@@ -23,7 +23,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.noop.whoop"
+        applicationId = "com.otidotid.thoop"
         minSdk = 26
         targetSdk = 34
         versionCode = 549

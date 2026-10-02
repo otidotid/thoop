@@ -2968,9 +2968,34 @@ public enum SleepStager {
         // Classified over the SAME beats the value was built from, windowed [start, end] exactly as
         // `sessionHrvWindows` does, so the verdict cannot describe a different set of beats than the number
         // it is gating.
-        guard !sessionHrvOverCounted(start: start, end: end, rr: rr) else { return nil }
-        return vals.reduce(0, +) / Double(vals.count)
-    }
+      static func sessionAvgHRV(start: Int, end: Int, rr: [RRInterval]) -> Double? {
+          let vals = sessionHrvWindows(
+              start: start,
+              end: end,
+              rr: rr,
+              stages: []
+          ).compactMap { $0.rmssd }
+
+          if vals.isEmpty {
+              return nil
+          }
+
+          // THOOP override:
+          // Bypass NOOP #1118 over-count gate for personal testing.
+          let bypassOvercountGate = true
+
+          if !bypassOvercountGate {
+              guard !sessionHrvOverCounted(
+                  start: start,
+                  end: end,
+                  rr: rr
+              ) else {
+                  return nil
+              }
+          }
+
+          return vals.reduce(0, +) / Double(vals.count)
+      }
 
     /// Whether the #1118 coverage gate refuses a session's HRV: its own R-R, windowed [start, end] exactly
     /// as `sessionAvgHRV` windows it, banks more beat-time than the wall clock allows. Pure. The ONE
