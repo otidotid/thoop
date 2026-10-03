@@ -1,7 +1,7 @@
 this Build is personal fork and using my personal algorithm build for me
 renaming to thoop is just to make me easier
 
-algorithm is on concept based on my zepp data with condition :
+algorithm concept based on my zepp data with condition :
 amazfit helio worn in arm (inside my sleeve) non-workout
 amazfit T-Rex Ultra 2 worn in left arm during workout
 whoop 4.0 worn in my right arm
