@@ -480,13 +480,7 @@ sealed class SyncChipState {
  *  parameter and its string resource go. [nowSec] is unix seconds, injected to keep this pure.
  *  Mirrors the iOS `SyncChipState.shortAgo`. */
 internal fun shortSyncAgo(unixSec: Long, nowSec: Long): String {
-    val secs = (nowSec - unixSec).coerceAtLeast(0)
-    return when {
-        secs < 60 -> "<1m"
-        secs < 3600 -> "${secs / 60}m"
-        secs < 86_400 -> "${secs / 3600}h"
-        else -> "${secs / 86_400}d"
-    }
+    return "Synced"
 }
 
 /** Whether this night's sleep staging is low-confidence, using the core [ScoreConfidence] rule. */
