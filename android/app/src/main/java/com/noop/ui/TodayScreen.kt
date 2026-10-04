@@ -149,6 +149,7 @@ import android.app.DatePickerDialog
 import android.content.Context
 import android.view.HapticFeedbackConstants
 import android.widget.Toast
+import androidx.compose.runtime.produceState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -463,6 +464,14 @@ fun TodayScreen(
     val selectedDayKey = remember(selectedDay, today, selectedDayOffset) {
         if (selectedDayOffset == 0) today?.day ?: selectedDay.toString() else selectedDay.toString()
     }
+
+    val oxygenSummary by produceState<AppViewModel.OxygenSummary?>(
+        initialValue = null,
+        key1 = selectedDayKey,
+    ) {
+        value = viewModel.oxygenSummary(selectedDayKey)
+    }
+
     val historicalMetric = remember(days, selectedDayKey) { days.lastOrNull { it.day == selectedDayKey } }
     val displayMetric = remember(today, historicalMetric, selectedDayOffset) {
         if (selectedDayOffset == 0) today ?: historicalMetric else historicalMetric
@@ -1763,16 +1772,78 @@ fun TodayScreen(
                         )
                         // The plain-English read-out, the Charge-tinted Synthesis card. Mirrors the iOS
                         // Synthesis InsightCard; carries the last scored day's read at the rollover (#543).
-                        TodaySection.SYNTHESIS -> Box(modifier = Modifier.fillMaxWidth().staggeredAppear(stagger)) {
-                            SynthesisHeroCard(
-                                day = displayMetric,
-                                recoveryCalibration = recoveryCalibration,
-                                carriedDay = lastScoredRecoveryDay,
-                                days = days,
-                                synthesisExpanded = synthesisExpanded,
-                                onToggleSynthesis = { synthesisExpanded = !synthesisExpanded },
-                                onOpenReadiness = { showChargeBreakdown = true },
-                            )
+                        TodaySection.SYNTHESIS -> Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .staggeredAppear(index = stagger),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                SynthesisHeroCard(
+                                    day = displayMetric,
+                                    recoveryCalibration = recoveryCalibration,
+                                    carriedDay = lastScoredRecoveryDay,
+                                    days = days,
+                                    synthesisExpanded = synthesisExpanded,
+                                    onToggleSynthesis = {
+                                        synthesisExpanded = !synthesisExpanded
+                                    },
+                                    onOpenReadiness = {
+                                        showChargeBreakdown = true
+                                    },
+                                )
+
+                                oxygenSummary?.let { oxygen ->
+                                    val oxygenDetail = buildList {
+                                        if (oxygen.isEstimated) {
+                                            oxygen.confidence?.let {
+                                                val confidenceLabel = it
+                                                    .lowercase()
+                                                    .replaceFirstChar { char -> char.uppercase() }
+
+                                                add("Confidence $confidenceLabel")
+                                            }
+
+                                            oxygen.stabilityScore?.let {
+                                                add("Stability $it/100")
+                                            }
+
+                                            if (oxygen.sampleCount > 0) {
+                                                add("${oxygen.sampleCount} calibration days")
+                                            }
+                                        } else {
+                                            oxygen.p10Pct?.let {
+                                                add("P10 ${it}%")
+                                            }
+
+                                            oxygen.minimumPct?.let {
+                                                add("Low ${it}%")
+                                            }
+
+                                            if (oxygen.sampleCount > 0) {
+                                                add("${oxygen.sampleCount} samples")
+                                            }
+                                        }
+
+                                        add(oxygen.sourceLabel)
+                                    }.joinToString(" • ")
+
+                                    InsightCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        category = if (oxygen.isEstimated) {
+                                            "Estimated Oxygen"
+                                        } else {
+                                            "Oxygen Calibration"
+                                        },
+                                        status = "${oxygen.averagePct}%",
+                                        detail = oxygenDetail,
+                                        statusColor = Palette.textPrimary,
+                                        tint = null,
+                                    )
+                                }
+                        }
                         }
                         // METRICS: header + Edit affordance (#251) + the tile grid. Previously two
                         // LazyColumn items; merged into ONE (a section must be a single keyed item for the

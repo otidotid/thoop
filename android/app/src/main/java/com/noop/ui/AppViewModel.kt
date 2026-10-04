@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.TimeZone
 import kotlin.math.roundToInt
+import com.noop.analytics.PersonalOxygenEngine
 
 /**
  * The single app-wide view model. Holds the BLE client and the Room-backed
@@ -3150,14 +3151,127 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         ble.externalLog("Moment marked @ $clock")
         ble.buzz(1)
     }
+    data class OxygenSummary(
+        val averagePct: Double,
+        val minimumPct: Double?,
+        val p10Pct: Double?,
+        val sampleCount: Int,
+        val isEstimated: Boolean = false,
+        val confidence: String? = null,
+        val stabilityScore: Int? = null,
+        val sourceLabel: String = "Zepp via Health Connect",
+    )
 
-    /** Record a "sleep mark" via the existing [SleepMark] analytics + the shareable strap log, with a
-     *  confirming buzz — the same logging-only path the Sleep screen's mark card uses (#461). A double-tap
-     *  can't pick bedtime vs wake, so it defaults to bedtime ([SleepMark.nowDefault]). */
+    suspend fun oxygenSummary(day: String): OxygenSummary? {
+        val measuredRows = repository.metricSeries(
+            deviceId = "health-connect",
+            key = "spo2",
+            from = "2020-01-01",
+            to = "2099-12-31",
+        )
+
+        val measuredByDay = measuredRows.associate {
+            it.day to it.value
+        }
+
+        val sourceIds = listOf(
+            "$activeStrapId-noop",
+            activeStrapId,
+            "my-whoop-noop",
+            "my-whoop",
+        ).distinct()
+
+        val dailyByDay = linkedMapOf<String, com.noop.data.DailyMetric>()
+
+        for (sourceId in sourceIds) {
+            val rows = runCatching {
+                repository.days(sourceId)
+            }.getOrDefault(emptyList())
+
+            for (row in rows) {
+                dailyByDay.putIfAbsent(row.day, row)
+            }
+        }
+
+        val trainingPoints = measuredByDay.mapNotNull { entry ->
+            val daily = dailyByDay[entry.key]
+                ?: return@mapNotNull null
+
+            PersonalOxygenEngine.TrainingPoint(
+                day = entry.key,
+                measuredSpo2 = entry.value,
+                daily = daily,
+            )
+        }
+
+        if (trainingPoints.size >= 7) {
+            PersonalOxygenEngine.trainAndSave(
+                context = appContext,
+                points = trainingPoints,
+            )
+        }
+
+        val selectedDaily = dailyByDay[day]
+
+        if (selectedDaily != null) {
+            val estimate = PersonalOxygenEngine.estimate(
+                context = appContext,
+                daily = selectedDaily,
+            )
+
+            val estimatedPct = estimate.estimatedSpo2
+
+            if (estimatedPct != null) {
+                return OxygenSummary(
+                    averagePct = estimatedPct,
+                    minimumPct = null,
+                    p10Pct = null,
+                    sampleCount = estimate.trainingDays,
+                    isEstimated = true,
+                    confidence = estimate.confidence.name,
+                    stabilityScore = estimate.stabilityScore,
+                    sourceLabel = "Estimated by THOOP",
+                )
+            }
+        }
+
+        val measured = measuredByDay[day]
+            ?: return null
+
+        val minimum = repository.metricSeries(
+            deviceId = "health-connect",
+            key = "spo2_min",
+            from = day,
+            to = day,
+        ).firstOrNull()?.value
+
+        val p10 = repository.metricSeries(
+            deviceId = "health-connect",
+            key = "spo2_p10",
+            from = day,
+            to = day,
+        ).firstOrNull()?.value
+
+        val samples = repository.metricSeries(
+            deviceId = "health-connect",
+            key = "spo2_samples",
+            from = day,
+            to = day,
+        ).firstOrNull()?.value?.toInt() ?: 0
+
+        return OxygenSummary(
+            averagePct = measured,
+            minimumPct = minimum,
+            p10Pct = p10,
+            sampleCount = samples,
+            isEstimated = false,
+            sourceLabel = "Calibration data from Zepp",
+        )
+    }
     private fun markSleep() {
         val mark = SleepMark.nowDefault()
         ble.externalLog(mark.logLine())
-        ble.buzz(1)
+    ble.buzz(1)
         viewModelScope.launch {
             // Use the SAME "my-whoop" series source the Sleep screen's mark card writes (SleepScreen.kt)
             // and reads back from, so a double-tap mark lands in the same place a tapped one does.
