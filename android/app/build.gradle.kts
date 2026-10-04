@@ -113,7 +113,7 @@ android {
             applicationIdSuffix = ".demo"
             versionNameSuffix = "-demo"
             buildConfigField("String", "TIER", "\"demo\"")
-            buildConfigField("boolean", "ENABLE_DEMO", "true")
+            buildConfigField("boolean", "ENABLE_DEMO", "false")
         }
     }
 
