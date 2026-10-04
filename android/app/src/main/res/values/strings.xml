@@ -2881,4 +2881,8 @@
     <string name="raw_diag_ecg_probe_start">Start ECG capture</string>
     <string name="raw_diag_ecg_probe_stop">Stop ECG capture</string>
     <string name="raw_diag_ecg_probe_running">A capture may still be running on this strap. The verdict goes to the strap log.</string>
+    <string name="l10n_settings_screen_weight_from_health_connect_caption_5ca6ea7d">From Health Connect · %1$s</string>
+    <string name="l10n_settings_screen_weight_from_health_connect_none_dd3f4884">From Health Connect · no weight yet</string>
+    <string name="l10n_settings_screen_use_weight_from_health_connect_c1fe3e2a">Use weight from Health Connect</string>
+    <string name="l10n_settings_screen_use_weight_from_health_connect_detail_40238f8a">After every sync, your profile weight takes the newest Health Connect reading. Turn off to set it by hand.</string>
 </resources>
