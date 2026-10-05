@@ -785,7 +785,7 @@ fun TodayScreen(
     // remember-once idiom the card uses; a resume/recompose re-reads it. (#656)
     val journalReminderOn = remember { NoopPrefs.journalReminderEnabled(context) }
     // S4: the Synthesis card collapses to a one-liner that expands on tap (default collapsed). Mirrors iOS.
-    var synthesisExpanded by remember { mutableStateOf(false) }
+    var synthesisExpanded by remember { mutableStateOf(true) }
     // S5: the Key Metrics grid caps at the first METRICS_COLLAPSED_CAP tiles behind a "Show all metrics"
     // expander, and the Data Sources footer collapses to a single "Synced from: ..." line. Both default
     // collapsed and are NOT persisted, so the home screen reopens compact. Mirrors iOS.
