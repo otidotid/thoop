@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.noop.analytics.HrvAnalyzer
 import com.noop.analytics.HrvAnalyzerTrace
 import com.noop.analytics.SpotHrvReading
+import com.noop.analytics.SpotRespReading
 import com.noop.data.MetricSeriesRow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -105,6 +106,8 @@ fun HrvSnapshotScreen(
     var runningRmssd by remember { mutableStateOf<Double?>(null) }
     // The completed analysis (null until Done).
     var result by remember { mutableStateOf<HrvAnalyzer.HrvResult?>(null) }
+    // Resting respiration estimated from the same deliberate R-R capture. Diagnostic only.
+    var respirationResult by remember { mutableStateOf<SpotRespReading.Outcome?>(null) }
     // Whether the just-finished snapshot has been saved (drives the Save button → "Saved").
     var saved by remember { mutableStateOf(false) }
 
@@ -151,6 +154,7 @@ fun HrvSnapshotScreen(
         // beats (e.g. overlapping live sources) — refuse the number rather than publish it.
         if (HrvAnalyzer.spotCaptureOverCounted(raw.sum(), captureMs)) {
             result = HrvAnalyzer.HrvResult.empty(raw.size)
+            respirationResult = SpotRespReading.Outcome.Incomplete(SpotRespReading.Reason.TOO_MUCH_NOISE)
             phase = HrvPhase.Done
             return@LaunchedEffect
         }
@@ -171,6 +175,7 @@ fun HrvSnapshotScreen(
         } else {
             HrvAnalyzer.analyzeRaw(raw, HrvAnalyzer.DEFAULT_SPOT_MAX_REJECTED_FRACTION)
         }
+        respirationResult = SpotRespReading.compute(captureBuffer.value)
         phase = HrvPhase.Done
     }
 
@@ -242,6 +247,12 @@ fun HrvSnapshotScreen(
                     color = if (phase == HrvPhase.Capturing) Palette.restBright else Palette.textSecondary,
                     textAlign = TextAlign.Center,
                 )
+                Text(
+                    text = respirationStatus(phase, respirationResult),
+                    style = NoopType.subhead,
+                    color = Palette.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
         }
@@ -263,6 +274,7 @@ fun HrvSnapshotScreen(
                         secondsRemaining = HRV_CAPTURE_SECONDS
                         runningRmssd = null
                         result = null
+                        respirationResult = null
                         saved = false
                         captureStart = TimeSource.Monotonic.markNow()
                         phase = HrvPhase.Capturing
@@ -488,6 +500,29 @@ private fun NotBondedHint() {
 // MARK: - Pure view helpers (mirrors HRVSnapshotView)
 
 /** Length of a capture in seconds. Mirrors HRVSnapshotView.captureSeconds. */
+private fun respirationStatus(
+    phase: HrvPhase,
+    outcome: SpotRespReading.Outcome?,
+): String = when {
+    phase == HrvPhase.Idle -> "Resting respiration will be measured with HRV"
+    phase == HrvPhase.Capturing -> "Respiration · Collecting a stable breathing pattern"
+    outcome is SpotRespReading.Outcome.Reading -> {
+        val quality = if (outcome.quality == SpotRespReading.Quality.GOOD) "Good" else "Fair"
+        "Respiration · ${String.format(Locale.US, "%.1f", outcome.rpm)} rpm · $quality signal"
+    }
+    outcome is SpotRespReading.Outcome.Collecting ->
+        "Respiration · Reading incomplete · Stay still a little longer and try again"
+    outcome is SpotRespReading.Outcome.Incomplete -> when (outcome.reason) {
+        SpotRespReading.Reason.TOO_MUCH_NOISE ->
+            "Respiration · Reading incomplete · Movement interrupted the measurement"
+        SpotRespReading.Reason.TOO_SHORT ->
+            "Respiration · Reading incomplete · Stay still a little longer and try again"
+        SpotRespReading.Reason.UNSTABLE_PATTERN ->
+            "Respiration · Reading incomplete · Breathe normally and try again"
+    }
+    else -> "Respiration · Reading incomplete"
+}
+
 const val HRV_CAPTURE_SECONDS = 60
 
 /** Generic metric-series key for a manual HRV reading (matches Swift `HRVSnapshot.metricKey`). */
