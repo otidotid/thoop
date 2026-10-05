@@ -86,7 +86,7 @@ object HealthConnectImporter {
     private const val HC_WORKOUT_SOURCE = "health-connect"
 
     /** Read window: a wide ~10-year span ending now. Health Connect itself caps retention. */
-    private const val WINDOW_YEARS = 10L
+    private const val WINDOW_DAYS = 30L
 
     /** Page size for paginated readRecords() calls. */
     private const val PAGE_SIZE = 5000
@@ -354,7 +354,7 @@ object HealthConnectImporter {
 
         val zone = ZoneId.systemDefault()
         val end = Instant.now()
-        val start = LocalDate.now(zone).minusYears(WINDOW_YEARS).atStartOfDay(zone).toInstant()
+        val start = LocalDate.now(zone).minusDays(WINDOW_DAYS).atStartOfDay(zone).toInstant()
         val filter = TimeRangeFilter.between(start, end)
         // #528: skip our own writes on import (see readAll / isSelfWritten).
         val selfPackage = context.packageName
@@ -485,8 +485,10 @@ object HealthConnectImporter {
             // --- SpO2 (%) -> per-day average ---
             readSelected(OxygenSaturationRecord::class) { r ->
                 val b = bucket(dayOf(r.time, r.zoneOffset))
-                b.spo2Sum += r.percentage.value
+                val value = r.percentage.value
+                b.spo2Sum += value
                 b.spo2Count += 1
+                b.spo2Values += value
             }
             // --- Respiratory rate (breaths/min) -> per-day average ---
             readSelected(RespiratoryRateRecord::class) { r ->
@@ -807,6 +809,27 @@ object HealthConnectImporter {
             // import: body_fat as a 0-100 percent, lean_mass in kg.
             a.bodyFatPct?.let { metricSeriesRows += MetricSeriesRow(HC_DEVICE, day, "body_fat", round2(it)) }
             a.leanMassKg?.let { metricSeriesRows += MetricSeriesRow(HC_DEVICE, day, "lean_mass", round2(it)) }
+
+            // THOOP Personal Oxygen calibration series. These rows deliberately live OUTSIDE the
+            // coveredDays gate below: Health Connect SpO2 is calibration ground truth and must coexist
+            // with richer WHOOP daily metrics rather than being discarded whenever the strap covers a day.
+            if (a.spo2Values.isNotEmpty()) {
+                val sortedSpo2 = a.spo2Values.sorted()
+                val averageSpo2 = round1(a.spo2Sum / a.spo2Count)
+                val minimumSpo2 = round1(sortedSpo2.first())
+                val p10Index = ((sortedSpo2.size - 1) * 0.10).toInt()
+                val p10Spo2 = round1(sortedSpo2[p10Index])
+
+                metricSeriesRows += MetricSeriesRow(HC_DEVICE, day, "spo2", averageSpo2)
+                metricSeriesRows += MetricSeriesRow(HC_DEVICE, day, "spo2_min", minimumSpo2)
+                metricSeriesRows += MetricSeriesRow(HC_DEVICE, day, "spo2_p10", p10Spo2)
+                metricSeriesRows += MetricSeriesRow(
+                    HC_DEVICE,
+                    day,
+                    "spo2_samples",
+                    a.spo2Count.toDouble(),
+                )
+            }
 
             // DailyMetric (my-whoop): resting-HR / HRV / sleep-minutes / SpO2 / respiration,
             // ONLY for days the strap does not already cover (raw OR computed).
@@ -1510,6 +1533,7 @@ object HealthConnectImporter {
 
         var spo2Sum: Double = 0.0
         var spo2Count: Int = 0
+        val spo2Values = ArrayList<Double>()
 
         var respSum: Double = 0.0
         var respCount: Int = 0

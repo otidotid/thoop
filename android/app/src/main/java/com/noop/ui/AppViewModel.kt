@@ -3211,34 +3211,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
-        val selectedDaily = dailyByDay[day]
-
-        if (selectedDaily != null) {
-            val estimate = PersonalOxygenEngine.estimate(
-                context = appContext,
-                daily = selectedDaily,
-            )
-
-            val estimatedPct = estimate.estimatedSpo2
-
-            if (estimatedPct != null) {
-                return OxygenSummary(
-                    averagePct = estimatedPct,
-                    minimumPct = null,
-                    p10Pct = null,
-                    sampleCount = estimate.trainingDays,
-                    isEstimated = true,
-                    confidence = estimate.confidence.name,
-                    stabilityScore = estimate.stabilityScore,
-                    sourceLabel = "Estimated by THOOP",
-                )
-            }
-        }
-
+        // Measured Health Connect SpO2 is ground truth. When both measured and estimated values
+        // exist for a day, always show the measured calibration value and reserve estimates for days
+        // with no imported Zepp reading.
         val measured = measuredByDay[day]
-            ?: return null
 
-        val minimum = repository.metricSeries(
+        if (measured != null) {
+            val minimum = repository.metricSeries(
             deviceId = "health-connect",
             key = "spo2_min",
             from = day,
@@ -3259,13 +3238,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             to = day,
         ).firstOrNull()?.value?.toInt() ?: 0
 
+            return OxygenSummary(
+                averagePct = measured,
+                minimumPct = minimum,
+                p10Pct = p10,
+                sampleCount = samples,
+                isEstimated = false,
+                sourceLabel = "Calibration data from Zepp",
+            )
+        }
+
+        val selectedDaily = dailyByDay[day]
+            ?: return null
+
+        val estimate = PersonalOxygenEngine.estimate(
+            context = appContext,
+            daily = selectedDaily,
+        )
+
+        val estimatedPct = estimate.estimatedSpo2
+            ?: return null
+
         return OxygenSummary(
-            averagePct = measured,
-            minimumPct = minimum,
-            p10Pct = p10,
-            sampleCount = samples,
-            isEstimated = false,
-            sourceLabel = "Calibration data from Zepp",
+            averagePct = estimatedPct,
+            minimumPct = null,
+            p10Pct = null,
+            sampleCount = estimate.trainingDays,
+            isEstimated = true,
+            confidence = estimate.confidence.name,
+            stabilityScore = estimate.stabilityScore,
+            sourceLabel = "Estimated by THOOP",
         )
     }
     private fun markSleep() {
