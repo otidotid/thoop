@@ -45,6 +45,9 @@ class BackupSettingsCodecTest {
             "today.hostedCards" to "[\"sleep.sleepMarks\"]",
             "today.sectionOrder" to "recovery,charge,sleep,strain",
             "today.hiddenSections" to "sleep,strain",
+			"today.dashboardCards" to "[\"steps\",\"skinTemp\"]",
+"today.keyMetrics" to "charge,hrv,restingHr",
+"today.keyMetricsWindowDays" to 30,
             // #1361: custom journal behaviours, a newline-joined name list — the embedded newline must
             // survive the JSON round-trip (and stay byte-identical to the Apple value).
             "journal.customBehaviors" to "Cold plunge\nMagnesium",
@@ -74,6 +77,18 @@ class BackupSettingsCodecTest {
             back["today.hiddenSections"]
         )
         assertEquals("Cold plunge\nMagnesium", back["journal.customBehaviors"])
+        assertEquals(
+            "[\"steps\",\"skinTemp\"]",
+            back["today.dashboardCards"]
+        )
+        assertEquals(
+            "charge,hrv,restingHr",
+            back["today.keyMetrics"]
+        )
+        assertEquals(
+            30,
+            back["today.keyMetricsWindowDays"]
+        )
         assertEquals(values.size, back.size)
     }
 
