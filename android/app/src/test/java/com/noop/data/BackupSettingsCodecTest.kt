@@ -86,6 +86,8 @@ class BackupSettingsCodecTest {
         assertEquals("A bare JSON int must land as Double for double-kind keys", 80.0, back["profile.weightKg"])
         assertEquals("male", back["profile.sex"])
         assertEquals("metric", back["units.system"])
+        assertFalse(back.containsKey("today.sectionOrder"))
+        assertFalse(back.containsKey("today.hiddenSections"))
     }
 
     // ── Codec: whitelist + type enforcement ──────────────────────────────────────
