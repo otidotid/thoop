@@ -64,6 +64,9 @@ object BackupSettingsCodec {
         // built and expects across a restore. Its POSITION (the addedCards slot in today.sectionOrder) is
         // not carried, so on restore the set + internal order return but the section sits at its default.
         HostedCardPrefs.KEY_SELECTION to Kind.STRING,
+        "today.sectionOrder" to Kind.STRING,
+        "today.hiddenSections" to Kind.STRING,
+
         // #1361: the user's own custom journal BEHAVIOURS (a newline-joined list of names). The journal
         // EFFECTS ride the DB backup, but the behaviour DEFINITIONS live only in prefs, so a restore left
         // the entries referencing behaviours the logging catalog no longer offered. Platform-neutral key;
@@ -209,6 +212,12 @@ object BackupSettingsBridge {
         (values["effort.scale"] as? String)?.let { editor.putString(UnitPrefs.KEY_EFFORT_SCALE, it) }
         (values["dayCycle.mode"] as? String)?.let { editor.putString(NoopPrefs.KEY_DAY_CYCLE_MODE, it) }
         (values[HostedCardPrefs.KEY_SELECTION] as? String)?.let { editor.putString(HostedCardPrefs.KEY_SELECTION, it) }
+        (values["today.sectionOrder"] as? String)?.let {
+            editor.putString("today.sectionOrder", it)
+        }
+        (values["today.hiddenSections"] as? String)?.let {
+            editor.putString("today.hiddenSections", it)
+        }
         // #1361: restore custom behaviours — write the names to the legacy custom key, clear stale hidden,
         // and drop the v2 blob so the next catalog load re-migrates them (restart-gated, #57). Mirrors iOS.
         (values["journal.customBehaviors"] as? String)?.let { joined ->

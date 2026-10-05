@@ -43,6 +43,8 @@ class BackupSettingsCodecTest {
             "dayCycle.mode" to "sleep_onset",
             // #today-hosted-cards: the one layout pref carried, a JSON [String] stored under the String kind.
             "today.hostedCards" to "[\"sleep.sleepMarks\"]",
+            "today.sectionOrder" to "recovery,charge,sleep,strain",
+            "today.hiddenSections" to "sleep,strain",
             // #1361: custom journal behaviours, a newline-joined name list — the embedded newline must
             // survive the JSON round-trip (and stay byte-identical to the Apple value).
             "journal.customBehaviors" to "Cold plunge\nMagnesium",
@@ -63,6 +65,14 @@ class BackupSettingsCodecTest {
         assertEquals("whoop", back["effort.scale"])
         assertEquals("sleep_onset", back["dayCycle.mode"])
         assertEquals("[\"sleep.sleepMarks\"]", back["today.hostedCards"])
+        assertEquals(
+            "recovery,charge,sleep,strain",
+            back["today.sectionOrder"]
+        )
+        assertEquals(
+            "sleep,strain",
+            back["today.hiddenSections"]
+        )
         assertEquals("Cold plunge\nMagnesium", back["journal.customBehaviors"])
         assertEquals(values.size, back.size)
     }
@@ -76,6 +86,8 @@ class BackupSettingsCodecTest {
         assertEquals("A bare JSON int must land as Double for double-kind keys", 80.0, back["profile.weightKg"])
         assertEquals("male", back["profile.sex"])
         assertEquals("metric", back["units.system"])
+        assertFalse(back.containsKey("today.sectionOrder"))
+        assertFalse(back.containsKey("today.hiddenSections"))
     }
 
     // ── Codec: whitelist + type enforcement ──────────────────────────────────────
