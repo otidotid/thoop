@@ -66,6 +66,9 @@ object BackupSettingsCodec {
         HostedCardPrefs.KEY_SELECTION to Kind.STRING,
         "today.sectionOrder" to Kind.STRING,
         "today.hiddenSections" to Kind.STRING,
+        "today.dashboardCards" to Kind.STRING,
+        "today.keyMetrics" to Kind.STRING,
+        "today.keyMetricsWindowDays" to Kind.INT,
 
         // #1361: the user's own custom journal BEHAVIOURS (a newline-joined list of names). The journal
         // EFFECTS ride the DB backup, but the behaviour DEFINITIONS live only in prefs, so a restore left
@@ -217,6 +220,15 @@ object BackupSettingsBridge {
         }
         (values["today.hiddenSections"] as? String)?.let {
             editor.putString("today.hiddenSections", it)
+        }
+        (values["today.dashboardCards"] as? String)?.let {
+            editor.putString("today.dashboardCards", it)
+        }
+        (values["today.keyMetrics"] as? String)?.let {
+            editor.putString("today.keyMetrics", it)
+        }
+        (values["today.keyMetricsWindowDays"] as? Int)?.let {
+            editor.putInt("today.keyMetricsWindowDays", it)
         }
         // #1361: restore custom behaviours — write the names to the legacy custom key, clear stale hidden,
         // and drop the v2 blob so the next catalog load re-migrates them (restart-gated, #57). Mirrors iOS.
