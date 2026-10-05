@@ -2865,4 +2865,5 @@
     <string name="raw_diag_ecg_probe_start">EKG-Aufzeichnung starten</string>
     <string name="raw_diag_ecg_probe_stop">EKG-Aufzeichnung stoppen</string>
     <string name="raw_diag_ecg_probe_running">Auf diesem Strap läuft möglicherweise noch eine Aufzeichnung. Das Ergebnis steht im Strap-Log.</string>
+    <string name="l10n_sleep_screen_move_relative_to_tonight_fd71d87b">Bewegung, relativ zu dieser Nacht</string>
 </resources>

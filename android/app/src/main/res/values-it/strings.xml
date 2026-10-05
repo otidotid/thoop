@@ -2820,4 +2820,5 @@
     <string name="raw_diag_ecg_probe_start">Avvia acquisizione ECG</string>
     <string name="raw_diag_ecg_probe_stop">Interrompi acquisizione ECG</string>
     <string name="raw_diag_ecg_probe_running">Una acquisizione potrebbe essere ancora attiva su questo strap. Il verdetto va nello strap log.</string>
+    <string name="l10n_sleep_screen_move_relative_to_tonight_fd71d87b">Movimento, rispetto a questa notte</string>
 </resources>

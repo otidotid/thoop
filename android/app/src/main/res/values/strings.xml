@@ -2885,4 +2885,5 @@
     <string name="l10n_settings_screen_weight_from_health_connect_none_dd3f4884">From Health Connect · no weight yet</string>
     <string name="l10n_settings_screen_use_weight_from_health_connect_c1fe3e2a">Use weight from Health Connect</string>
     <string name="l10n_settings_screen_use_weight_from_health_connect_detail_40238f8a">After every sync, your profile weight takes the newest Health Connect reading. Turn off to set it by hand.</string>
+    <string name="l10n_sleep_screen_move_relative_to_tonight_fd71d87b">Move, relative to tonight</string>
 </resources>
