@@ -15,6 +15,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 
 @Composable
 internal fun GoogleAccountCard() {
@@ -22,6 +25,11 @@ internal fun GoogleAccountCard() {
     val controller = remember(context) {
         GoogleSignInController(context.applicationContext)
     }
+
+    val driveController = remember(context) {
+        GoogleDriveAuthorizationController(context.applicationContext)
+    }
+
     val scope = rememberCoroutineScope()
 
     var account by remember {
@@ -35,6 +43,32 @@ internal fun GoogleAccountCard() {
     var errorMessage by remember {
         mutableStateOf<String?>(null)
     }
+
+    var driveAuthorized by remember {
+        mutableStateOf(false)
+    }
+
+    var driveBusy by remember {
+        mutableStateOf(false)
+    }
+
+    val driveAuthorizationLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartIntentSenderForResult(),
+        ) { activityResult ->
+            driveBusy = false
+
+            driveController.resultFromIntent(activityResult.data)
+                .onSuccess {
+                    driveAuthorized = true
+                    errorMessage = null
+                }
+                .onFailure { failure ->
+                    driveAuthorized = false
+                    errorMessage = failure.message
+                        ?: "Google Drive authorization did not complete."
+                }
+        }
 
     SettingsCard(
         icon = Icons.Filled.AccountCircle,
