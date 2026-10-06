@@ -70,6 +70,16 @@ object BackupSettingsCodec {
         "today.keyMetrics" to Kind.STRING,
         "today.keyMetricsWindowDays" to Kind.INT,
 
+        // Stable layout and appearance choices that should follow the user's THOOP profile to a new phone.
+        // All are plain strings in noop_prefs; device/runtime state remains deliberately excluded.
+        "sleep.sectionOrder" to Kind.STRING,
+        "sleep.hiddenSections" to Kind.STRING,
+        "theme.appearance" to Kind.STRING,
+        "accent.color" to Kind.STRING,
+        "accent.customHex" to Kind.STRING,
+        "chart.style" to Kind.STRING,
+        "noop.appLanguage" to Kind.STRING,
+
         // #1361: the user's own custom journal BEHAVIOURS (a newline-joined list of names). The journal
         // EFFECTS ride the DB backup, but the behaviour DEFINITIONS live only in prefs, so a restore left
         // the entries referencing behaviours the logging catalog no longer offered. Platform-neutral key;
@@ -133,6 +143,17 @@ object BackupSettingsCodec {
  */
 object BackupSettingsBridge {
 
+    /** Stable string preferences stored under the same canonical key in noop_prefs. */
+    private val STABLE_STRING_PREFS = listOf(
+        "sleep.sectionOrder",
+        "sleep.hiddenSections",
+        "theme.appearance",
+        "accent.color",
+        "accent.customHex",
+        "chart.style",
+        "noop.appLanguage",
+    )
+
     /** Journal-catalog storage keys in `noop_prefs` (#1361). The v2 items blob is the LIVE store; the
      *  legacy custom/hidden keys are read ONCE by `JournalCatalog.loadJournalCatalogItems` to migrate into
      *  v2, then never again. So export pulls custom names out of the v2 blob (parsed raw here to avoid a
@@ -170,6 +191,9 @@ object BackupSettingsBridge {
         }
         if (noop.contains(HostedCardPrefs.KEY_SELECTION)) {
             noop.getString(HostedCardPrefs.KEY_SELECTION, null)?.let { values[HostedCardPrefs.KEY_SELECTION] = it }
+        }
+        for (key in STABLE_STRING_PREFS) {
+            if (noop.contains(key)) noop.getString(key, null)?.let { values[key] = it }
         }
         // #1361: custom journal behaviours from the LIVE v2 catalog blob (the legacy key is read-once-
         // then-stale). Parse raw to avoid a data→ui dependency; shape mirrors JournalCatalog.
@@ -229,6 +253,9 @@ object BackupSettingsBridge {
         }
         (values["today.keyMetricsWindowDays"] as? Int)?.let {
             editor.putInt("today.keyMetricsWindowDays", it)
+        }
+        for (key in STABLE_STRING_PREFS) {
+            (values[key] as? String)?.let { editor.putString(key, it) }
         }
         // #1361: restore custom behaviours — write the names to the legacy custom key, clear stale hidden,
         // and drop the v2 blob so the next catalog load re-migrates them (restart-gated, #57). Mirrors iOS.

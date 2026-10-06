@@ -135,6 +135,23 @@ class BackupSettingsCodecTest {
         assertEquals("Valid siblings still decode", 185, back["profile.hrMax"])
     }
 
+    @Test fun stableLayoutAndAppearanceSettingsRoundTrip() {
+        val expected = linkedMapOf<String, Any?>(
+            "sleep.sectionOrder" to "hero,stages,consistency",
+            "sleep.hiddenSections" to "debt",
+            "theme.appearance" to "dark",
+            "accent.color" to "custom",
+            "accent.customHex" to "#12AB34",
+            "chart.style" to "line",
+            "noop.appLanguage" to "id",
+        )
+
+        val encoded = requireNotNull(BackupSettingsCodec.encode(expected))
+        val decoded = BackupSettingsCodec.decode(encoded)
+
+        expected.forEach { (key, value) -> assertEquals(value, decoded[key]) }
+    }
+
     @Test fun garbageDecodesToEmptyAndEmptyEncodesToNull() {
         assertTrue(BackupSettingsCodec.decode("not json at all").isEmpty())
         assertTrue(BackupSettingsCodec.decode("[1,2,3]").isEmpty())
