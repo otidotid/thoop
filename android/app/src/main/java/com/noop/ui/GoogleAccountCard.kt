@@ -14,7 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.noop.data.GoogleDriveBackupCoordinator
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +31,10 @@ internal fun GoogleAccountCard() {
 
     val driveController = remember(context) {
         GoogleDriveAuthorizationController(context.applicationContext)
+    }
+
+    val backupCoordinator = remember(context) {
+        GoogleDriveBackupCoordinator(context.applicationContext)
     }
 
     val scope = rememberCoroutineScope()
@@ -52,6 +59,31 @@ internal fun GoogleAccountCard() {
         mutableStateOf(false)
     }
 
+    var driveAccessToken by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var backupStatus by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    fun acceptDriveAuthorization(result: com.google.android.gms.auth.api.identity.AuthorizationResult) {
+        driveController.accessToken(result)
+            .onSuccess { token ->
+                driveAccessToken = token
+                driveAuthorized = true
+                driveBusy = false
+                errorMessage = null
+            }
+            .onFailure { failure ->
+                driveAccessToken = null
+                driveAuthorized = false
+                driveBusy = false
+                errorMessage = failure.message
+                    ?: "Google Drive returned no access token."
+            }
+    }
+
     val driveAuthorizationLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartIntentSenderForResult(),
@@ -59,10 +91,7 @@ internal fun GoogleAccountCard() {
             driveBusy = false
 
             driveController.resultFromIntent(activityResult.data)
-                .onSuccess {
-                    driveAuthorized = true
-                    errorMessage = null
-                }
+                .onSuccess(::acceptDriveAuthorization)
                 .onFailure { failure ->
                     driveAuthorized = false
                     errorMessage = failure.message
@@ -142,6 +171,9 @@ internal fun GoogleAccountCard() {
                         scope.launch {
                             controller.signOut()
                             account = null
+                            driveAccessToken = null
+                            driveAuthorized = false
+                            backupStatus = null
                             busy = false
                         }
                     },
@@ -158,17 +190,98 @@ internal fun GoogleAccountCard() {
 
 
             Text(
-                text = "Cloud backup: Not configured",
+                text = if (driveAuthorized) {
+                    "Google Drive backup: Authorized"
+                } else {
+                    "Google Drive backup: Not configured"
+                },
                 style = NoopType.subhead,
-                color = Palette.textSecondary,
+                color = if (driveAuthorized) Palette.textPrimary else Palette.textSecondary,
             )
 
+            if (currentAccount != null && !driveAuthorized) {
+                NoopButton(
+                    text = if (driveBusy) "Connecting Google Drive..." else "Enable Google Drive Backup",
+                    fullWidth = true,
+                    enabled = !driveBusy && !busy,
+                    onClick = {
+                        driveBusy = true
+                        errorMessage = null
+                        backupStatus = null
+                        driveController.authorize(
+                            onSuccess = { result ->
+                                if (result.hasResolution()) {
+                                    val pendingIntent = result.pendingIntent
+                                    if (pendingIntent == null) {
+                                        driveBusy = false
+                                        errorMessage = "Google Drive authorization could not be opened."
+                                    } else {
+                                        driveAuthorizationLauncher.launch(
+                                            IntentSenderRequest.Builder(pendingIntent.intentSender).build(),
+                                        )
+                                    }
+                                } else {
+                                    acceptDriveAuthorization(result)
+                                }
+                            },
+                            onFailure = { failure ->
+                                driveBusy = false
+                                errorMessage = failure.message
+                                    ?: "Google Drive authorization did not complete."
+                            },
+                        )
+                    },
+                )
+            }
+
+            if (currentAccount != null && driveAuthorized) {
+                NoopButton(
+                    text = if (driveBusy) "Backing up..." else "Back up now",
+                    fullWidth = true,
+                    enabled = !driveBusy && !busy && driveAccessToken != null,
+                    onClick = {
+                        val token = driveAccessToken ?: return@NoopButton
+                        driveBusy = true
+                        errorMessage = null
+                        backupStatus = null
+                        scope.launch {
+                            runCatching {
+                                backupCoordinator.backUpNow(token, currentAccount.accountId)
+                            }.onSuccess { backup ->
+                                val whenUploaded = DateFormat.getDateTimeInstance().format(Date())
+                                backupStatus = "Uploaded $whenUploaded · ${formatBackupSize(backup.sizeBytes)} · newest 3 kept"
+                            }.onFailure { failure ->
+                                errorMessage = failure.message ?: "Google Drive backup failed."
+                            }
+                            driveBusy = false
+                        }
+                    },
+                )
+            }
+
+            backupStatus?.let { status ->
+                Text(
+                    text = status,
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
+                )
+            }
+
             Text(
-                text = "Signing in does not upload health data. " +
-                        "Google Drive permission will be requested separately later.",
+                text = if (driveAuthorized) {
+                    "The access token is kept only in memory. Restore and automatic schedules come next."
+                } else {
+                    "Signing in does not upload health data. Drive permission is requested only when enabled."
+                },
                 style = NoopType.footnote,
                 color = Palette.textTertiary,
             )
         }
     }
+}
+
+private fun formatBackupSize(bytes: Long): String = when {
+    bytes >= 1_048_576L -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1_048_576.0)
+    bytes >= 1_024L -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1_024.0)
+    else -> "$bytes B"
 }

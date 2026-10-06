@@ -38,6 +38,14 @@ internal class GoogleDriveAuthorizationController(
             .addOnFailureListener(onFailure)
     }
 
+    fun accessToken(result: AuthorizationResult): Result<String> =
+        result.accessToken
+            ?.takeIf(String::isNotBlank)
+            ?.let { Result.success(it) }
+            ?: Result.failure(
+                IllegalStateException("Google Drive returned no access token."),
+            )
+
     fun resultFromIntent(
         data: Intent?,
     ): Result<AuthorizationResult> {
