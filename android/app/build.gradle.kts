@@ -76,7 +76,7 @@ android {
             if (!keystorePropsFile.exists() && !isStagingRelease && requestedReleaseBuild) {
                 throw GradleException(
                     "Refusing to build a real release without keystore.properties. " +
-                        "Use -PstagingRelease for debug-key staging artifacts only."
+                            "Use -PstagingRelease for debug-key staging artifacts only."
                 )
             }
             // Real release key when keystore.properties is present. The debug-key fallback is allowed
@@ -278,6 +278,7 @@ dependencies {
     implementation("androidx.credentials:credentials:1.5.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("com.google.android.gms:play-services-auth:21.1.1")
 
     // --- Coroutines ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
