@@ -6,7 +6,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.noop.data.GoogleDriveBackupClient
 import com.noop.data.GoogleDriveBackupCoordinator
+import com.noop.data.DataBackup
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -73,6 +76,12 @@ internal fun GoogleAccountCard() {
     var selectedPreview by remember {
         mutableStateOf<GoogleDriveBackupCoordinator.BackupPreview?>(null)
     }
+    var pendingRestore by remember {
+        mutableStateOf<GoogleDriveBackupClient.RemoteBackup?>(null)
+    }
+    var restartRequired by remember {
+        mutableStateOf(false)
+    }
 
     fun acceptDriveAuthorization(result: com.google.android.gms.auth.api.identity.AuthorizationResult) {
         driveController.accessToken(result)
@@ -105,6 +114,52 @@ internal fun GoogleAccountCard() {
                         ?: "Google Drive authorization did not complete."
                 }
         }
+
+    pendingRestore?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { if (!driveBusy) pendingRestore = null },
+            title = { Text("Restore cloud backup?") },
+            text = {
+                Text(
+                    "THOOP will check free space, create and validate a local safety snapshot, " +
+                        "then replace local data with ${formatCloudBackupDate(backup.createdTime)}. " +
+                        "Do not close THOOP during restore."
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !driveBusy,
+                    onClick = { pendingRestore = null },
+                ) { Text("Cancel") }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !driveBusy,
+                    onClick = {
+                        val token = driveAccessToken ?: return@TextButton
+                        driveBusy = true
+                        errorMessage = null
+                        scope.launch {
+                            runCatching { backupCoordinator.restoreBackup(token, backup) }
+                                .onSuccess { outcome ->
+                                    when (val result = outcome.result) {
+                                        DataBackup.ImportResult.NeedsRestart -> {
+                                            restartRequired = true
+                                            backupStatus = "Restore completed. Safety snapshot kept locally."
+                                            pendingRestore = null
+                                        }
+                                        is DataBackup.ImportResult.Failed -> errorMessage = result.message
+                                        is DataBackup.ImportResult.TooLarge -> errorMessage = result.message
+                                    }
+                                }
+                                .onFailure { errorMessage = it.message ?: "Cloud restore failed safely." }
+                            driveBusy = false
+                        }
+                    },
+                ) { Text(if (driveBusy) "Restoring..." else "Restore") }
+            },
+        )
+    }
 
     SettingsCard(
         icon = Icons.Filled.AccountCircle,
@@ -290,6 +345,23 @@ internal fun GoogleAccountCard() {
                             "${formatBackupSize(preview.backup.sizeBytes)}\nValid THOOP backup",
                         style = NoopType.footnote,
                         color = Palette.textSecondary,
+                    )
+                }
+
+                selectedPreview?.let { preview ->
+                    NoopButton(
+                        text = "Restore this backup",
+                        fullWidth = true,
+                        enabled = !driveBusy,
+                        onClick = { pendingRestore = preview.backup },
+                    )
+                }
+
+                if (restartRequired) {
+                    Text(
+                        text = "Restore completed. Fully close and reopen THOOP before continuing.",
+                        style = NoopType.footnote,
+                        color = Palette.accent,
                     )
                 }
 

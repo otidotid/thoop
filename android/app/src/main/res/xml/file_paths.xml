@@ -10,4 +10,5 @@
     <cache-path name="exports" path="exports/" />
     <cache-path name="recaps" path="recaps/" />
 	<cache-path name="cloud-backups" path="cloud-backups/" />
+    <files-path name="cloud-safety" path="cloud-safety/" />
 </paths>
