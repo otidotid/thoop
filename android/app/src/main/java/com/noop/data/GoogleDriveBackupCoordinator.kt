@@ -5,6 +5,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 
 /** Creates a verified .noopbak snapshot, uploads it, and removes the temporary file. */
 internal class GoogleDriveBackupCoordinator(
@@ -43,6 +44,23 @@ internal class GoogleDriveBackupCoordinator(
         accessToken: String,
         ownerId: String,
     ): List<GoogleDriveBackupClient.RemoteBackup> = driveClient.list(accessToken, ownerId)
+
+    data class BackupPreview(val backup: GoogleDriveBackupClient.RemoteBackup)
+
+    suspend fun previewBackup(
+        accessToken: String,
+        backup: GoogleDriveBackupClient.RemoteBackup,
+    ): BackupPreview = withContext(Dispatchers.IO) {
+        val downloaded = downloadForPreview(accessToken, backup.id)
+        try {
+            check(FileInputStream(downloaded).use(DataBackup::backupStreamIsIntact)) {
+                "The selected Google Drive backup is not a valid THOOP backup."
+            }
+            BackupPreview(backup)
+        } finally {
+            downloaded.delete()
+        }
+    }
 
     suspend fun downloadForPreview(
         accessToken: String,

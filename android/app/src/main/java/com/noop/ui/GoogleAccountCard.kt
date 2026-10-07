@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.noop.data.GoogleDriveBackupClient
 import com.noop.data.GoogleDriveBackupCoordinator
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -65,6 +66,12 @@ internal fun GoogleAccountCard() {
 
     var backupStatus by remember {
         mutableStateOf<String?>(null)
+    }
+    var availableBackups by remember {
+        mutableStateOf<List<GoogleDriveBackupClient.RemoteBackup>>(emptyList())
+    }
+    var selectedPreview by remember {
+        mutableStateOf<GoogleDriveBackupCoordinator.BackupPreview?>(null)
     }
 
     fun acceptDriveAuthorization(result: com.google.android.gms.auth.api.identity.AuthorizationResult) {
@@ -236,6 +243,57 @@ internal fun GoogleAccountCard() {
 
             if (currentAccount != null && driveAuthorized) {
                 NoopButton(
+                    text = if (driveBusy) "Loading backups..." else "Restore from Google Drive",
+                    fullWidth = true,
+                    enabled = !driveBusy && !busy && driveAccessToken != null,
+                    onClick = {
+                        val token = driveAccessToken ?: return@NoopButton
+                        driveBusy = true
+                        errorMessage = null
+                        selectedPreview = null
+                        scope.launch {
+                            runCatching { backupCoordinator.availableBackups(token, currentAccount.accountId) }
+                                .onSuccess { backups ->
+                                    availableBackups = backups
+                                    backupStatus = if (backups.isEmpty()) "No cloud backups found."
+                                        else "Select a backup to validate and preview."
+                                }
+                                .onFailure { errorMessage = it.message ?: "Could not load cloud backups." }
+                            driveBusy = false
+                        }
+                    },
+                )
+                availableBackups.forEach { backup ->
+                    NoopButton(
+                        text = "${formatCloudBackupDate(backup.createdTime)} · ${formatBackupSize(backup.sizeBytes)}",
+                        fullWidth = true,
+                        enabled = !driveBusy,
+                        onClick = {
+                            val token = driveAccessToken ?: return@NoopButton
+                            driveBusy = true
+                            scope.launch {
+                                runCatching { backupCoordinator.previewBackup(token, backup) }
+                                    .onSuccess {
+                                        selectedPreview = it
+                                        backupStatus = "Backup validated. No local data was changed."
+                                    }
+                                    .onFailure { errorMessage = it.message ?: "Could not validate backup." }
+                                driveBusy = false
+                            }
+                        },
+                    )
+                }
+                selectedPreview?.let { preview ->
+                    Text(
+                        text = "${preview.backup.name}\n" +
+                            "${formatCloudBackupDate(preview.backup.createdTime)} · " +
+                            "${formatBackupSize(preview.backup.sizeBytes)}\nValid THOOP backup",
+                        style = NoopType.footnote,
+                        color = Palette.textSecondary,
+                    )
+                }
+
+                NoopButton(
                     text = if (driveBusy) "Backing up..." else "Back up now",
                     fullWidth = true,
                     enabled = !driveBusy && !busy && driveAccessToken != null,
@@ -269,7 +327,7 @@ internal fun GoogleAccountCard() {
 
             Text(
                 text = if (driveAuthorized) {
-                    "The access token is kept only in memory. Restore and automatic schedules come next."
+                    "The access token is kept only in memory. Preview does not change local data."
                 } else {
                     "Signing in does not upload health data. Drive permission is requested only when enabled."
                 },
@@ -285,3 +343,8 @@ private fun formatBackupSize(bytes: Long): String = when {
     bytes >= 1_024L -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1_024.0)
     else -> "$bytes B"
 }
+
+
+private fun formatCloudBackupDate(createdTime: String): String = runCatching {
+    DateFormat.getDateTimeInstance().format(Date.from(java.time.Instant.parse(createdTime)))
+}.getOrDefault(createdTime.ifBlank { "Unknown date" })
