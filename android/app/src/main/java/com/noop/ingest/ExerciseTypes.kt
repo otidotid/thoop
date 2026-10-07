@@ -79,6 +79,8 @@ object ExerciseTypes {
      * on our own rows. List the display name + the HC type it falls back to.
      */
     val EXTRA: List<Pair<String, Int>> = listOf(
+        "Cold Bath" to EX.EXERCISE_TYPE_OTHER_WORKOUT,
+        "Warm Bath" to EX.EXERCISE_TYPE_OTHER_WORKOUT,
         "Padel" to EX.EXERCISE_TYPE_OTHER_WORKOUT,
         // Pickleball (#768): a fast-growing racquet sport HC has no type for → writes as "Other",
         // stays "Pickleball" on our own rows. No route → GPS off.

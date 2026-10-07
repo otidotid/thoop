@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,11 @@ internal fun GoogleAccountCard() {
     }
 
     val scope = rememberCoroutineScope()
+    val drivePrefs = remember(context) {
+        context.applicationContext.getSharedPreferences(
+            "thoop_google_drive", android.content.Context.MODE_PRIVATE,
+        )
+    }
 
     var account by remember {
         mutableStateOf(controller.storedAccount())
@@ -60,8 +66,10 @@ internal fun GoogleAccountCard() {
         mutableStateOf<String?>(null)
     }
 
-    var driveAuthorized by remember {
-        mutableStateOf(false)
+    var driveAuthorized by remember(account?.accountId) {
+        mutableStateOf(
+            account?.accountId?.let { drivePrefs.getBoolean("configured.$it", false) } == true,
+        )
     }
 
     var driveBusy by remember {
@@ -123,6 +131,9 @@ internal fun GoogleAccountCard() {
             .onSuccess { token ->
                 driveAccessToken = token
                 driveAuthorized = true
+                account?.accountId?.let {
+                    drivePrefs.edit().putBoolean("configured.$it", true).apply()
+                }
                 driveBusy = false
                 errorMessage = null
 
@@ -169,6 +180,17 @@ internal fun GoogleAccountCard() {
                         ?: "Google Drive authorization did not complete."
                 }
         }
+
+    LaunchedEffect(account?.accountId) {
+        val accountId = account?.accountId ?: return@LaunchedEffect
+        if (!drivePrefs.getBoolean("configured.$accountId", false)) return@LaunchedEffect
+        driveController.authorize(
+            onSuccess = { result ->
+                if (!result.hasResolution()) acceptDriveAuthorization(result)
+            },
+            onFailure = { /* Keep configured status; explicit Drive actions can retry. */ },
+        )
+    }
 
     if (showPostLoginRestorePrompt && postLoginBackups.isNotEmpty()) {
         val newestBackup = postLoginBackups.first()
@@ -317,6 +339,7 @@ internal fun GoogleAccountCard() {
 
                         scope.launch {
                             controller.signOut()
+                            account?.accountId?.let { drivePrefs.edit().remove("configured.$it").apply() }
                             account = null
                             driveAccessToken = null
                             driveAuthorized = false

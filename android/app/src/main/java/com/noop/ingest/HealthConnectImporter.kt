@@ -1,5 +1,7 @@
 package com.noop.ingest
 
+import com.noop.analytics.DailyStepSource
+import com.noop.analytics.StepsSourcePriority
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
@@ -1190,7 +1192,9 @@ object HealthConnectImporter {
      * (and internal) so the de-overlap semantics can be unit-tested without a HealthConnectClient,
      * mirroring the iOS/macOS `stepsBySource.values.max()` and the Android XML importer's `maxOrNull()`.
      */
-    internal fun maxSourceLong(bySource: Map<String, Long>): Long = bySource.values.maxOrNull() ?: 0L
+    internal fun maxSourceLong(bySource: Map<String, Long>): Long =
+        StepsSourcePriority.resolve(bySource.map { (source, steps) -> DailyStepSource(source, steps) })
+            ?.steps ?: 0L
 
     /** One Health Connect energy record's window + value, tagged with the writing app so the
      *  per-workout credit can de-overlap across sources the way the day totals do (#589, #835). */

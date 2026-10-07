@@ -13,11 +13,13 @@ import org.junit.Test
  */
 class HealthConnectStepsDeOverlapTest {
 
-    @Test fun twoStepSourcesTakeMaxNotSum() {
-        // Phone reports 8000, watch 9500 for the same day. Summing -> 17500 (the #589 double-count);
-        // de-overlap keeps the MAX source = 9500.
-        val bySource = mapOf("com.google.android.apps.fitness" to 8_000L, "com.whoop.android" to 9_500L)
-        assertEquals(9_500L, HealthConnectImporter.maxSourceLong(bySource))
+    @Test fun zeppWinsBeforePhoneAndOtherWithoutSumming() {
+        val bySource = mapOf(
+            "com.google.android.apps.fitness" to 8_000L,
+            "com.huami.watch.hmwatchmanager" to 7_500L,
+            "com.whoop.android" to 9_500L,
+        )
+        assertEquals(7_500L, HealthConnectImporter.maxSourceLong(bySource))
     }
 
     @Test fun twoCalorieSourcesTakeMaxNotSum() {

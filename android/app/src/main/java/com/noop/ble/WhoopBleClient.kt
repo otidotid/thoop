@@ -69,8 +69,12 @@ import com.noop.protocol.WhoopGattServiceFamily
 import com.noop.protocol.whoopGattScanDecision
 import com.noop.protocol.toHexLower
 import com.noop.analytics.Baselines
+import com.noop.analytics.AutoNapAction
+import com.noop.analytics.AutoNapPolicy
 import com.noop.analytics.BatterySocLine
 import com.noop.analytics.ConnectionReadout
+import com.noop.analytics.DerivedStateFingerprint
+import com.noop.analytics.DerivedStateFingerprints
 import com.noop.analytics.IntelligenceEngine
 import com.noop.analytics.NapDetector
 import com.noop.analytics.NapPrefs
@@ -3171,6 +3175,14 @@ class WhoopBleClient(
         schedulePostBackfillAnalysis()
     }
 
+    private suspend fun captureDerivedState(): DerivedStateFingerprint {
+        val now = System.currentTimeMillis() / 1000L
+        return DerivedStateFingerprints.of(
+            repository.daysMerged(deviceId).takeLast(7),
+            repository.sleepSessionsMerged(deviceId, now - 7L * 86_400L, now, 128),
+        )
+    }
+
     private fun schedulePostBackfillAnalysis(retry: Boolean = false) {
         if (!analyzeAfterBackfillScheduled.compareAndSet(false, true)) {
             // A later chunk arrived while the debounce or scoring pass was already active. Remember it:
@@ -3186,6 +3198,7 @@ class WhoopBleClient(
         // flashes a final "not detected" verdict between HISTORY_COMPLETE and the scoring pass starting.
         _state.update { it.copy(analyzingHistory = true) }
         ioScope.launch {
+            var derivedChanged = false
             try {
                 delay(POST_BACKFILL_ANALYZE_DELAY_MS) // let trailing chunks of the same session land
                 val profileStore = ProfileStore.from(context)
@@ -3202,6 +3215,7 @@ class WhoopBleClient(
                 // advances the watermark at the end of EVERY successful analyzeRecent (IntelligenceEngine.swift);
                 // this brings Android into lockstep. Captured before the run, written only on success, so an
                 // interrupted/failed pass can never advance the watermark past unscored data.
+                val derivedBefore = runCatching { captureDerivedState() }.getOrNull()
                 val analyzeFp = repository.analysisFingerprint()
                 // Attribute this forced post-offload re-score. A completed offload ALWAYS re-scores (#836),
                 // so an EMPTY/duplicate offload (rows=0, common on a flapping link) still pays for a full
@@ -3349,6 +3363,10 @@ class WhoopBleClient(
                     if (it is kotlin.coroutines.cancellation.CancellationException) throw it
                     log("Backfill: post-sync scoring failed: ${it.message}")
                 }
+                val derivedAfter = runCatching { captureDerivedState() }.getOrNull()
+                derivedChanged = derivedBefore != null && derivedAfter != null &&
+                    DerivedStateFingerprints.changed(derivedBefore, derivedAfter)
+                log("re-score: derivedChanged=" + if (derivedChanged) "yes" else "no")
                 // #1816: clear the motion sink after the post-backfill pass completes.
                 IntelligenceEngine.stepsHasMotionSink = null
                 // Keep the opt-in Health Connect writeback fresh in background-only operation too.
@@ -3367,7 +3385,8 @@ class WhoopBleClient(
                 // gravity/RR/sleep-state chunk now gets the decisive sleep-detection pass immediately.
                 // Check pending again after releasing the scheduled latch so a chunk racing this finally
                 // block cannot strand its retry signal.
-                val needsSecondPass = retryAlreadyQueued || analyzeAfterBackfillPending.getAndSet(false)
+                analyzeAfterBackfillPending.getAndSet(false)
+                val needsSecondPass = derivedChanged
                 if (needsSecondPass && postBackfillPass.get() < 2) {
                     schedulePostBackfillAnalysis(retry = true)
                 } else {
@@ -4871,8 +4890,8 @@ class WhoopBleClient(
                     config = NapPrefs.config(context),
                 )
                 val candidate = decision.candidate
-                when (decision.verdict) {
-                    NapVerdict.NAP -> if (candidate != null && candidate.end > highWater) {
+                when (AutoNapPolicy.action(NapPrefs.enabled(context), decision.verdict)) {
+                    AutoNapAction.ACCEPT -> if (candidate != null && candidate.end > highWater) {
                         // Nap Detection ON is the master automation switch. A conservative NAP verdict
                         // follows the same overlap-guarded persistence path as a manually accepted nap.
                         repository.addManualNap(deviceId, candidate.start, candidate.end)
@@ -4882,12 +4901,12 @@ class WhoopBleClient(
                         schedulePostBackfillAnalysis()
                         log("Nap detection: auto-accepted a ~${candidate.durationS / 60}-min nap.")
                     }
-                    NapVerdict.INCONCLUSIVE -> {
+                    AutoNapAction.REJECT -> {
                         // Never queue or persist ambiguous windows. Remove a matching stale candidate if
                         // an older build had queued it, so it cannot leak into Sleep/Rest/Charge/Recovery.
                         if (candidate != null) NapStore.dismiss(context, NapStore.idFor(candidate), nowSec)
                     }
-                    NapVerdict.NONE -> Unit
+                    AutoNapAction.IGNORE -> Unit
                 }
             } catch (t: Throwable) {
                 log("Nap detection: check failed (${t.message})")

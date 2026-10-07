@@ -3979,8 +3979,6 @@ fun SettingsScreen(
             )
         }
 
-        GoogleAccountCard()
-
         SettingsCard(
             icon = Icons.Filled.Storage,
             title = uiString(R.string.l10n_settings_screen_backup_restore_a1616284),

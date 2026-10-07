@@ -1337,6 +1337,7 @@ fun TimelineChart(
     // Round wall-clock (epochSec, "HH:mm") ticks, each drawn as a dotted gridline under the curve.
     // The matching labels render OUTSIDE this plot-height composable by the host. Empty = no gridlines.
     timeTicks: List<Pair<Long, String>> = emptyList(),
+    sleepWindows: List<LongRange> = emptyList(),
 ) {
     val span = (windowEnd - windowStart).coerceAtLeast(1L)
     val vis = remember(points, windowStart, windowEnd) {
@@ -1377,6 +1378,19 @@ fun TimelineChart(
                 }
             },
     ) {
+        if (sleepWindows.isNotEmpty()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                sleepWindows.forEach { range ->
+                    val left = ((range.first.coerceIn(windowStart, windowEnd) - windowStart).toFloat() / span) * size.width
+                    val right = ((range.last.coerceIn(windowStart, windowEnd) - windowStart).toFloat() / span) * size.width
+                    if (right > left) drawRect(
+                        color = Palette.sleepLight.copy(alpha = 0.10f),
+                        topLeft = Offset(left, 0f),
+                        size = androidx.compose.ui.geometry.Size(right - left, size.height),
+                    )
+                }
+            }
+        }
         // Dotted round-time gridlines, FIRST so the curve reads over them (matching OverviewHRChart z-order).
         if (timeTicks.isNotEmpty()) {
             val gridDash = remember { PathEffect.dashPathEffect(floatArrayOf(4f, 6f), 0f) }

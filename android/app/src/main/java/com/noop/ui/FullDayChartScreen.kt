@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -165,6 +168,7 @@ fun FullDayChartScreen(vm: AppViewModel, onBack: () -> Unit) {
     var isRaw by remember { mutableStateOf(false) }
     var bucketSeconds by remember { mutableStateOf(0L) }
     var loading by remember { mutableStateOf(true) }
+    var sleepWindows by remember { mutableStateOf<List<com.noop.data.SleepSession>>(emptyList()) }
 
     // Imperial/Metric temperature preference (#101) — skin temp is stored/read in °C, so when the user
     // has °F selected the chart line, y-axis, stats AND readout need the converted number, not just a
@@ -208,6 +212,9 @@ fun FullDayChartScreen(vm: AppViewModel, onBack: () -> Unit) {
         bucketSeconds = bucket
         isRaw = bucket <= 1L
         points = readTimeline(vm, deviceId, metric, from, to, bucket)
+        sleepWindows = if (metric == TimelineMetric.Hr) {
+            runCatching { vm.repo.sleepSessionsMerged(deviceId, from, to, 128) }.getOrDefault(emptyList())
+        } else emptyList()
         loading = false
     }
 
@@ -303,11 +310,24 @@ fun FullDayChartScreen(vm: AppViewModel, onBack: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth().height(280.dp),
                                 onWindowChange = { window = it },
                                 timeTicks = timeTicks,
+                                sleepWindows = sleepWindows.map { it.startTs..it.endTs },
                             )
                         }
                     }
                     // X-axis: HH:mm labels aligned to their gridlines via the same wall-clock mapping.
                     // Hidden when the chart is empty (loading / unsupported) so no labels float alone.
+                    if (metric == TimelineMetric.Hr && sleepWindows.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            sleepWindows.forEach { session ->
+                                val mins = ((session.endTs - session.startTs) / 60L).coerceAtLeast(0L)
+                                val label = if (mins <= 180L) "Nap" else "Sleep"
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Bedtime, contentDescription = label, tint = Palette.sleepLight)
+                                    Text("$label · ${mins / 60}h ${mins % 60}m", style = NoopType.footnote, color = Palette.sleepLight)
+                                }
+                            }
+                        }
+                    }
                     if (displayPoints.isNotEmpty()) {
                         TimelineTimeAxisLabels(
                             ticks = timeTicks,
