@@ -82,6 +82,15 @@ internal fun GoogleAccountCard() {
     var restartRequired by remember {
         mutableStateOf(false)
     }
+    var postLoginBackups by remember {
+        mutableStateOf<List<GoogleDriveBackupClient.RemoteBackup>>(emptyList())
+    }
+    var showPostLoginRestorePrompt by remember {
+        mutableStateOf(false)
+    }
+    var restorePromptHandledAccountId by remember {
+        mutableStateOf<String?>(null)
+    }
 
     fun acceptDriveAuthorization(result: com.google.android.gms.auth.api.identity.AuthorizationResult) {
         driveController.accessToken(result)
@@ -90,6 +99,26 @@ internal fun GoogleAccountCard() {
                 driveAuthorized = true
                 driveBusy = false
                 errorMessage = null
+
+                val signedInAccount = account
+                if (signedInAccount != null &&
+                    restorePromptHandledAccountId != signedInAccount.accountId
+                ) {
+                    scope.launch {
+                        runCatching {
+                            backupCoordinator.availableBackups(token, signedInAccount.accountId)
+                        }.onSuccess { backups ->
+                            restorePromptHandledAccountId = signedInAccount.accountId
+                            if (backups.isNotEmpty()) {
+                                postLoginBackups = backups
+                                showPostLoginRestorePrompt = true
+                            }
+                        }.onFailure { failure ->
+                            errorMessage = failure.message
+                                ?: "Could not check Google Drive backups after sign-in."
+                        }
+                    }
+                }
             }
             .onFailure { failure ->
                 driveAccessToken = null
@@ -114,6 +143,36 @@ internal fun GoogleAccountCard() {
                         ?: "Google Drive authorization did not complete."
                 }
         }
+
+    if (showPostLoginRestorePrompt && postLoginBackups.isNotEmpty()) {
+        val newestBackup = postLoginBackups.first()
+        AlertDialog(
+            onDismissRequest = { showPostLoginRestorePrompt = false },
+            title = { Text("Google Drive backup found") },
+            text = {
+                Text(
+                    "A THOOP backup from ${formatCloudBackupDate(newestBackup.createdTime)} " +
+                        "is available (${formatBackupSize(newestBackup.sizeBytes)}). " +
+                        "You can preview it before deciding whether to restore."
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showPostLoginRestorePrompt = false },
+                ) { Text("Continue without restoring") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        availableBackups = postLoginBackups
+                        selectedPreview = null
+                        backupStatus = "Select a backup to validate and preview."
+                        showPostLoginRestorePrompt = false
+                    },
+                ) { Text("Preview & Restore") }
+            },
+        )
+    }
 
     pendingRestore?.let { backup ->
         AlertDialog(
