@@ -3192,8 +3192,9 @@ class WhoopBleClient(
                 // data loss (#1196). Scoped to THIS post-offload trigger only: import/edit/settings/
                 // recalibrate re-scores force regardless of the raw-input fingerprint and are untouched. Twin of
                 // the Swift `analyzeRecent(skipIfUnchanged:)` gate at the refreshAfterCompletedBackfill site.
-                val newData = analyzeFp != NoopPrefs.analyzeWatermark(context)
-                log("re-score: trigger=post-offload newData=" +
+                val forceRescore = forcePostBackfillAnalysis.getAndSet(false)
+                val newData = forceRescore || analyzeFp != NoopPrefs.analyzeWatermark(context)
+                log("re-score: trigger=" + (if (forceRescore) "auto-nap" else "post-offload") + " newData=" +
                     if (newData) "yes"
                     else "no (empty/duplicate offload — nothing changed since last run) — skipping (#1146)")
                 if (newData) runCatching {
@@ -3501,6 +3502,7 @@ class WhoopBleClient(
     /** One-shot debounce: a post-backfill scoring pass is already scheduled/running. */
     private val analyzeAfterBackfillScheduled = java.util.concurrent.atomic.AtomicBoolean(false)
     private val analyzeAfterBackfillPending = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val forcePostBackfillAnalysis = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /** Guards the once-per-connect initial offload kick (Swift `backfillStarted`). */
     private var backfillStarted = false
@@ -4801,10 +4803,9 @@ class WhoopBleClient(
      * Read-only hook on the natural offload completion — the SAME instant [maybeNudgeStress] /
      * [maybeBuzzInactivity] run, so it adds NO cadence of its own. Over the freshly-offloaded daytime
      * window it runs the pure, unit-tested [NapDetector] (dense-gravity eligibility gate → tri-state
-     * NAP / NONE / INCONCLUSIVE) and, ONLY on a confident NAP, queues the candidate for review via
-     * [NapStore]. It NEVER auto-writes a sleep session: a confirmed nap goes through the user's review
-     * card → `addManualNap` (#508), the same overlap-guarded path a hand-corrected nap uses. Honest by
-     * construction: an INCONCLUSIVE window queues nothing.
+     * NAP / NONE / INCONCLUSIVE) and, ONLY on a confident NAP, persists it through `addManualNap` (#508), the same overlap-guarded
+     * path a hand-corrected nap uses, then schedules the existing coalesced rescore. INCONCLUSIVE and NONE
+     * never become sleep sessions; an ambiguous matching legacy queue item is dismissed.
      *
      * Self-gates on the NapPrefs toggle (default OFF, opt-in), so it's fully inert until enabled.
      */
@@ -4836,18 +4837,24 @@ class WhoopBleClient(
                     restingHr = restingHr,
                     config = NapPrefs.config(context),
                 )
-                if (decision.verdict == NapVerdict.NAP && decision.candidate != null &&
-                    decision.candidate.end > highWater
-                ) {
-                    val queued = NapStore.enqueue(context, decision.candidate, nowSec)
-                    // Advance the mark past this nap's window so the same window isn't re-judged on the next
-                    // overlapping offload — whether or not it newly queued (a dup the user already saw or
-                    // dismissed is still "past"). NapStore's own dedup is the belt to this braces.
-                    NapPrefs.setHighWaterTs(context, decision.candidate.end)
-                    if (queued) {
-                        val mins = decision.candidate.durationS / 60
-                        log("Nap detection: queued a ~$mins-min nap for review.")
+                val candidate = decision.candidate
+                when (decision.verdict) {
+                    NapVerdict.NAP -> if (candidate != null && candidate.end > highWater) {
+                        // Nap Detection ON is the master automation switch. A conservative NAP verdict
+                        // follows the same overlap-guarded persistence path as a manually accepted nap.
+                        repository.addManualNap(deviceId, candidate.start, candidate.end)
+                        NapStore.dismiss(context, NapStore.idFor(candidate), nowSec)
+                        NapPrefs.setHighWaterTs(context, candidate.end)
+                        forcePostBackfillAnalysis.set(true)
+                        schedulePostBackfillAnalysis()
+                        log("Nap detection: auto-accepted a ~${candidate.durationS / 60}-min nap.")
                     }
+                    NapVerdict.INCONCLUSIVE -> {
+                        // Never queue or persist ambiguous windows. Remove a matching stale candidate if
+                        // an older build had queued it, so it cannot leak into Sleep/Rest/Charge/Recovery.
+                        if (candidate != null) NapStore.dismiss(context, NapStore.idFor(candidate), nowSec)
+                    }
+                    NapVerdict.NONE -> Unit
                 }
             } catch (t: Throwable) {
                 log("Nap detection: check failed (${t.message})")

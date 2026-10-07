@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.BatteryStd
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Storage
@@ -188,6 +189,7 @@ internal enum class Destination(
     FusedRecord("fused_record", R.string.nav_fused_record, Icons.AutoMirrored.Filled.CompareArrows),
     Notifications("notifications", R.string.nav_notifications, Icons.Filled.Notifications),
     PowerSaving("power_saving", R.string.nav_power_saving, Icons.Filled.BatteryStd),
+    Profile("profile", R.string.l10n_settings_screen_profile_ff4fc027, Icons.Filled.AccountCircle),
     Settings("settings", R.string.nav_settings, Icons.Filled.Settings),
     // Experimental and intentionally absent from More: reachable only through Settings > Advanced.
     SelfHostedPush("self_hosted_push", R.string.nav_self_hosted_push, Icons.Filled.CloudSync),
@@ -636,9 +638,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         // sheet AppRoot presents (it owns the nav for deep-links).
                         updateStore = updateStore,
                         onOpenUpdates = { showUpdatesInbox = true },
-                        // The leading profile avatar opens Settings (where the photo is set/changed),
-                        // mirroring iOS's avatar-leading Today header. The drawer hamburger is unchanged.
-                        onOpenSettings = { nav.navigateTopLevel(Destination.Settings.route) },
+                        // The leading avatar opens the account-facing Profile surface. General Settings
+                        // remains a separate destination reachable from Profile and More.
+                        onOpenSettings = { nav.navigateTopLevel(Destination.Profile.route) },
                         // The opt-in Hydration card (only shown when Hydration tracking is on) pushes its
                         // detail. A normal push so the back-stack returns to Today.
                         onOpenHydration = { nav.navigate(Destination.Hydration.route) },
@@ -733,7 +735,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         onVitalClick = { nav.navigate("vital_detail/$it") },
                         onOpenLabBook = { nav.navigateTopLevel(Destination.LabBook.route) },
                         onOpenFusedRecord = { nav.navigateTopLevel(Destination.FusedRecord.route) },
-                        onOpenSettings = { nav.navigateTopLevel(Destination.Settings.route) },
+                        onOpenSettings = { nav.navigateTopLevel(Destination.Profile.route) },
                     )
                 }
                 composable(Destination.Hydration.route) { HydrationScreen(viewModel) }
@@ -768,6 +770,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.BackupSync.route) { BackupSyncScreen() }
                 composable(Destination.Notifications.route) { NotificationsSettingsScreen(viewModel) }
                 composable(Destination.PowerSaving.route) { PowerSavingScreen(viewModel) }
+                composable(Destination.Profile.route) {
+                    ProfileScreen(onOpenSettings = { nav.navigate(Destination.Settings.route) })
+                }
                 composable(Destination.Settings.route) {
                     SettingsScreen(
                         viewModel,
