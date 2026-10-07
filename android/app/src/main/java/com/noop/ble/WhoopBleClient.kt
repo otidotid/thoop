@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import com.noop.NoopApplication
@@ -1032,6 +1033,7 @@ class WhoopBleClient(
         private const val WHOOP5_HISTORY_RETRY_DELAY_MS = 700L
         /** Debounce between a committed backfill chunk and the on-device scoring pass it schedules. */
         private const val POST_BACKFILL_ANALYZE_DELAY_MS = 1_500L
+        private const val HISTORICAL_WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
         /** #174: window after the last offload frame/HISTORY_COMPLETE during which a type-0x2F frame is
          *  treated as trailing-historical, not live. Mirrors macOS deepPacketLiveCooldownSeconds (10s). */
         private const val DEEP_PACKET_LIVE_COOLDOWN_MS = 10_000L
@@ -3100,6 +3102,27 @@ class WhoopBleClient(
         }
     }
 
+    private var historicalWakeLock: PowerManager.WakeLock? = null
+
+    private fun acquireHistoricalWakeLock() {
+        releaseHistoricalWakeLock()
+        val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        historicalWakeLock = power.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "THOOP:historical-offload",
+        ).apply {
+            setReferenceCounted(false)
+            acquire(HISTORICAL_WAKE_LOCK_TIMEOUT_MS)
+        }
+    }
+
+    private fun releaseHistoricalWakeLock() {
+        historicalWakeLock?.let { lock ->
+            if (lock.isHeld) runCatching { lock.release() }
+        }
+        historicalWakeLock = null
+    }
+
     /** The offload state machine. Ack callback writes HISTORICAL_DATA_RESULT (with response). */
     private val backfiller = Backfiller(
         repository = repository,
@@ -3148,7 +3171,7 @@ class WhoopBleClient(
         schedulePostBackfillAnalysis()
     }
 
-    private fun schedulePostBackfillAnalysis() {
+    private fun schedulePostBackfillAnalysis(retry: Boolean = false) {
         if (!analyzeAfterBackfillScheduled.compareAndSet(false, true)) {
             // A later chunk arrived while the debounce or scoring pass was already active. Remember it:
             // sleep-critical gravity commonly trails HR, and dropping this signal is how a partial first
@@ -3156,6 +3179,9 @@ class WhoopBleClient(
             analyzeAfterBackfillPending.set(true)
             return
         }
+        // One sync generation is capped at Pass 1 plus one coalesced Pass 2. A retry never opens a
+        // third pass, even if more callbacks race while it runs.
+        postBackfillPass.set(if (retry) 2 else 1)
         // The debounce is part of the calculation lifecycle. Publish this before waiting so Sleep never
         // flashes a final "not detected" verdict between HISTORY_COMPLETE and the scoring pass starting.
         _state.update { it.copy(analyzingHistory = true) }
@@ -3341,8 +3367,14 @@ class WhoopBleClient(
                 // gravity/RR/sleep-state chunk now gets the decisive sleep-detection pass immediately.
                 // Check pending again after releasing the scheduled latch so a chunk racing this finally
                 // block cannot strand its retry signal.
-                if (retryAlreadyQueued || analyzeAfterBackfillPending.getAndSet(false)) {
-                    schedulePostBackfillAnalysis()
+                val needsSecondPass = retryAlreadyQueued || analyzeAfterBackfillPending.getAndSet(false)
+                if (needsSecondPass && postBackfillPass.get() < 2) {
+                    schedulePostBackfillAnalysis(retry = true)
+                } else {
+                    // Pass 2 is the hard ceiling for this generation. Any later sync starts a new generation.
+                    analyzeAfterBackfillPending.set(false)
+                    postBackfillPass.set(0)
+                    _state.update { it.copy(analyzingHistory = false) }
                 }
             }
         }
@@ -3503,6 +3535,7 @@ class WhoopBleClient(
     private val analyzeAfterBackfillScheduled = java.util.concurrent.atomic.AtomicBoolean(false)
     private val analyzeAfterBackfillPending = java.util.concurrent.atomic.AtomicBoolean(false)
     private val forcePostBackfillAnalysis = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val postBackfillPass = java.util.concurrent.atomic.AtomicInteger(0)
 
     /** Guards the once-per-connect initial offload kick (Swift `backfillStarted`). */
     private var backfillStarted = false
@@ -10827,6 +10860,7 @@ class WhoopBleClient(
         // in the same burst banked rows — tell the backfiller so its no-cursor END reads as "caught up",
         // not "no banked history / charge to 100%". A fresh offload (count 0) keeps the honest guidance.
         backfiller.begin(connectedFamily, continuedAfterRows = consecutiveAutoContinues > 0)   // family drives the +4 puffin offset for 5/MG (#78)
+        acquireHistoricalWakeLock()
         backfilling = true
         lastBackfillAtMs = System.currentTimeMillis()   // the BackfillPolicy floor is measured from the last KICK
         ackedChunksThisSession = 0
@@ -11078,6 +11112,7 @@ class WhoopBleClient(
     private fun exitBackfilling(reason: String) {
         if (!backfilling) return
         backfilling = false
+        releaseHistoricalWakeLock()
         refreshConnectionPriority()   // #477: offload done — drop back to idle priority. No-op unless enabled.
         // #533: offload done — hand the PHY back to 1M too, so the 2M preference is BOUNDED to the burst
         // exactly like the priority escalation above. A PHY PERSISTS once negotiated, so without this a link
