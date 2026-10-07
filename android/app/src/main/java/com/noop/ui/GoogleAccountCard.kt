@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.noop.data.GoogleDriveBackupClient
 import com.noop.data.GoogleDriveBackupCoordinator
 import com.noop.data.DataBackup
+import com.noop.data.CloudBackupCadence
+import com.noop.data.CloudBackupSchedule
+import com.noop.data.GoogleCloudBackupPreferences
+import com.noop.data.GoogleCloudBackupScheduler
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -90,6 +95,27 @@ internal fun GoogleAccountCard() {
     }
     var restorePromptHandledAccountId by remember {
         mutableStateOf<String?>(null)
+    }
+
+    val cloudSchedulePreferences = remember(context) {
+        GoogleCloudBackupPreferences(context.applicationContext)
+    }
+    var cloudSchedule by remember {
+        mutableStateOf(cloudSchedulePreferences.read())
+    }
+    var cloudScheduleStatus by remember {
+        mutableStateOf(cloudSchedulePreferences.status())
+    }
+
+    fun updateCloudSchedule(value: CloudBackupSchedule) {
+        cloudSchedule = value
+        cloudSchedulePreferences.write(value)
+        GoogleCloudBackupScheduler.apply(context.applicationContext, value)
+        cloudScheduleStatus = if (value.enabled) {
+            "Automatic backup scheduled: ${value.cadence.label}."
+        } else {
+            "Automatic backup is off."
+        }
     }
 
     fun acceptDriveAuthorization(result: com.google.android.gms.auth.api.identity.AuthorizationResult) {
@@ -446,6 +472,55 @@ internal fun GoogleAccountCard() {
                         }
                     },
                 )
+            }
+
+            if (currentAccount != null && driveAuthorized) {
+                Text(
+                    text = "Automatic backup",
+                    style = NoopType.subhead,
+                    color = Palette.textPrimary,
+                )
+                Switch(
+                    checked = cloudSchedule.enabled,
+                    onCheckedChange = { enabled ->
+                        updateCloudSchedule(cloudSchedule.copy(enabled = enabled))
+                    },
+                )
+                NoopButton(
+                    text = "Schedule: ${cloudSchedule.cadence.label}",
+                    fullWidth = true,
+                    enabled = !driveBusy,
+                    onClick = {
+                        val next = when (cloudSchedule.cadence) {
+                            CloudBackupCadence.DAILY -> CloudBackupCadence.THREE_DAYS
+                            CloudBackupCadence.THREE_DAYS -> CloudBackupCadence.WEEKLY
+                            CloudBackupCadence.WEEKLY -> CloudBackupCadence.DAILY
+                        }
+                        updateCloudSchedule(cloudSchedule.copy(cadence = next))
+                    },
+                )
+                Text(text = "Wi-Fi only", style = NoopType.footnote, color = Palette.textSecondary)
+                Switch(
+                    checked = cloudSchedule.wifiOnly,
+                    onCheckedChange = { updateCloudSchedule(cloudSchedule.copy(wifiOnly = it)) },
+                )
+                Text(text = "Charging only", style = NoopType.footnote, color = Palette.textSecondary)
+                Switch(
+                    checked = cloudSchedule.chargingOnly,
+                    onCheckedChange = { updateCloudSchedule(cloudSchedule.copy(chargingOnly = it)) },
+                )
+                NoopButton(
+                    text = "Run automatic backup now",
+                    fullWidth = true,
+                    enabled = !driveBusy,
+                    onClick = {
+                        GoogleCloudBackupScheduler.runNow(context.applicationContext)
+                        cloudScheduleStatus = "Automatic backup queued."
+                    },
+                )
+                cloudScheduleStatus?.let { status ->
+                    Text(text = status, style = NoopType.footnote, color = Palette.textTertiary)
+                }
             }
 
             backupStatus?.let { status ->
