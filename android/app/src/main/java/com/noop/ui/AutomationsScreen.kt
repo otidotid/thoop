@@ -404,14 +404,7 @@ private fun NapDetectionSection(viewModel: AppViewModel) {
                 if (it) pending = viewModel.pendingNaps()
             },
         )
-        if (enabled) {
-            if (pending.isEmpty()) {
-                RowDivider()
-                Text(
-                    uiString(R.string.l10n_automations_screen_no_naps_to_review_detected_naps_2e82e9fc),
-                    style = NoopType.footnote, color = Palette.textTertiary,
-                )
-            } else {
+        if (enabled && pending.isNotEmpty()) {
                 pending.forEach { nap ->
                     RowDivider()
                     NapReviewRow(
@@ -420,7 +413,6 @@ private fun NapDetectionSection(viewModel: AppViewModel) {
                         onDismiss = { pending = viewModel.dismissDetectedNap(nap) },
                     )
                 }
-            }
         }
     }
 }

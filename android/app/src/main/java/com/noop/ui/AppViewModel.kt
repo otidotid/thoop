@@ -1361,6 +1361,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         effortMethod = NoopPrefs.effortMethod(appContext),
                         dayCycleMode = NoopPrefs.dayCycleMode(appContext),
                     )
+                    PersonalOxygenEngine.refreshAfterRescore(appContext, repository, deviceId)
                     // analyzeRecent now hops to Dispatchers.Default; a scope cancellation surfaces as a
                     // CancellationException that runCatching would otherwise swallow, breaking the loop's
                     // own cancellation — rethrow it so onCleared() actually stops the loop. (#125)
@@ -2058,6 +2059,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 effortMethod = NoopPrefs.effortMethod(appContext),
                 dayCycleMode = NoopPrefs.dayCycleMode(appContext),
             )
+            PersonalOxygenEngine.refreshAfterRescore(appContext, repository, deviceId)
         }.onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
         IntelligenceEngine.stepsHasMotionSink = null
     }
@@ -2248,6 +2250,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val ticks = com.noop.analytics.StepsCounter.stepsInWindow(samples) ?: return null
         val scaled = (ticks.toDouble() / maxOf(profileStore.stepTicksPerStep, 0.5)).roundToInt()
         return if (scaled > 0) scaled else null
+    }
+
+    fun saveAutoDetectedWorkout(candidate: com.noop.analytics.AutoWorkoutDetector.DetectedWorkout, row: WorkoutRow) {
+        viewModelScope.launch {
+            val saved = repository.saveAutoDetectedWorkoutIfNoSleep(deviceId, row)
+            if (!saved) AutoWorkoutPrefs.dismiss(appContext, candidate)
+            rescoreAfterEdit(); loadWorkouts()
+        }
     }
 
     /** Save a retroactive / edited manual workout, then reload. [replacing] is the original on edit. */

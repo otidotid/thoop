@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.analytics.PersonalOxygenEngine
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -3335,6 +3337,7 @@ class WhoopBleClient(
                         effortMethod = NoopPrefs.effortMethod(context),
                         dayCycleMode = NoopPrefs.dayCycleMode(context),
                     )
+                    PersonalOxygenEngine.refreshAfterRescore(context.applicationContext, repository, deviceId)
                 }.onSuccess {
                     // Advance the shared watermark so the next 15-min tick sees no change and skips (#836).
                     NoopPrefs.setAnalyzeWatermark(context, analyzeFp)

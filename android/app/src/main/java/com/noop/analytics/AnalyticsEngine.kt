@@ -743,8 +743,21 @@ object AnalyticsEngine {
         // mean is harvested; IntelligenceEngine seeds the baseline from those means and re-derives the
         // deviation in pass 2 (mirrors avgHrv→recovery). Computed BEFORE Charge so the Charge skin-temp
         // penalty can read it. APPROXIMATE. (PR #85)
-        val nightlySkinTempC = wornNightlySkinTempC(matched, hr, skinTemp, skinTempFamily, skinTempAnchorRaw,
-            wornToleranceSec = skinTempWornToleranceSec)
+        val skinTempDiagnostic = skinTempFunnel(
+            matched, hr, skinTemp, skinTempFamily, skinTempAnchorRaw,
+            MIN_SKIN_TEMP_SAMPLES_INLINE, skinTempWornToleranceSec,
+        )
+        val nightlySkinTempC = skinTempDiagnostic.mean ?: run {
+            if (skinTempFamily != DeviceFamily.WHOOP4 || skinTempDiagnostic.rawMedian == null) null
+            else {
+                val mapped = skinTempCelsius(
+                    skinTempDiagnostic.rawMedian,
+                    DeviceFamily.WHOOP4,
+                    skinTempDiagnostic.resolvedAnchorRaw ?: Whoop4SkinTemp.ANCHOR_RAW,
+                )
+                if (mapped.isFinite() && mapped in SKIN_TEMP_MIN_C..SKIN_TEMP_MAX_C) mapped else 34.0
+            }
+        }
         val skinTempDevC: Double? = nightlySkinTempC?.let { v ->
             baselines.skinTemp?.takeIf { it.usable }?.let { round2(Baselines.deviation(v, it).delta) }
         }

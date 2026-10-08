@@ -101,9 +101,6 @@ internal fun GoogleAccountCard() {
     var showPostLoginRestorePrompt by remember {
         mutableStateOf(false)
     }
-    var restorePromptHandledAccountId by remember {
-        mutableStateOf<String?>(null)
-    }
 
     val cloudSchedulePreferences = remember(context) {
         GoogleCloudBackupPreferences(context.applicationContext)
@@ -138,18 +135,15 @@ internal fun GoogleAccountCard() {
                 errorMessage = null
 
                 val signedInAccount = account
-                if (signedInAccount != null &&
-                    restorePromptHandledAccountId != signedInAccount.accountId
-                ) {
+                if (signedInAccount != null) {
                     scope.launch {
                         runCatching {
                             backupCoordinator.availableBackups(token, signedInAccount.accountId)
                         }.onSuccess { backups ->
-                            restorePromptHandledAccountId = signedInAccount.accountId
-                            if (backups.isNotEmpty()) {
-                                postLoginBackups = backups
-                                showPostLoginRestorePrompt = true
-                            }
+                            val newest = backups.firstOrNull()
+                            val ack = drivePrefs.getString("restorePromptAcknowledged.${signedInAccount.accountId}", null)
+                            if (newest != null && ack != newest.id) { postLoginBackups = backups; showPostLoginRestorePrompt = true }
+
                         }.onFailure { failure ->
                             errorMessage = failure.message
                                 ?: "Could not check Google Drive backups after sign-in."
@@ -195,7 +189,7 @@ internal fun GoogleAccountCard() {
     if (showPostLoginRestorePrompt && postLoginBackups.isNotEmpty()) {
         val newestBackup = postLoginBackups.first()
         AlertDialog(
-            onDismissRequest = { showPostLoginRestorePrompt = false },
+            onDismissRequest = { postLoginBackups.firstOrNull()?.let { newest -> account?.accountId?.let { id -> drivePrefs.edit().putString("restorePromptAcknowledged.$id", newest.id).apply() } }; showPostLoginRestorePrompt = false },
             title = { Text("Google Drive backup found") },
             text = {
                 Text(
@@ -206,13 +200,13 @@ internal fun GoogleAccountCard() {
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showPostLoginRestorePrompt = false },
+                    onClick = { postLoginBackups.firstOrNull()?.let { newest -> account?.accountId?.let { id -> drivePrefs.edit().putString("restorePromptAcknowledged.$id", newest.id).apply() } }; showPostLoginRestorePrompt = false },
                 ) { Text("Continue without restoring") }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        availableBackups = postLoginBackups
+                        postLoginBackups.firstOrNull()?.let { newest -> account?.accountId?.let { id -> drivePrefs.edit().putString("restorePromptAcknowledged.$id", newest.id).apply() } }; availableBackups = postLoginBackups
                         selectedPreview = null
                         backupStatus = "Select a backup to validate and preview."
                         showPostLoginRestorePrompt = false

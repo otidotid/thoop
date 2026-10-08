@@ -757,6 +757,18 @@ class WhoopRepository(
 
     suspend fun upsertDailyMetrics(days: List<DailyMetric>) = dao.upsertDailyMetrics(days)
 
+    private suspend fun reconcileAutoWorkoutsForSleep(activeDeviceId: String, sessions: List<SleepSession>) {
+        val ids = listOf(activeDeviceId, "$activeDeviceId-noop", "my-whoop", "my-whoop-noop").distinct()
+        for (s in sessions) for (id in ids) dao.deleteAutoDetectedWorkoutOverlap(id, s.effectiveStartTs, s.endTs)
+    }
+
+    suspend fun saveAutoDetectedWorkoutIfNoSleep(activeDeviceId: String, row: WorkoutRow): Boolean = transactor.run {
+        val ids = listOf(activeDeviceId, "$activeDeviceId-noop", "my-whoop", "my-whoop-noop").distinct()
+        val sleeps = ids.flatMap { dao.sleepSessions(it, row.startTs - 1, row.endTs + 1, DEFAULT_LIMIT) }
+        if (sleeps.any { it.effectiveStartTs < row.endTs && it.endTs > row.startTs }) false
+        else { dao.upsertWorkouts(listOf(row.copy(source = "auto-detected"))); true }
+    }
+
     /**
      * Upsert cached sleep sessions without letting a partial re-serve replace a fuller night.
      *
@@ -777,6 +789,7 @@ class WhoopRepository(
                     }
                 }
             }
+            reconcileAutoWorkoutsForSleep(sessions.first().deviceId.removeSuffix("-noop"), sessions)
         }
     }
 
@@ -866,6 +879,7 @@ class WhoopRepository(
                 stagesJSON = reclipped ?: session.stagesJSON,
             )),
         )
+        reconcileAutoWorkoutsForSleep(session.deviceId.removeSuffix("-noop"), listOf(session.copy(startTsAdjusted = safeStartTs, endTs = safeEndTs, userEdited = true)))
     }
 
     /** Apply a hand-corrected bed/wake window across a BRIDGED night — every fragment, not just one.
@@ -890,6 +904,7 @@ class WhoopRepository(
         val plan = com.noop.analytics.SleepGroupEdit.plan(group, safeStartTs, safeEndTs)
         if (plan.clipped.isEmpty()) return
         dao.upsertSleepSessions(plan.clipped)
+        reconcileAutoWorkoutsForSleep(group.first().deviceId.removeSuffix("-noop"), plan.clipped)
         plan.dropped.forEach { deleteSleepSession(it) }
     }
 
@@ -1032,6 +1047,7 @@ class WhoopRepository(
                 startTsAdjusted = null,
             ),
         )
+        reconcileAutoWorkoutsForSleep(strapDeviceId, listOf(SleepSession(computedId, safeStartTs, safeEndTs, userEdited = true)))
     }
 
     /** Asleep fraction (light+deep+rem ÷ total in-bed) of a segment-array [stagesJSON], or null when the
@@ -2368,7 +2384,7 @@ class WhoopRepository(
          *  classification shared by [fillWorkoutHrFromStrap] and [workoutHrDeviceIds]. */
         fun isStrapNativeWorkout(source: String): Boolean {
             val s = source.lowercase()
-            return s == "manual" || s.endsWith("-noop")
+            return s == "manual" || s == "auto-detected" || s.endsWith("-noop")
         }
 
         /** A workout row is DETECTED when the engine scored it from a strap trace it recorded itself

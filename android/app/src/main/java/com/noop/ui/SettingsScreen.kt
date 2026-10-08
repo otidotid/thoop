@@ -4086,6 +4086,12 @@ fun SettingsScreen(
             blurb = "NOOP: all your data, none of the cloud.",
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                NoopCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Data sources & provenance", style = NoopType.headline, color = Palette.textPrimary)
+                        Text("Imported wearable data keeps priority. THOOP-computed metrics fill missing days. Resolver and scoring provenance remain unchanged.", style = NoopType.footnote, color = Palette.textSecondary)
+                    }
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),

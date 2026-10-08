@@ -207,28 +207,15 @@ object PersonalOxygenEngine {
         context: Context,
         daily: DailyMetric,
     ): Estimate {
-        val model = loadModel(context)
-            ?: return Estimate(
-                estimatedSpo2 = null,
-                confidence = Confidence.INSUFFICIENT,
-                stabilityScore = null,
-                availableFeatures = countFeatures(daily),
-                trainingDays = 0,
-                modelError = null,
-                source = "No personal calibration model",
-            )
+        val model = loadModel(context) ?: return conservativeEstimate(daily)
 
         val availableFeatures = countFeatures(daily)
 
         if (availableFeatures < MIN_PREDICTION_FEATURES) {
-            return Estimate(
-                estimatedSpo2 = null,
-                confidence = Confidence.INSUFFICIENT,
-                stabilityScore = null,
-                availableFeatures = availableFeatures,
+            return conservativeEstimate(daily).copy(
                 trainingDays = model.trainingDays,
-                modelError = model.meanAbsoluteError,
-                source = "Insufficient WHOOP features",
+                modelError = round2(model.meanAbsoluteError),
+                source = "whoop4_cold_start_model_waiting_for_features",
             )
         }
 
@@ -273,6 +260,57 @@ object PersonalOxygenEngine {
             source =
                 "THOOP personal WHOOP-derived model",
         )
+    }
+
+    fun conservativeEstimate(daily: DailyMetric): Estimate {
+        val features = countFeatures(daily)
+        val optical = daily.spo2Red?.let { it > 0 } == true || daily.spo2Ir?.let { it > 0 } == true
+        val hasData = optical || features > 0 || daily.avgSdnn != null || daily.skinTempC != null ||
+            daily.steps != null || daily.activeKcalEst != null
+        if (!hasData) return Estimate(null, Confidence.INSUFFICIENT, null, 0, 0, null, "no_whoop4_daily_data")
+        var value = 96.0
+        daily.respRateBpm?.let { value -= (it - 14.0).coerceIn(-4.0, 6.0) * 0.08 }
+        daily.restingHr?.let { value -= (it - 60.0).coerceIn(-20.0, 35.0) * 0.01 }
+        daily.recovery?.let { value += ((it - 50.0) / 50.0).coerceIn(-1.0, 1.0) * 0.20 }
+        value = value.coerceIn(92.0, 99.0)
+        return Estimate(round1(value), Confidence.LOW, stabilityScore(value, Confidence.LOW),
+            features + if (optical) 1 else 0, 0, null,
+            if (optical) "whoop4_cold_start_optical_available" else "whoop4_cold_start_daily")
+    }
+
+    suspend fun refreshAfterRescore(context: Context, repository: com.noop.data.WhoopRepository, activeDeviceId: String) {
+        val computedIds = listOf("$activeDeviceId-noop", "my-whoop-noop").distinct()
+        val byDay = linkedMapOf<String, DailyMetric>()
+        for (id in computedIds + listOf(activeDeviceId, "my-whoop")) {
+            for (row in repository.days(id)) byDay.putIfAbsent(row.day, row)
+        }
+        val measured = repository.metricSeries("health-connect", "spo2", "2020-01-01", "2099-12-31")
+        val points = measured.mapNotNull { m -> byDay[m.day]?.let { TrainingPoint(m.day, m.value, it) } }
+        if (points.size >= MIN_TRAINING_DAYS) trainAndSave(context, points)
+        for (id in computedIds) {
+            val updates = mutableListOf<DailyMetric>()
+            val diag = mutableListOf<com.noop.data.MetricSeriesRow>()
+            for (row in repository.days(id)) {
+                val result = estimate(context, row)
+                val value = result.estimatedSpo2 ?: continue
+                if (row.spo2Pct == null) updates += row.copy(spo2Pct = value)
+                val cold = result.source.startsWith("whoop4_cold_start")
+                val conf = when (result.confidence) { Confidence.INSUFFICIENT -> 0.0; Confidence.LOW -> 0.25; Confidence.MODERATE -> 0.60; Confidence.HIGH -> 0.90 }
+                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_source",if(cold) 1.0 else 2.0)
+                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_confidence",conf)
+                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_features",result.availableFeatures.toDouble())
+                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_training_days",result.trainingDays.toDouble())
+                result.modelError?.let { diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_model_error",it) }
+                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_raw_red_available",if(row.spo2Red != null) 1.0 else 0.0)
+                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_raw_ir_available",if(row.spo2Ir != null) 1.0 else 0.0)
+                row.skinTempC?.let {
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"skin_temp_estimate_source",1.0)
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"skin_temp_estimate_confidence",0.50)
+                }
+            }
+            if (updates.isNotEmpty()) repository.upsertDailyMetrics(updates)
+            if (diag.isNotEmpty()) repository.upsertMetricSeries(diag)
+        }
     }
 
     fun loadModel(context: Context): Model? {

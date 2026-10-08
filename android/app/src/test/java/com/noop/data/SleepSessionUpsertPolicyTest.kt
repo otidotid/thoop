@@ -135,6 +135,7 @@ class SleepSessionUpsertPolicyTest {
                     stored[row.deviceId to row.startTs] = row
                     1
                 }
+                "deleteAutoDetectedWorkoutOverlap" -> 0
                 else -> error("Unexpected DAO call: ${method.name}")
             }
         } as WhoopDao
@@ -158,7 +159,9 @@ class SleepSessionUpsertPolicyTest {
 
         assertEquals(1, transactionCalls)
         assertEquals(
-            listOf("sleepSession", "insertSleepSession", "sleepSession", "sleepSession", "updateSleepSession"),
+            listOf(
+                "sleepSession", "insertSleepSession", "sleepSession", "sleepSession", "updateSleepSession",
+            ) + List(12) { "deleteAutoDetectedWorkoutOverlap" },
             calls,
         )
         assertEquals(0.9, stored.getValue(deviceId to start).efficiency!!, 0.0)

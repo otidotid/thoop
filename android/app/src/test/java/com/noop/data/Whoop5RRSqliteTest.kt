@@ -164,6 +164,7 @@ class Whoop5RRSqliteTest {
                     listOf("deviceId", "from", "to").zip(args.take(3)).toMap()) { it.getString(1) }.single()
                 "stepSamples", "ppgHrSamples", "spo2Samples",
                 "skinTempSamples", "respSamples", "sleepStateSamples", "events" -> emptyList<Any>()
+                "deleteAutoDetectedWorkoutOverlap" -> 0
                 else -> error("Unimplemented DAO call: ${method.name}")
             }
         } as WhoopDao

@@ -2014,21 +2014,6 @@ fun TodayScreen(
         // Strap battery only while the link is up AND a real reading exists, a stale % from a
         // dropped connection must not present as live (#159).
         item {
-            TodaySourcesSection(
-                footer,
-                // NOT routed through LiveConsoleReadout.batteryPercent, which substitutes the RING's charge
-                // for a non-WHOOP active device. That is right for a readout that names the active device,
-                // and wrong here: this value lands in the SourceRow badged `today_source_whoop`, and it
-                // also feeds that row's `present` flag. Substituting would put the ring's number under a
-                // WHOOP label and assert a WHOOP source that is not there, which is worse than the stale
-                // reading being fixed. Nothing is the honest answer for a strap that is not active.
-                strapBatteryPct = if (liveSnap.connected && activeIsWhoop)
-                    liveSnap.batteryPct?.roundToInt() else null,
-                // The runtime estimate is banked from strap SoC samples, so it is the strap's alone.
-                strapBatteryEstimate = if (liveSnap.connected && activeIsWhoop) batteryEstimateText else null,
-                expanded = sourcesExpanded,
-                onToggle = { sourcesExpanded = !sourcesExpanded },
-            )
         }
     }
         // Material3's PullToRefreshContainer draws its indicator circle even at rest (progress 0, not
@@ -3533,14 +3518,6 @@ private fun SynthesisHeroCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The greeting yields/ellipsises first; the pill keeps its full width (#527).
-            Text(
-                greetingWord(),
-                style = NoopType.subhead,
-                color = Palette.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
             Spacer(Modifier.weight(1f))
             // S4 (#205): the one-word readiness read kept on the hero now the full Readiness card folded
             // into the Charge-ring tap. Push / Maintain / Rest; hidden when there isn't enough history.

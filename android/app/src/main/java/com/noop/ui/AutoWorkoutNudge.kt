@@ -229,7 +229,7 @@ fun AutoWorkoutNudgeCard(
                         // `scope.launch { saveManualWorkout }` was killed before the suspend DB write
                         // committed. The workout never saved and the card kept re-prompting. viewModel
                         // .saveManualWorkout runs on viewModelScope (survives) + reloads the list itself.
-                        if (row != null) viewModel.saveManualWorkout(row)
+                        if (row != null) viewModel.saveAutoDetectedWorkout(w, row)
                         handledThisSession = true
                         candidate = null
                     },
