@@ -761,6 +761,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * rows (from [IntelligenceEngine]) gap-fill, so recovery/strain/sleep populate from
      * the strap with no WHOOP import.
      */
+    val autoWorkoutInvalidations = repository.autoWorkoutInvalidations
+
     val recentDays: StateFlow<List<DailyMetric>> =
         // #797: bound the dashboard merge window. The unbounded daysMergedFlow re-merged the WHOLE daily
         // history on every DB change; a years-deep import made that a heavy refresh feeding Today / Trends /

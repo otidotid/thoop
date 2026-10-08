@@ -290,23 +290,65 @@ object PersonalOxygenEngine {
         for (id in computedIds) {
             val updates = mutableListOf<DailyMetric>()
             val diag = mutableListOf<com.noop.data.MetricSeriesRow>()
-            for (row in repository.days(id)) {
+            val rows = repository.days(id)
+            val priorSkin = rows.mapNotNull { it.skinTempC }.sorted()
+            for (row in rows) {
+                var updated = row
+
                 val result = estimate(context, row)
-                val value = result.estimatedSpo2 ?: continue
-                if (row.spo2Pct == null) updates += row.copy(spo2Pct = value)
+                result.estimatedSpo2?.let { value ->
+                    if (row.spo2Pct == null) updated = updated.copy(spo2Pct = value)
+                }
                 val cold = result.source.startsWith("whoop4_cold_start")
                 val conf = when (result.confidence) { Confidence.INSUFFICIENT -> 0.0; Confidence.LOW -> 0.25; Confidence.MODERATE -> 0.60; Confidence.HIGH -> 0.90 }
-                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_source",if(cold) 1.0 else 2.0)
-                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_confidence",conf)
-                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_features",result.availableFeatures.toDouble())
-                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_training_days",result.trainingDays.toDouble())
-                result.modelError?.let { diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_model_error",it) }
-                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_raw_red_available",if(row.spo2Red != null) 1.0 else 0.0)
-                diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_raw_ir_available",if(row.spo2Ir != null) 1.0 else 0.0)
-                row.skinTempC?.let {
-                    diag += com.noop.data.MetricSeriesRow(id,row.day,"skin_temp_estimate_source",1.0)
-                    diag += com.noop.data.MetricSeriesRow(id,row.day,"skin_temp_estimate_confidence",0.50)
+
+                val skinSource: String
+                val skinConfidence: Double
+                if (row.skinTempC != null) {
+                    skinSource = "SENSOR_PIPELINE"
+                    skinConfidence = 0.60
+                } else {
+                    // Restrict wear evidence to nightly WHOOP-derived physiology. Phone/Zepp steps and
+                    // activity calories are intentionally excluded: they do not prove the strap was worn.
+                    val wearEvidence = row.totalSleepMin?.let { it > 0 } == true ||
+                        row.restingHr != null || row.avgHrv != null || row.respRateBpm != null
+                    if (wearEvidence) {
+                        val personal = priorSkin.takeIf { it.isNotEmpty() }?.let { it[it.size / 2] }
+                        var estimateC = personal ?: 34.0
+                        row.restingHr?.let { estimateC += (it - 60).coerceIn(-20, 30) * 0.005 }
+                        row.respRateBpm?.let { estimateC += (it - 14.0).coerceIn(-4.0, 6.0) * 0.02 }
+                        estimateC = kotlin.math.round(estimateC.coerceIn(32.0, 36.0) * 10.0) / 10.0
+                        updated = updated.copy(skinTempC = estimateC)
+                        skinSource = if (personal != null) "PERSONAL_ROLLING_MEDIAN" else "COLD_START_ESTIMATE"
+                        skinConfidence = if (personal != null) 0.35 else 0.20
+                    } else {
+                        skinSource = "NO_DATA"
+                        skinConfidence = 0.0
+                    }
                 }
+                if (updated != row) updates += updated
+                result.estimatedSpo2?.let {
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_source",if(cold) 1.0 else 2.0)
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_confidence",conf)
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_features",result.availableFeatures.toDouble())
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_training_days",result.trainingDays.toDouble())
+                    result.modelError?.let { error -> diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_estimate_model_error",error) }
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_raw_red_available",if(row.spo2Red != null) 1.0 else 0.0)
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"spo2_raw_ir_available",if(row.spo2Ir != null) 1.0 else 0.0)
+                }
+                if (skinSource != "NO_DATA") {
+                    val sourceCode = when (skinSource) {
+                        "SENSOR_PIPELINE" -> 1.0
+                        "PERSONAL_ROLLING_MEDIAN" -> 2.0
+                        else -> 3.0
+                    }
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"skin_temp_estimate_source",sourceCode)
+                    diag += com.noop.data.MetricSeriesRow(id,row.day,"skin_temp_estimate_confidence",skinConfidence)
+                }
+                context.getSharedPreferences("skin_temp_provenance", Context.MODE_PRIVATE).edit()
+                    .putString("source.$id.${row.day}", skinSource)
+                    .putFloat("confidence.$id.${row.day}", skinConfidence.toFloat())
+                    .apply()
             }
             if (updates.isNotEmpty()) repository.upsertDailyMetrics(updates)
             if (diag.isNotEmpty()) repository.upsertMetricSeries(diag)

@@ -18,7 +18,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -133,6 +135,26 @@ fun AutoWorkoutNudgeCard(
     var candidate by remember { mutableStateOf<AutoWorkoutDetector.DetectedWorkout?>(null) }
     // Hide immediately on Save/X without waiting for the next reload (mirrors iOS `handledThisSession`).
     var handledThisSession by remember { mutableStateOf(false) }
+    var editMode by remember { mutableStateOf(false) }
+    var editedStart by remember { mutableStateOf<Long?>(null) }
+    var editedEnd by remember { mutableStateOf<Long?>(null) }
+    var editedSport by remember { mutableStateOf(AUTO_DETECT_SPORT) }
+
+    LaunchedEffect(candidate?.startSec, candidate?.endSec) {
+        editedStart = candidate?.startSec
+        editedEnd = candidate?.endSec
+        editedSport = AUTO_DETECT_SPORT
+        editMode = false
+    }
+    LaunchedEffect(Unit) {
+        viewModel.autoWorkoutInvalidations.collect { (from, to) ->
+            candidate?.takeIf { it.startSec < to && it.endSec > from }?.let {
+                AutoWorkoutPrefs.dismiss(context, it)
+                candidate = null
+                handledThisSession = true
+            }
+        }
+    }
 
     // Re-scan after Today appears / when the data refreshes (days = the recompute trigger; the Android
     // analog of the iOS refreshSeq). All reads + detection run off the main thread. Mirrors `reload()`.
@@ -148,9 +170,11 @@ fun AutoWorkoutNudgeCard(
     val timeFormatter = remember(locale) {
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).withZone(ZoneId.systemDefault())
     }
-    val startTime = timeFormatter.format(Instant.ofEpochSecond(w.startSec))
-    val endTime = timeFormatter.format(Instant.ofEpochSecond(w.endSec))
-    val prompt = when (val day = autoWorkoutDay(w.startSec)) {
+    val effectiveStart = editedStart ?: w.startSec
+    val effectiveEnd = editedEnd ?: w.endSec
+    val startTime = timeFormatter.format(Instant.ofEpochSecond(effectiveStart))
+    val endTime = timeFormatter.format(Instant.ofEpochSecond(effectiveEnd))
+    val prompt = when (val day = autoWorkoutDay(effectiveStart)) {
         AutoWorkoutDay.Today -> uiString(R.string.today_auto_workout_prompt_today, startTime, endTime, w.avgBpm, w.durationMin)
         AutoWorkoutDay.Yesterday -> uiString(R.string.today_auto_workout_prompt_yesterday, startTime, endTime, w.avgBpm, w.durationMin)
         is AutoWorkoutDay.OnDate -> {
@@ -202,6 +226,26 @@ fun AutoWorkoutNudgeCard(
                 style = NoopType.footnote,
                 color = Palette.textSecondary,
             )
+            TextButton(onClick = { editMode = !editMode }) {
+                Text(if (editMode) "Done editing" else "Edit before save")
+            }
+            if (editMode) {
+                OutlinedTextField(
+                    value = editedSport,
+                    onValueChange = { editedSport = it },
+                    label = { Text("Workout type") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { editedStart = (editedStart ?: w.startSec) - 300 }) { Text("Start -5m") }
+                    TextButton(onClick = { editedStart = minOf((editedStart ?: w.startSec) + 300, (editedEnd ?: w.endSec) - 60) }) { Text("Start +5m") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { editedEnd = maxOf((editedEnd ?: w.endSec) - 300, (editedStart ?: w.startSec) + 60) }) { Text("End -5m") }
+                    TextButton(onClick = { editedEnd = (editedEnd ?: w.endSec) + 300 }) { Text("End +5m") }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -211,15 +255,17 @@ fun AutoWorkoutNudgeCard(
                     onClick = {
                         // Build the manual-style "Workout" row over the detected window (avg HR filled),
                         // saved via the SAME manual path the Workouts screen uses. buildManualRow is pure.
-                        val durMin = ((w.endSec - w.startSec) / 60L).toInt().coerceAtLeast(1)
+                        val saveStart = editedStart ?: w.startSec
+                        val saveEnd = editedEnd ?: w.endSec
+                        val durMin = ((saveEnd - saveStart) / 60L).toInt().coerceAtLeast(1)
                         val row = WorkoutEditing.buildManualRow(
                             // Save under the ACTIVE strap id (what the Workouts union reads, #200/#814),
                             // mirroring iOS `saveDetectedWorkout`. Not the visibility fix (workoutsUnion
                             // reads "my-whoop" too) but keeps the id consistent with the list + exclusion.
                             deviceId = viewModel.deviceId,
-                            startSeconds = w.startSec,
+                            startSeconds = saveStart,
                             durationMin = durMin,
-                            sport = AUTO_DETECT_SPORT,
+                            sport = editedSport.trim().ifBlank { AUTO_DETECT_SPORT },
                             avgHr = w.avgBpm,
                             energyKcal = null,
                         )
@@ -346,7 +392,14 @@ private suspend fun autoDetectCandidate(
     val detectedDismissed = repo.dismissedDetectedUnion(viewModel.deviceId)
         .map { it.startTs to it.endTs }
         .distinct()
+    val sleepWindows = (
+        repo.sleepSessionsUnion(viewModel.deviceId, fromSec, nowSec) +
+            repo.computedSleepSessionsUnion(viewModel.deviceId, fromSec, nowSec)
+        ).map { it.effectiveStartTs to it.endTs }
     return candidates
         .filterNot { AutoWorkoutPrefs.isDismissed(it, legacyDismissed, detectedDismissed) }
+        .filterNot { candidate ->
+            sleepWindows.any { (start, end) -> candidate.startSec < end && candidate.endSec > start }
+        }
         .maxByOrNull { it.startSec }
 }

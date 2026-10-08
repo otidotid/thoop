@@ -5,6 +5,8 @@ import androidx.room.withTransaction
 import com.noop.protocol.DroppedRtcEvent
 import com.noop.protocol.RrSourceChannel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -440,6 +442,8 @@ class WhoopRepository(
         override suspend fun <R> run(block: suspend () -> R): R = block()
     },
 ) {
+    private val _autoWorkoutInvalidations = MutableSharedFlow<Pair<Long, Long>>(extraBufferCapacity = 32)
+    val autoWorkoutInvalidations = _autoWorkoutInvalidations.asSharedFlow()
 
     /** Transaction boundary injected so repository writes remain testable without a Room runtime. */
     interface Transactor {
@@ -759,7 +763,10 @@ class WhoopRepository(
 
     private suspend fun reconcileAutoWorkoutsForSleep(activeDeviceId: String, sessions: List<SleepSession>) {
         val ids = listOf(activeDeviceId, "$activeDeviceId-noop", "my-whoop", "my-whoop-noop").distinct()
-        for (s in sessions) for (id in ids) dao.deleteAutoDetectedWorkoutOverlap(id, s.effectiveStartTs, s.endTs)
+        for (session in sessions) {
+            for (id in ids) dao.deleteAutoDetectedWorkoutOverlap(id, session.effectiveStartTs, session.endTs)
+            _autoWorkoutInvalidations.tryEmit(session.effectiveStartTs to session.endTs)
+        }
     }
 
     suspend fun saveAutoDetectedWorkoutIfNoSleep(activeDeviceId: String, row: WorkoutRow): Boolean = transactor.run {

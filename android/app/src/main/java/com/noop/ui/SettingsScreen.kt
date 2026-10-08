@@ -555,6 +555,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val live by vm.live.collectAsStateWithLifecycle()
+    val recentDays by vm.recentDays.collectAsStateWithLifecycle()
     // #2338: the read-only advertising-name probe result. Its own flow on the BLE client rather than a
     // LiveState field, matching the other opcode probes.
     val advertisingNameProbe by vm.advertisingNameProbe.collectAsStateWithLifecycle()
@@ -4087,9 +4088,17 @@ fun SettingsScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 NoopCard {
+                    val latest = recentDays.lastOrNull()
+                    val computedId = "${vm.deviceId}-noop"
+                    val skinPrefs = context.getSharedPreferences("skin_temp_provenance", android.content.Context.MODE_PRIVATE)
+                    val skinSource = latest?.day?.let { skinPrefs.getString("source.$computedId.$it", null) }
+                    val skinEstimated = skinSource == "PERSONAL_ROLLING_MEDIAN" || skinSource == "COLD_START_ESTIMATE"
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Data sources & provenance", style = NoopType.headline, color = Palette.textPrimary)
-                        Text("Imported wearable data keeps priority. THOOP-computed metrics fill missing days. Resolver and scoring provenance remain unchanged.", style = NoopType.footnote, color = Palette.textSecondary)
+                        Text("Current day: ${latest?.day ?: "No daily row"}", style = NoopType.footnote, color = Palette.textSecondary)
+                        Text("Oxygen: ${if (latest?.spo2Pct != null) "THOOP computed / calibrated" else "No data"}", style = NoopType.footnote, color = Palette.textSecondary)
+                        Text("Skin temperature: ${if (latest?.skinTempC != null) "${if (skinEstimated) "≙ " else ""}${latest.skinTempC} °C · ${skinSource ?: "resolved winner"}" else "No data"}", style = NoopType.footnote, color = Palette.textSecondary)
+                        Text("Imported measurements still win; THOOP only fills missing values.", style = NoopType.caption, color = Palette.textTertiary)
                     }
                 }
                 Row(

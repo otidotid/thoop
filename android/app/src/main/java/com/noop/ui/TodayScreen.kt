@@ -6185,12 +6185,24 @@ private fun MetricGrid(
                 d, carriedDay, skinTempCarryDay,
                 com.noop.ui.UnitPrefs.skinTempPreferred(LocalContext.current),
             )
-            val fahrenheit = UnitPrefs.temperature(LocalContext.current) == TemperatureUnit.FAHRENHEIT
+            val localContext = LocalContext.current
+            val fahrenheit = UnitPrefs.temperature(localContext) == TemperatureUnit.FAHRENHEIT
+            val sourceDay = listOfNotNull(d, carriedDay, skinTempCarryDay)
+                .firstOrNull { it.skinTempC != null || it.skinTempDevC != null }?.day
+            val estimateSource = sourceDay?.let { day ->
+                val ids = listOf("${d?.deviceId ?: carriedDay?.deviceId ?: skinTempCarryDay?.deviceId}", "my-whoop-noop")
+                val prefs = localContext.getSharedPreferences("skin_temp_provenance", android.content.Context.MODE_PRIVATE)
+                ids.firstNotNullOfOrNull { id -> prefs.getString("source.$id.$day", null) }
+            }
+            val estimateMark = estimateSource == "PERSONAL_ROLLING_MEDIAN" || estimateSource == "COLD_START_ESTIMATE"
             KeyTileData(
                 label = uiString(R.string.today_card_skin_temp),
                 // The value carries its own "°C"/"Δ°F" (SkinTempDisplay.format), so unit stays empty —
                 // same as the DashboardCard.SKIN_TEMP card and the classic TodayView Skin Temp tile.
-                value = reading?.let { com.noop.analytics.SkinTempDisplay.formatReading(it, fahrenheit = fahrenheit) } ?: NO_DATA,
+                value = reading?.let {
+                    val formatted = com.noop.analytics.SkinTempDisplay.formatReading(it, fahrenheit = fahrenheit)
+                    if (estimateMark) "≙ $formatted" else formatted
+                } ?: NO_DATA,
                 unit = "",
                 tint = Palette.metricAmber,
                 frac = null,
