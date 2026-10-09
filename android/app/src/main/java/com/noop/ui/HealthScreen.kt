@@ -2107,6 +2107,21 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
     // view isn't showing: Fitness Age with no reading yet -> what it still needs; ANY metric with a single
     // reading -> that reading (trend to follow); two+ -> the trend. Pre-load falls through to trend.
     val loadedPoints = if (seriesLoaded) (detail?.points?.size ?: 0) else -1
+    var fitnessDetailVo2 by remember { mutableStateOf<Double?>(null) }
+    var fitnessDetailEstimator by remember { mutableStateOf<Vo2MaxEstimator?>(null) }
+    LaunchedEffect(key, days) {
+        if (key == "fitness_age") {
+            val row = runCatching {
+                vm.repo.latestMetricComputedUnion(vm.activeStrapId, "vo2max_est")
+            }.getOrNull()
+            fitnessDetailVo2 = row?.value
+            fitnessDetailEstimator = row?.let {
+                Vo2MaxEstimator.fromProvenanceId(
+                    vm.repo.scoreInputSource(it.deviceId, it.day, it.key),
+                )
+            }
+        }
+    }
     // #430 parity: the detail carries the SAME backdrop as the screen that pushed it — the day-cycle sky
     // when the setting is on (full-viewport when "Sky behind cards" is also on, so the transparent cards
     // reveal it the whole way down; the top band otherwise), the plain canvas when off. Same gates the
@@ -2169,7 +2184,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             // needs a second point. Show the value + when the chart fills in, never a no-data dead end.
             // Matches iOS, which renders the value hero at a single point. First hit on Fitness Age, then
             // Vitality — both weekly-ish computed scores that sit at one reading for a while.
-            if (!isStepsDetail && detail != null && detail.points.size == 1) {
+            if (!isStepsDetail && key != "fitness_age" && detail != null && detail.points.size == 1) {
                 val one = detail.points.last()   // size 1: the single reading (last == the latest)
                 NoopCard {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2209,39 +2224,17 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
         }
 
         if (key == "fitness_age") {
-            val latestAge = detail.points.last().second
-            val chronologicalAge = profile.age.toDouble()
-            val difference = latestAge - chronologicalAge
-            val comparison = when {
-                chronologicalAge <= 0.0 -> "Add your age in Settings to compare."
-                difference <= -0.5 -> "${kotlin.math.abs(difference).roundToInt()} years younger than your age"
-                difference >= 0.5 -> "${difference.roundToInt()} years older than your age"
-                else -> "Aligned with your chronological age"
-            }
-            SectionHeader("Fitness Age", overline = "Weekly", trailing = "Latest")
-            NoopCard {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Overline("Your current Fitness Age")
-                    Text(
-                        text = "${detail.format(latestAge)} ${detail.unit}".trim(),
-                        style = NoopType.chartValueLarge,
-                        color = detail.color,
-                    )
-                    Text(comparison, style = NoopType.headline, color = Palette.textPrimary)
-                    Text(
-                        "Updated weekly from your recent resting heart rate, sleep, HRV and activity. " +
-                            "This is a THOOP fitness estimate, not a medical or biological-age diagnosis.",
-                        style = NoopType.subhead,
-                        color = Palette.textSecondary,
-                    )
-                    Text(
-                        "Latest week: ${shortDayLabel(detail.points.last().first)}",
-                        style = NoopType.footnote,
-                        color = Palette.textTertiary,
-                    )
-                }
-            }
-            if (detail.points.size == 1) return@ScreenScaffold
+            FitnessAgeDetailExperience(
+                readings = detail.readings,
+                chronologicalAge = profile.age,
+                vo2max = fitnessDetailVo2,
+                vo2maxEstimator = fitnessDetailEstimator,
+                restingHr = days.takeLast(7).mapNotNull { it.restingHr?.toDouble() }.average().takeIf { !it.isNaN() },
+                weeklyEffort = days.takeLast(7).mapNotNull { it.strain }.average().takeIf { !it.isNaN() },
+                color = detail.color,
+                format = detail.format,
+            )
+            return@ScreenScaffold
         }
 
         // #943 (ryanbr): gate the range chips by available history so short history can't draw six
@@ -2741,6 +2734,241 @@ private fun buildVitalDetail(
  *  the repo (async): Fitness Age + Vitality off the computed strap the IntelligenceEngine writes, Steps
  *  off the resolved step series (imported ∪ estimated), Active Energy off the Apple-Health import. Colours
  *  match each card's dashboard tint. Returns null for an unknown key. */
+@Composable
+private fun FitnessAgeDetailExperience(
+    readings: List<VitalReading>,
+    chronologicalAge: Int,
+    vo2max: Double?,
+    vo2maxEstimator: Vo2MaxEstimator?,
+    restingHr: Double?,
+    weeklyEffort: Double?,
+    color: Color,
+    format: (Double) -> String,
+) {
+    val ordered = readings.sortedBy { it.day }
+    val latest = ordered.last()
+    val delta = if (chronologicalAge > 0) chronologicalAge - latest.value else 0.0
+    val favorable = delta > 0.5
+    val unfavorable = delta < -0.5
+    val accent = when {
+        favorable -> Palette.recoveryColor(100.0)
+        unfavorable -> Palette.strainColor(20.0)
+        else -> color
+    }
+    val comparison = when {
+        chronologicalAge <= 0 -> "ADD AGE IN SETTINGS"
+        favorable -> "${String.format(Locale.US, "%.1f", delta)} YEARS YOUNGER"
+        unfavorable -> "${String.format(Locale.US, "%.1f", kotlin.math.abs(delta))} YEARS OLDER"
+        else -> "ABOUT YOUR AGE"
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(32.dp))
+                .background(Palette.heroFill.copy(alpha = 0.94f))
+                .border(1.dp, accent.copy(alpha = 0.42f), RoundedCornerShape(32.dp))
+                .padding(horizontal = Metrics.cardPadding, vertical = 24.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            if (chronologicalAge > 0) String.format(Locale.US, "%.1f", kotlin.math.abs(delta)) else "--",
+                            style = NoopType.number(27f, FontWeight.Bold),
+                            color = accent,
+                        )
+                        Text(
+                            when {
+                                chronologicalAge <= 0 -> "ADD YOUR AGE"
+                                favorable -> "YEARS YOUNGER"
+                                unfavorable -> "YEARS OLDER"
+                                else -> "ABOUT YOUR AGE"
+                            },
+                            style = NoopType.caption,
+                            color = Palette.textSecondary,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(158.dp)
+                            .clip(RoundedCornerShape(58.dp))
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        accent.copy(alpha = 0.10f),
+                                        accent.copy(alpha = 0.36f),
+                                        accent.copy(alpha = 0.82f),
+                                    ),
+                                ),
+                            )
+                            .border(2.dp, accent, RoundedCornerShape(58.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Canvas(Modifier.matchParentSize()) {
+                            drawCircle(accent.copy(alpha = 0.16f), radius = size.minDimension * 0.44f, center = Offset(size.width * .46f, size.height * .47f))
+                            drawCircle(Color.White.copy(alpha = 0.08f), radius = size.minDimension * 0.28f, center = Offset(size.width * .62f, size.height * .34f))
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(fitnessAgeBoundSymbol(latest.value) + format(latest.value), style = NoopType.number(42f, FontWeight.Bold), color = Color.White)
+                            Text("THOOP AGE", style = NoopType.caption, color = Color.White.copy(alpha = .78f))
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("WEEKLY", style = NoopType.number(19f, FontWeight.Bold), color = Color.White)
+                        Text("UPDATE", style = NoopType.caption, color = Palette.textSecondary)
+                    }
+                }
+                Text(comparison, style = NoopType.title2, color = accent, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text("Latest week: ${shortDayLabel(latest.day)}", style = NoopType.footnote, color = Palette.textTertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        SectionHeader("Fitness Factors", overline = "On-device inputs")
+        NoopCard {
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                FitnessAgeDetailFactor(
+                    label = "VO₂ MAX",
+                    value = vo2max?.let { String.format(Locale.US, "%.1f ml/kg/min", it) } ?: "Building baseline",
+                    marker = vo2max?.let { ((it - 15.0) / 55.0).toFloat().coerceIn(0f, 1f) },
+                    left = "15", right = "70",
+                    source = "On-device estimate",
+                    method = when (vo2maxEstimator) {
+                        Vo2MaxEstimator.NES -> "Nes 2011 waist model"
+                        Vo2MaxEstimator.UTH -> "Uth 2004 HR-ratio fallback"
+                        else -> "Estimator provenance unavailable"
+                    },
+                )
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
+                FitnessAgeDetailFactor(
+                    label = "RESTING HEART RATE",
+                    value = restingHr?.let { "${it.roundToInt()} bpm" } ?: "Building baseline",
+                    marker = restingHr?.let { (1f - ((it - 40.0) / 40.0).toFloat()).coerceIn(0f, 1f) },
+                    left = "80 bpm", right = "40 bpm",
+                    source = "On-device", method = "7-day mean",
+                )
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
+                FitnessAgeDetailFactor(
+                    label = "WEEKLY ACTIVITY",
+                    value = weeklyEffort?.let { String.format(Locale.US, "%.1f effort", it) } ?: "Building baseline",
+                    marker = weeklyEffort?.let { (it / 100.0).toFloat().coerceIn(0f, 1f) },
+                    left = "Lower", right = "Higher",
+                    source = "On-device", method = "Recent activity coverage",
+                )
+            }
+        }
+
+        SectionHeader("Trend View", overline = "Weekly history", trailing = "${ordered.size} readings")
+        NoopCard {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    FitnessAgeDetailLegend(accent, "THOOP Fitness Age")
+                    FitnessAgeDetailLegend(Palette.textPrimary, "Chronological Age")
+                }
+                FitnessAgeDetailTrend(
+                    readings = ordered,
+                    chronologicalAge = chronologicalAge,
+                    color = accent,
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                )
+                if (ordered.size == 1) {
+                    Text("The first weekly point is visible now. Additional weekly results will extend the trend.", style = NoopType.footnote, color = Palette.textSecondary)
+                }
+            }
+        }
+
+        SectionHeader("History", overline = "Stored weekly results")
+        NoopCard {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ordered.asReversed().take(12).forEachIndexed { index, reading ->
+                    if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(shortDayLabel(reading.day), style = NoopType.body, color = Palette.textPrimary)
+                            Text(reading.source.ifBlank { "On-device" }, style = NoopType.caption, color = Palette.textTertiary)
+                        }
+                        Text("${format(reading.value)} yr", style = NoopType.title2, color = accent)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FitnessAgeDetailFactor(
+    label: String,
+    value: String,
+    marker: Float?,
+    left: String,
+    right: String,
+    source: String,
+    method: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = NoopType.title2, color = Palette.textPrimary, modifier = Modifier.weight(1f))
+            Text(value, style = NoopType.body, color = Palette.textPrimary)
+        }
+        Box(
+            modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(99.dp)).background(
+                Brush.horizontalGradient(listOf(Palette.strainColor(20.0), Palette.chargeColor, Palette.recoveryColor(100.0))),
+            ),
+        ) {
+            marker?.let { valuePosition ->
+                Box(Modifier.fillMaxWidth(valuePosition.coerceIn(.025f, 1f)).fillMaxHeight(), contentAlignment = Alignment.CenterEnd) {
+                    Box(Modifier.size(12.dp).clip(RoundedCornerShape(99.dp)).background(Color.White).border(2.dp, Color.Black.copy(alpha=.35f), RoundedCornerShape(99.dp)))
+                }
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(left, style = NoopType.caption, color = Palette.textTertiary)
+            Text(right, style = NoopType.caption, color = Palette.textTertiary)
+        }
+        Text("$source · $method", style = NoopType.footnote, color = Palette.textSecondary)
+    }
+}
+
+@Composable
+private fun FitnessAgeDetailLegend(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box(Modifier.size(10.dp).clip(RoundedCornerShape(99.dp)).background(color))
+        Text(label, style = NoopType.caption, color = Palette.textSecondary)
+    }
+}
+
+@Composable
+private fun FitnessAgeDetailTrend(
+    readings: List<VitalReading>,
+    chronologicalAge: Int,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier) {
+        val values = readings.map { it.value } + listOfNotNull(chronologicalAge.takeIf { it > 0 }?.toDouble())
+        if (values.isEmpty()) return@Canvas
+        val min = (values.minOrNull() ?: 0.0) - 2.0
+        val max = (values.maxOrNull() ?: 1.0) + 2.0
+        val span = (max - min).coerceAtLeast(1.0)
+        fun y(v: Double) = size.height - (((v - min) / span).toFloat() * size.height)
+        if (chronologicalAge > 0) drawLine(Palette.textPrimary.copy(alpha=.7f), Offset(0f,y(chronologicalAge.toDouble())), Offset(size.width,y(chronologicalAge.toDouble())), 3.dp.toPx())
+        val points = readings.mapIndexed { index, item ->
+            Offset(if (readings.size == 1) size.width/2f else size.width*index/(readings.size-1f), y(item.value))
+        }
+        if (points.size > 1) {
+            val path = Path().apply { moveTo(points.first().x, points.first().y); points.drop(1).forEach { lineTo(it.x,it.y) } }
+            drawPath(path, color, style=Stroke(5.dp.toPx(), cap=StrokeCap.Round, join=StrokeJoin.Round))
+        }
+        points.forEach { drawCircle(color, 7.dp.toPx(), it); drawCircle(Color.White, 2.5.dp.toPx(), it) }
+    }
+}
+
 internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): VitalDetailModel? = when (key) {
     // The Today Key-Metrics Rest tile's drill-in: the Rest composite (sleep_performance) trend, read via
     // the SAME imported-wins resolvedSeries merge the tile's score/sparkline use, so the detail can never
