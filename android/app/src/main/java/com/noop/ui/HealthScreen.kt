@@ -33,6 +33,7 @@ import android.widget.Toast
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -675,6 +676,7 @@ private fun FitnessAgeSection(vm: AppViewModel, days: List<DailyMetric>, profile
     var fitnessAge by remember { mutableStateOf<Double?>(null) }
     var vo2max by remember { mutableStateOf<Double?>(null) }
     var vo2maxEstimator by remember { mutableStateOf<Vo2MaxEstimator?>(null) }
+    var fitnessAgeHistory by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
     // Manual-refresh plumbing: the not-ready card's refresh button recomputes Fitness Age NOW and bumps
     // this tick, which re-keys the read below so a freshly written value shows without waiting for a sync.
     var refreshTick by remember { mutableStateOf(0) }
@@ -697,6 +699,11 @@ private fun FitnessAgeSection(vm: AppViewModel, days: List<DailyMetric>, profile
         fitnessAge = fa
         vo2max = vo2Row?.value
         vo2maxEstimator = estimator
+        fitnessAgeHistory = runCatching {
+            vm.repo.metricSeriesComputedUnion(
+                vm.activeStrapId, "fitness_age", "0000-01-01", "9999-12-31",
+            ).map { it.day to it.value }
+        }.getOrDefault(emptyList())
     }
 
     // Readiness from what THIS screen can see: the last 7 merged daily rows. RHR coverage drives the
@@ -718,6 +725,9 @@ private fun FitnessAgeSection(vm: AppViewModel, days: List<DailyMetric>, profile
                 chronoAge = profile.age,
                 vo2max = vo2max,
                 vo2maxEstimator = vo2maxEstimator,
+                restingHr = days.takeLast(7).mapNotNull { it.restingHr?.toDouble() }.average().takeIf { !it.isNaN() },
+                weeklyEffort = days.takeLast(7).mapNotNull { it.strain }.average().takeIf { !it.isNaN() },
+                history = fitnessAgeHistory,
                 onHowAccurate = { showChecklist = !showChecklist },
                 checklistOpen = showChecklist,
             )
@@ -966,155 +976,263 @@ private fun FitnessAgeHero(
     chronoAge: Int,
     vo2max: Double?,
     vo2maxEstimator: Vo2MaxEstimator?,
+    restingHr: Double?,
+    weeklyEffort: Double?,
+    history: List<Pair<String, Double>>,
     onHowAccurate: () -> Unit,
     checklistOpen: Boolean,
 ) {
     val shown = fitnessAge.roundToInt()
     val boundSymbol = fitnessAgeBoundSymbol(fitnessAge)
-    val deltaYears = if (chronoAge > 0) (chronoAge - fitnessAge).roundToInt() else 0
-    val younger = chronoAge > 0 && fitnessAge < chronoAge
-    val older = chronoAge > 0 && fitnessAge > chronoAge
+    val delta = if (chronoAge > 0) chronoAge - fitnessAge else 0.0
+    val younger = chronoAge > 0 && delta > 0.5
+    val older = chronoAge > 0 && delta < -0.5
     val accent = when {
         younger -> Palette.recoveryColor(100.0)
         older -> Palette.strainColor(20.0)
         else -> Palette.metricCyan
     }
-    val comparison = when {
-        chronoAge <= 0 -> "Add your age to unlock comparison"
-        boundSymbol == "≤" && deltaYears > 0 -> "At least $deltaYears ${yearWord(deltaYears)} younger"
-        boundSymbol == "≥" && deltaYears < 0 -> "At least ${kotlin.math.abs(deltaYears)} ${yearWord(deltaYears)} older"
-        deltaYears == 0 -> "About your age"
-        younger -> "$deltaYears ${yearWord(deltaYears)} younger"
-        else -> "${kotlin.math.abs(deltaYears)} ${yearWord(deltaYears)} older"
+    val comparisonValue = kotlin.math.abs(delta)
+    val comparisonLabel = when {
+        chronoAge <= 0 -> "ADD AGE IN SETTINGS"
+        younger -> "YEARS YOUNGER"
+        older -> "YEARS OLDER"
+        else -> "ABOUT YOUR AGE"
     }
-    val position = ((fitnessAge.coerceIn(FitnessAgeEngine.minAge, FitnessAgeEngine.maxAge) - FitnessAgeEngine.minAge) /
-        (FitnessAgeEngine.maxAge - FitnessAgeEngine.minAge)).toFloat().coerceIn(0f, 1f)
+    val comparisonText = if (chronoAge > 0 && (younger || older)) {
+        String.format(Locale.US, "%.1f", comparisonValue)
+    } else "--"
+    val vo2Position = vo2max?.let { ((it - 15.0) / 55.0).toFloat().coerceIn(0f, 1f) }
+    val rhrPosition = restingHr?.let { (1f - ((it - 40.0) / 40.0).toFloat()).coerceIn(0f, 1f) }
+    val effortPosition = weeklyEffort?.let { (it / 100.0).toFloat().coerceIn(0f, 1f) }
 
-    LiquidHeroCard {
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Overline("THOOP FITNESS AGE")
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = "$boundSymbol$shown",
-                            style = NoopType.number(54f, weight = FontWeight.Bold),
-                            color = Color.White,
-                        )
-                        Text(
-                            " years",
-                            style = NoopType.body,
-                            color = Palette.textSecondary,
-                            modifier = Modifier.padding(bottom = 9.dp),
-                        )
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
+        LiquidHeroCard {
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space12),
+                ) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(comparisonText, style = NoopType.number(25f, weight = FontWeight.Bold), color = accent)
+                        Text(comparisonLabel, style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.Center)
                     }
-                    Text(comparison, style = NoopType.title2, color = accent)
-                }
-                Column(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(accent.copy(alpha = 0.14f))
-                        .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    Overline("YOUR AGE")
-                    Text(
-                        if (chronoAge > 0) chronoAge.toString() else "--",
-                        style = NoopType.number(26f, weight = FontWeight.Bold),
-                        color = Color.White,
-                    )
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(Palette.textTertiary.copy(alpha = 0.18f)),
-                ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(position)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(accent),
-                    )
+                            .size(142.dp)
+                            .clip(RoundedCornerShape(52.dp))
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(accent.copy(alpha = 0.08f), accent.copy(alpha = 0.32f), accent.copy(alpha = 0.76f)),
+                                ),
+                            )
+                            .border(2.dp, accent.copy(alpha = 0.85f), RoundedCornerShape(52.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "$boundSymbol$shown",
+                                style = NoopType.number(42f, weight = FontWeight.Bold),
+                                color = Color.White,
+                            )
+                            Text("THOOP AGE", style = NoopType.caption, color = Palette.textSecondary)
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("WEEKLY", style = NoopType.number(19f, weight = FontWeight.Bold), color = Color.White)
+                        Text("UPDATE", style = NoopType.caption, color = Palette.textSecondary)
+                    }
                 }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Younger", style = NoopType.caption, color = Palette.textTertiary)
-                    Text("Older", style = NoopType.caption, color = Palette.textTertiary)
-                }
-            }
-
-            Text("WHAT SHAPES THIS WEEK", style = NoopType.caption, color = Palette.textTertiary)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FitnessAgeFactorTile(
-                    label = "Aerobic fitness",
-                    value = vo2max?.let { "${it.roundToInt()} VO₂ max" } ?: "Building baseline",
-                    modifier = Modifier.weight(1f),
-                )
-                FitnessAgeFactorTile(
-                    label = "Weekly signal",
-                    value = "Health + activity",
-                    modifier = Modifier.weight(1f),
-                )
-            }
-
-            Text(
-                "THOOP updates this estimate weekly from available health and activity signals. Use it to follow direction over time, not as a diagnosis.",
-                style = NoopType.footnote,
-                color = Palette.textSecondary,
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable(onClick = onHowAccurate)
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("How this estimate is built", style = NoopType.body, color = Color.White)
-                    Text(
-                        if (checklistOpen) "Hide data-readiness details" else "View data readiness and accuracy",
-                        style = NoopType.footnote,
-                        color = Palette.textSecondary,
-                    )
-                }
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = Palette.textTertiary,
+                Text(
+                    "Fitness Age is THOOP's on-device weekly estimate. The factors below use the same stored inputs; no scoring formula is changed by this view.",
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+
+        SectionHeader("Fitness Factors", overline = "Current inputs")
+        NoopCard {
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
+                FitnessAgeFactorRow(
+                    label = "VO₂ MAX",
+                    value = vo2max?.let { String.format(Locale.US, "%.1f ml/kg/min", it) } ?: "Building baseline",
+                    position = vo2Position,
+                    lowLabel = "15",
+                    highLabel = "70",
+                    source = "On-device estimate",
+                    detail = when (vo2maxEstimator) {
+                        Vo2MaxEstimator.NES -> "Nes 2011 waist model"
+                        Vo2MaxEstimator.UTH -> "Uth 2004 HR-ratio fallback"
+                        else -> "Method pending provenance"
+                    },
+                )
+                HorizontalDivider(color = Palette.heroBorder.copy(alpha = 0.7f))
+                FitnessAgeFactorRow(
+                    label = "RESTING HEART RATE",
+                    value = restingHr?.let { "${it.roundToInt()} bpm" } ?: "Building baseline",
+                    position = rhrPosition,
+                    lowLabel = "80 bpm",
+                    highLabel = "40 bpm",
+                    source = "On-device",
+                    detail = "7-day mean used by the weekly model",
+                )
+                HorizontalDivider(color = Palette.heroBorder.copy(alpha = 0.7f))
+                FitnessAgeFactorRow(
+                    label = "WEEKLY ACTIVITY",
+                    value = weeklyEffort?.let { String.format(Locale.US, "%.1f effort", it) } ?: "Building baseline",
+                    position = effortPosition,
+                    lowLabel = "Lower",
+                    highLabel = "Higher",
+                    source = "On-device",
+                    detail = "Recent activity coverage used by Fitness Age",
+                )
+            }
+        }
+
+        SectionHeader("Trend View", overline = "Weekly history", trailing = "${history.size} readings")
+        NoopCard {
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Metrics.space16)) {
+                    FitnessAgeLegendDot(accent, "THOOP Fitness Age")
+                    FitnessAgeLegendDot(Palette.textPrimary, "Chronological Age")
+                }
+                FitnessAgeTrendChart(
+                    history = history,
+                    chronologicalAge = chronoAge,
+                    accent = accent,
+                    modifier = Modifier.fillMaxWidth().height(190.dp),
+                )
+                Text(
+                    if (history.size <= 1) "The latest weekly point is shown now. More weekly updates will build the trend."
+                    else "Each point is a stored weekly Fitness Age result. Chronological age is shown as the comparison line.",
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onHowAccurate)
+                .padding(vertical = Metrics.space8),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("How this estimate is built", style = NoopType.title2, color = Palette.textPrimary)
+                Text(
+                    if (checklistOpen) "Hide data-readiness details" else "View data readiness and accuracy",
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
+                )
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Palette.textTertiary)
         }
     }
 }
 
 @Composable
-private fun FitnessAgeFactorTile(
+private fun FitnessAgeFactorRow(
     label: String,
     value: String,
+    position: Float?,
+    lowLabel: String,
+    highLabel: String,
+    source: String,
+    detail: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = NoopType.title2, color = Palette.textPrimary, modifier = Modifier.weight(1f))
+            Text(value, style = NoopType.body, color = Palette.textPrimary)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(9.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Palette.strainColor(20.0), Palette.chargeColor, Palette.recoveryColor(100.0)),
+                    ),
+                ),
+        ) {
+            position?.let { fraction ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction.coerceIn(0.025f, 1f))
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(9.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(Palette.textPrimary),
+                    )
+                }
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(lowLabel, style = NoopType.caption, color = Palette.textTertiary)
+            Text(highLabel, style = NoopType.caption, color = Palette.textTertiary)
+        }
+        Text("$source · $detail", style = NoopType.footnote, color = Palette.textSecondary)
+    }
+}
+
+@Composable
+private fun FitnessAgeLegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(99.dp)).background(color))
+        Text(label, style = NoopType.caption, color = Palette.textSecondary)
+    }
+}
+
+@Composable
+private fun FitnessAgeTrendChart(
+    history: List<Pair<String, Double>>,
+    chronologicalAge: Int,
+    accent: Color,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Palette.heroFill.copy(alpha = 0.55f))
-            .border(1.dp, Palette.heroBorder.copy(alpha = 0.75f), RoundedCornerShape(16.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Text(label, style = NoopType.caption, color = Palette.textTertiary)
-        Text(value, style = NoopType.body, color = Color.White, maxLines = 2)
+    val values = history.map { it.second } + listOfNotNull(chronologicalAge.takeIf { it > 0 }?.toDouble())
+    Canvas(modifier = modifier) {
+        if (values.isEmpty()) return@Canvas
+        val minValue = (values.minOrNull() ?: 0.0) - 2.0
+        val maxValue = (values.maxOrNull() ?: 1.0) + 2.0
+        val span = (maxValue - minValue).coerceAtLeast(1.0)
+        fun y(value: Double): Float = size.height - (((value - minValue) / span).toFloat() * size.height)
+        if (chronologicalAge > 0) {
+            drawLine(
+                color = Palette.textPrimary.copy(alpha = 0.68f),
+                start = Offset(0f, y(chronologicalAge.toDouble())),
+                end = Offset(size.width, y(chronologicalAge.toDouble())),
+                strokeWidth = 3.dp.toPx(),
+            )
+        }
+        if (history.isNotEmpty()) {
+            val points = history.mapIndexed { index, reading ->
+                val x = if (history.size == 1) size.width / 2f else size.width * index / (history.size - 1).toFloat()
+                Offset(x, y(reading.second))
+            }
+            if (points.size > 1) {
+                val path = Path().apply {
+                    moveTo(points.first().x, points.first().y)
+                    points.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                drawPath(path, color = accent, style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            points.forEach { point ->
+                drawCircle(color = accent, radius = 6.dp.toPx(), center = point)
+                drawCircle(color = Palette.textPrimary, radius = 2.5.dp.toPx(), center = point)
+            }
+        }
     }
 }
 
