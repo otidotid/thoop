@@ -1509,19 +1509,7 @@ fun TodayScreen(
         }
         }
 
-        // Today's shared workout host offers Start when idle and the recording controls when active.
-        // Past days retain the active-workout shortcut. Per-second clocks remain inside their leaves.
-        if (selectedDayOffset == 0) {
-            // Keep the existing picker/live-view host mounted across idle → recording transitions.
-            // Manual entry stays on Workouts; Today offers the same live recording controls.
-            item { WorkoutStartSection(viewModel) }
-        } else {
-            activeWorkout?.let { w ->
-                item {
-                    WorkoutInProgressCard(workout = w, onReturn = onOpenActiveWorkout)
-                }
-            }
-        }
+        // Workout actions live exclusively on the Workouts screen. Today intentionally renders none.
 
         // Design Reset (iOS parity): the "New here?" first-run card is off the Today dashboard for the
         // clean look, the scoring guide stays reachable from the i on each score and in Settings.

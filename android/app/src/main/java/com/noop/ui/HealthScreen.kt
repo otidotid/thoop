@@ -2066,6 +2066,42 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             return@ScreenScaffold
         }
 
+        if (key == "fitness_age") {
+            val latestAge = detail.points.last().second
+            val chronologicalAge = profile.age.toDouble()
+            val difference = latestAge - chronologicalAge
+            val comparison = when {
+                chronologicalAge <= 0.0 -> "Add your age in Settings to compare."
+                difference <= -0.5 -> "${kotlin.math.abs(difference).roundToInt()} years younger than your age"
+                difference >= 0.5 -> "${difference.roundToInt()} years older than your age"
+                else -> "Aligned with your chronological age"
+            }
+            SectionHeader("Fitness Age", overline = "Weekly", trailing = "Latest")
+            NoopCard {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Overline("Your current Fitness Age")
+                    Text(
+                        text = "${detail.format(latestAge)} ${detail.unit}".trim(),
+                        style = NoopType.chartValueLarge,
+                        color = detail.color,
+                    )
+                    Text(comparison, style = NoopType.headline, color = Palette.textPrimary)
+                    Text(
+                        "Updated weekly from your recent resting heart rate, sleep, HRV and activity. " +
+                            "This is a THOOP fitness estimate, not a medical or biological-age diagnosis.",
+                        style = NoopType.subhead,
+                        color = Palette.textSecondary,
+                    )
+                    Text(
+                        "Latest week: ${shortDayLabel(detail.points.last().first)}",
+                        style = NoopType.footnote,
+                        color = Palette.textTertiary,
+                    )
+                }
+            }
+            if (detail.points.size == 1) return@ScreenScaffold
+        }
+
         // #943 (ryanbr): gate the range chips by available history so short history can't draw six
         // byte-identical charts. A locked selection (e.g. the MONTH default during the first week)
         // coerces DOWN to the largest unlocked range so a calibrating user always has a live chart.

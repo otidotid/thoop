@@ -475,13 +475,20 @@ fun DevicesScreen(
         )
     }
 
-    // #592: the probe reply (or the " waiting" sentinel while in flight) — readable + copyable in place,
-    // so a capture doesn't need a full strap-log export to read or share.
-    batteryProbeResult?.let { result ->
-        BatteryInfoProbeResultDialog(
-            text = result,
-            onDismiss = { viewModel.clearExtendedBatteryProbe() },
-        )
+    // Keep the diagnostic read-only, but keep its raw result off the Devices surface. Completed
+    // replies are archived in the Updates inbox so they remain available without an interrupting dialog.
+    LaunchedEffect(batteryProbeResult) {
+        val result = batteryProbeResult ?: return@LaunchedEffect
+        if (result != WhoopBleClient.WAITING_EXTENDED_BATTERY_PROBE) {
+            UpdateStore.from(context).post(
+                UpdateItem(
+                    kind = UpdateKind.STRAP_ALERT,
+                    title = "Battery probe notification",
+                    message = result,
+                ),
+            )
+            viewModel.clearExtendedBatteryProbe()
+        }
     }
     // #690 body-location opcode probe: read-only send + full raw-response dump + decoded record.
     bodyLocationProbeTarget?.let {
