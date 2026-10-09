@@ -18,7 +18,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -227,24 +226,13 @@ fun AutoWorkoutNudgeCard(
                 color = Palette.textSecondary,
             )
             TextButton(onClick = { editMode = !editMode }) {
-                Text(if (editMode) "Done editing" else "Edit before save")
+                Text(if (editMode) "Hide details" else "Edit details")
             }
             if (editMode) {
-                OutlinedTextField(
-                    value = editedSport,
-                    onValueChange = { editedSport = it },
-                    label = { Text("Workout type") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { editedStart = (editedStart ?: w.startSec) - 300 }) { Text("Start -5m") }
-                    TextButton(onClick = { editedStart = minOf((editedStart ?: w.startSec) + 300, (editedEnd ?: w.endSec) - 60) }) { Text("Start +5m") }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { editedEnd = maxOf((editedEnd ?: w.endSec) - 300, (editedStart ?: w.startSec) + 60) }) { Text("End -5m") }
-                    TextButton(onClick = { editedEnd = (editedEnd ?: w.endSec) + 300 }) { Text("End +5m") }
-                }
+                SportPickerField(editedSport) { editedSport = it }
+                SpanTimeField("Started", effectiveStart * 1000L) { editedStart = it / 1000L }
+                SpanTimeField("Ended", effectiveEnd * 1000L) { editedEnd = it / 1000L }
+                Text("Duration\n${((effectiveEnd - effectiveStart) / 60L).coerceAtLeast(0)} minutes")
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

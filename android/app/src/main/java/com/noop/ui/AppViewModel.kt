@@ -2254,6 +2254,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return if (scaled > 0) scaled else null
     }
 
+    suspend fun workoutOverlapsExistingSession(row: WorkoutRow, replacing: WorkoutRow? = null): Boolean =
+        repository.workoutOverlapsExistingSession(deviceId, row, replacing)
+
     fun saveAutoDetectedWorkout(candidate: com.noop.analytics.AutoWorkoutDetector.DetectedWorkout, row: WorkoutRow) {
         viewModelScope.launch {
             val saved = repository.saveAutoDetectedWorkoutIfNoSleep(deviceId, row)

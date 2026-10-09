@@ -769,11 +769,39 @@ class WhoopRepository(
         }
     }
 
+
+    /** True when [row] overlaps any existing Sleep, Nap, or workout. [replacing] is excluded on edit. */
+    suspend fun workoutOverlapsExistingSession(
+        activeDeviceId: String,
+        row: WorkoutRow,
+        replacing: WorkoutRow? = null,
+    ): Boolean {
+        val from = row.startTs
+        val to = row.endTs
+        if (to <= from) return true
+        val sleeps = sleepSessionsUnion(activeDeviceId, from - 1, to + 1) +
+            computedSleepSessionsUnion(activeDeviceId, from - 1, to + 1)
+        if (sleeps.any { it.effectiveStartTs < to && it.endTs > from }) return true
+        val workouts = workoutsUnion(activeDeviceId, from - 1, to + 1) +
+            detectedWorkoutsUnion(activeDeviceId, from - 1, to + 1) +
+            listOf("apple-health", "health-connect", "lifting", "activity-file")
+                .flatMap { dao.workouts(it, from - 1, to + 1, DEFAULT_LIMIT) }
+        return workouts.any { existing ->
+            val sameAsReplacement = replacing != null && existing.deviceId == replacing.deviceId &&
+                existing.startTs == replacing.startTs && existing.sport == replacing.sport
+            !sameAsReplacement && existing.startTs < to && existing.endTs > from
+        }
+    }
+
     suspend fun saveAutoDetectedWorkoutIfNoSleep(activeDeviceId: String, row: WorkoutRow): Boolean = transactor.run {
         val ids = listOf(activeDeviceId, "$activeDeviceId-noop", "my-whoop", "my-whoop-noop").distinct()
         val sleeps = ids.flatMap { dao.sleepSessions(it, row.startTs - 1, row.endTs + 1, DEFAULT_LIMIT) }
-        if (sleeps.any { it.effectiveStartTs < row.endTs && it.endTs > row.startTs }) false
-        else { dao.upsertWorkouts(listOf(row.copy(source = "auto-detected"))); true }
+        val workouts = ids.flatMap { dao.workouts(it, row.startTs - 1, row.endTs + 1, DEFAULT_LIMIT) } +
+            listOf("apple-health", "health-connect", "lifting", "activity-file")
+                .flatMap { dao.workouts(it, row.startTs - 1, row.endTs + 1, DEFAULT_LIMIT) }
+        val overlaps = sleeps.any { it.effectiveStartTs < row.endTs && it.endTs > row.startTs } ||
+            workouts.any { it.startTs < row.endTs && it.endTs > row.startTs }
+        if (overlaps) false else { dao.upsertWorkouts(listOf(row.copy(source = "auto-detected"))); true }
     }
 
     /**
@@ -1612,6 +1640,7 @@ class WhoopRepository(
      *  - an IMPORTED row is never passed here as `replacing` (duplicating one is a pure add).
      */
     suspend fun saveManualWorkout(row: WorkoutRow, replacing: WorkoutRow? = null) {
+        if (workoutOverlapsExistingSession(row.deviceId, row, replacing)) return
         if (replacing != null && replacing.source.lowercase().endsWith("-noop")) {
             dao.upsertWorkouts(listOf(row))
             dismissDetected(replacing)
