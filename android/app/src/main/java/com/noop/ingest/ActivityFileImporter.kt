@@ -216,7 +216,7 @@ object ActivityFileImporter {
         )
 
         repo.upsertDevice(deviceId, name = "Workout files")
-        repo.upsertWorkouts(listOf(row))
+        repo.saveCandidateWorkoutsNoOverlap(listOf(row))
 
         // #137 (A): persist the ride's real per-sample HR under the activity-file source. The insert is
         // keyed on (deviceId, ts) (OnConflict.REPLACE), so re-importing the same file is idempotent — an

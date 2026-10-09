@@ -1008,6 +1008,14 @@ interface WhoopDao : DeviceRegistryDao {
     )
     suspend fun sleepSessions(deviceId: String, from: Long, to: Long, limit: Int): List<SleepSession>
 
+    /** All-source Sleep/Nap overlap query. Hand-edited onset is the effective interval start. */
+    @Query(
+        "SELECT * FROM sleepSession " +
+            "WHERE COALESCE(startTsAdjusted, startTs) < :candidateEnd AND endTs > :candidateStart " +
+            "ORDER BY COALESCE(startTsAdjusted, startTs) ASC"
+    )
+    suspend fun sleepSessionsOverlapping(candidateStart: Long, candidateEnd: Long): List<SleepSession>
+
     /** Hand-edited sessions for a device (userEdited = 1), oldest first. Backs the H5 edit-merge (#509):
      *  the repository maps each to its LOCAL wake-day so [WhoopRepository.mergeDaily] lets the computed
      *  sleep fields win on those days over a re-imported night. */
@@ -1220,6 +1228,13 @@ interface WhoopDao : DeviceRegistryDao {
             "ORDER BY startTs ASC LIMIT :limit"
     )
     suspend fun workouts(deviceId: String, from: Long, to: Long, limit: Int): List<WorkoutRow>
+
+    /** All-source half-open interval overlap query used by the single workout Save gate. */
+    @Query(
+        "SELECT * FROM workout WHERE startTs < :candidateEnd AND endTs > :candidateStart " +
+            "ORDER BY startTs ASC"
+    )
+    suspend fun workoutsOverlapping(candidateStart: Long, candidateEnd: Long): List<WorkoutRow>
 
     /** Scalar COUNT twin of [workouts] (no row limit — a count badge wants the exact total), for
      *  badges that were materializing the row list for `.size`. */

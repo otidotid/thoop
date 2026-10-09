@@ -123,7 +123,7 @@ import com.noop.push.SelfHostedPushScreen
 // MARK: - Navigation model
 //
 // The macOS app's sidebar holds many sections; on Android (mirroring the iOS RootTabView) we surface
-// them through a unified floating "glass" bottom bar (Today · Trends · Sleep · More) for the everyday
+// them through a unified floating "glass" bottom bar (Today · Workouts · Trends · Sleep · More) for the everyday
 // screens, with a "More" sheet that lists the full grouped set — so every destination is one tap away
 // without a global hamburger/drawer. Destinations are grouped exactly as the sidebar groups them.
 // Routes whose screens belong to later waves point at a ComingSoon placeholder so the app compiles today.
@@ -244,8 +244,7 @@ internal val drawerGroups: List<DrawerGroup> = listOf(
         Destination.Insights, Destination.Explore, Destination.Compare,
     ), defaultExpanded = true),
     DrawerGroup("Body", R.string.more_group_body, listOf(
-        Destination.Live, Destination.Workouts, Destination.Health, Destination.VitalSigns,
-        Destination.LabBook, Destination.Stress, Destination.Breathe, Destination.Intervals,
+        Destination.Live, Destination.LabBook, Destination.Breathe, Destination.Intervals,
         Destination.Rhythm,
     ), defaultExpanded = true),
     DrawerGroup("Data", R.string.more_group_data, listOf(
@@ -501,7 +500,7 @@ object BottomBarStyleStore {
 }
 
 /**
- * App shell: a single [Scaffold] with a floating [GlassBottomBar] (Today · Trends · Sleep · Coach · More)
+ * App shell: a single [Scaffold] with a floating [GlassBottomBar] (Today · Workouts · Trends · Sleep · Coach · More)
  * driving one [NavHost], mirroring the iOS RootTabView. There is NO global toolbar and no nav drawer
  * — every screen self-titles via [ScreenScaffold], and the "More" sheet (opened from the bar) reaches
  * every destination in [drawerGroups], so nothing is lost. A single [AppViewModel] is created here and
@@ -576,7 +575,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         Scaffold(
             containerColor = Palette.surfaceBase,
             bottomBar = {
-                // One unified "glass" bar: four evenly-spaced tabs — Today · Trends · Sleep · More
+                // One unified "glass" bar: four evenly-spaced tabs — Today · Workouts · Trends · Sleep · More
                 // (matches the iOS FloatingTabBar). The quick-action "+" lives in the Today header's
                 // top-right (balancing the avatar), so the bar is clean tabs only. "More" navigates to
                 // its own page (mirroring the iOS More tab) that reaches every grouped destination, so no
@@ -1100,7 +1099,7 @@ private fun MoreRow(dest: Destination, onClick: () -> Unit) {
 // MARK: - Glass bottom bar
 //
 // The signature bar, ported from iOS's FloatingTabBar: ONE rounded "glass" island holding four
-// evenly-spaced inline slots — Today · Trends · Sleep · More. The quick-action "+" now lives in the
+// evenly-spaced inline slots — Today · Workouts · Trends · Sleep · More. The quick-action "+" now lives in the
 // Today header's top-right (it left the bar to balance the avatar), so the bar is clean tabs only.
 // The "glass" feel is a translucent raised surface with a low elevation and a subtle hairline border
 // — frosted, not a hard opaque slab and not a glow. Each nav slot is an icon over a small label;
@@ -1110,10 +1109,11 @@ private fun MoreRow(dest: Destination, onClick: () -> Unit) {
 /** A single bottom-bar nav slot: the destination it switches to, plus the bar-specific icon/label. */
 internal data class BarTab(val dest: Destination, val icon: ImageVector, @StringRes val labelRes: Int)
 
-/** The nav slots in iOS order: Today · Trends · Sleep · Coach · More.
+/** The nav slots in iOS order: Today · Workouts · Trends · Sleep · Coach · More.
  *  More is special-cased (it opens the sheet rather than a route), so it is appended at the call site. */
 internal val barLeadingTabs = listOf(
     BarTab(Destination.Today, Icons.Outlined.GridView, R.string.nav_today),
+    BarTab(Destination.Workouts, Icons.Filled.FitnessCenter, R.string.nav_workouts),
     // chart.line.uptrend.xyaxis on iOS — the rising-trend glyph, not a flat bar chart.
     BarTab(Destination.Trends, Icons.AutoMirrored.Filled.TrendingUp, R.string.nav_trends),
 )
@@ -1280,7 +1280,6 @@ private data class QuickAction(@StringRes val titleRes: Int, val icon: ImageVect
  *  — it moved off the bottom bar (so the FAB no longer overlaps a tab) but stays one tap away here. */
 private val quickActions: List<QuickAction> = listOf(
     QuickAction(R.string.action_live_hr, Destination.Live.icon, Destination.Live.route),
-    QuickAction(R.string.action_start_workout, Icons.Filled.FitnessCenter, Destination.Workouts.route),
     QuickAction(R.string.action_log_journal, Icons.Filled.Edit, Destination.Insights.route),
     QuickAction(R.string.action_breathe, Icons.Filled.Air, Destination.Breathe.route),
 )

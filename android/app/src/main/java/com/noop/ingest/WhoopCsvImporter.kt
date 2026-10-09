@@ -128,7 +128,7 @@ object WhoopCsvImporter {
         repo.upsertDevice(deviceId, name = "WHOOP")
         if (daily.isNotEmpty()) repo.upsertDailyMetrics(daily)
         if (sleepSessions.isNotEmpty()) repo.upsertSleepSessions(sleepSessions)
-        if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
+        if (workouts.isNotEmpty()) repo.saveCandidateWorkoutsNoOverlap(workouts)
         if (journal.isNotEmpty()) {
             // #136: the wake-day fix moves an entry's day, so a naive re-import would leave the pre-fix
             // onset-keyed rows behind as duplicates. Atomically clear + re-write EXACTLY the day span we

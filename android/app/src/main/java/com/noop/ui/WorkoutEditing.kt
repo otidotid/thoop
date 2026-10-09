@@ -184,6 +184,17 @@ object WorkoutEditing {
         return overlap.toDouble() > 0.5 * shorter.toDouble()
     }
 
+    /** Strict half-open conflict for Save. Any overlap blocks; an edit excludes its original row. */
+    fun firstWorkoutConflict(
+        candidate: WorkoutRow,
+        saved: List<WorkoutRow>,
+        replacing: WorkoutRow? = null,
+    ): WorkoutRow? = saved.firstOrNull { existing ->
+        val isSelf = replacing != null && existing.deviceId == replacing.deviceId &&
+            existing.startTs == replacing.startTs && existing.sport == replacing.sport
+        !isSelf && candidate.startTs < existing.endTs && existing.startTs < candidate.endTs
+    }
+
     /**
      * Of two same-activity rows, the one to KEEP. Prefer the richer (more captured signals); on a tie
      * prefer the strap-native source (live/manual/detected/whoop carry the real trace) over a thin

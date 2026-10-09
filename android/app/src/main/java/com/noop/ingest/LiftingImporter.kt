@@ -138,7 +138,7 @@ object LiftingImporter {
         }
 
         repo.upsertDevice(deviceId, name = "Lifting log")
-        repo.upsertWorkouts(rows)
+        repo.saveCandidateWorkoutsNoOverlap(rows)
 
         val totalVolume = result.sessions.sumOf { it.volumeLoadKg }
         return ImportSummary(

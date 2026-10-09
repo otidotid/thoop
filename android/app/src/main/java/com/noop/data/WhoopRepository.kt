@@ -1176,6 +1176,45 @@ class WhoopRepository(
     suspend fun upsertWorkouts(rows: List<WorkoutRow>) = dao.upsertWorkouts(rows)
 
     /**
+     * Store candidate workouts only when each half-open interval is clear of every persisted workout and
+     * Sleep/Nap session. This is the shared persistence gate for manual, edited, auto-detected and imported
+     * candidates. [replacing] excludes only the edit's original natural key; adjacent intervals are valid.
+     * Candidates conflicting within the same incoming batch are rejected in stable input order.
+     */
+    suspend fun saveCandidateWorkoutsNoOverlap(
+        rows: List<WorkoutRow>,
+        replacing: List<WorkoutRow> = emptyList(),
+    ): List<WorkoutRow> = transactor.run {
+        if (rows.isEmpty()) return@run emptyList()
+        val accepted = ArrayList<WorkoutRow>()
+        for (candidate in rows.sortedBy { it.startTs }) {
+            if (candidate.endTs <= candidate.startTs) continue
+
+            val workoutConflict = (dao.workoutsOverlapping(candidate.startTs, candidate.endTs) + accepted)
+                .any { existing ->
+                    val isOriginalBeingEdited = replacing.any { original ->
+                        existing.deviceId == original.deviceId &&
+                            existing.startTs == original.startTs &&
+                            existing.sport == original.sport
+                    }
+                    !isOriginalBeingEdited &&
+                        candidate.startTs < existing.endTs && existing.startTs < candidate.endTs
+                }
+            if (workoutConflict) continue
+
+            val sleepOrNapConflict = dao.sleepSessionsOverlapping(candidate.startTs, candidate.endTs)
+                .any { session ->
+                    candidate.startTs < session.endTs && session.effectiveStartTs < candidate.endTs
+                }
+            if (sleepOrNapConflict) continue
+
+            accepted += candidate
+        }
+        if (accepted.isNotEmpty()) dao.upsertWorkouts(accepted)
+        accepted
+    }
+
+    /**
      * Persist analytics-derived fields onto workouts the user already logged. This is deliberately
      * append/update-only: unlike the retired detected-row reconciliation, an empty or interrupted pass
      * performs no DAO call and can never delete grandfathered `sport="detected"` history (#2187).
@@ -1666,7 +1705,7 @@ class WhoopRepository(
         val trimmed = sport.trim()
         if (trimmed.isEmpty()) return
         val manual = row.copy(deviceId = strapDeviceId, sport = trimmed, source = "manual")
-        dao.upsertWorkouts(listOf(manual))
+        if (saveCandidateWorkoutsNoOverlap(listOf(manual), listOf(row)).isEmpty()) return
         dismissDetected(row)
     }
 
@@ -1705,7 +1744,7 @@ class WhoopRepository(
         // Keep the longest original route on the merged row (mirrors macOS RouteStore re-key #10).
         val keptRoute = originals.mapNotNull { it.routePolyline }.maxByOrNull { it.length }
         val mergedWithRoute = if (keptRoute != null) merged.copy(routePolyline = keptRoute) else merged
-        saveManualWorkout(mergedWithRoute)
+        if (saveCandidateWorkoutsNoOverlap(listOf(mergedWithRoute), originals).isEmpty()) return
         // Retire each original. Skip any row whose natural key matches the merged row's, so we never
         // dismiss/delete the span the merged row now owns.
         for (r in originals) {

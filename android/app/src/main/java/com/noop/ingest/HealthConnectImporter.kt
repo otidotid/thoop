@@ -882,7 +882,7 @@ object HealthConnectImporter {
                 repo.upsertSleepSessions(sleepRows)
             }
             if (workouts.isNotEmpty()) {
-                repo.upsertWorkouts(workouts)
+                repo.saveCandidateWorkoutsNoOverlap(workouts)
             }
         } catch (e: Exception) {
             return ImportSummary.failure(SOURCE, "Saving Health Connect data failed: ${e.message}")

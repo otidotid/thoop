@@ -1833,7 +1833,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         buzz(2, HapticPrefs.WORKOUT)
         viewModelScope.launch {
-            val saved = runCatching { repository.upsertWorkouts(listOf(row)) }.isSuccess
+            val saved = runCatching { repository.saveCandidateWorkoutsNoOverlap(listOf(row)).isNotEmpty() }.getOrDefault(false)
             // #528: persist the live 1 Hz workout HR into hrSample so it can export to Health Connect
             // at full resolution NOW (the HR export keeps workout-window samples un-decimated), instead
             // of only after the next strap offload sync. IGNORE-on-conflict makes a later sync of the

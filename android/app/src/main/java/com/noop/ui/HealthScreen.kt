@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -970,127 +971,150 @@ private fun FitnessAgeHero(
 ) {
     val shown = fitnessAge.roundToInt()
     val boundSymbol = fitnessAgeBoundSymbol(fitnessAge)
-    // Delta vs the user's actual age: younger when the fitness age is below it. abs() drives the words.
-    val deltaYears = (chronoAge - fitnessAge).roundToInt()
-    val younger = fitnessAge < chronoAge
-    // A bounded reading can only be stated as a direction, never as a distance (#2173). The true age
-    // is somewhere at or beyond the bound, so "N years younger" would be a floor presented as a
-    // measurement; "at least N" is the same number said truthfully. Below the floor with a chronological
-    // age at or under it there is no safe distance to state at all, so the card states the bound alone.
-    val deltaWord = when {
-        boundSymbol == "≤" && deltaYears > 0 ->
-            "At least $deltaYears ${yearWord(deltaYears)} younger than your age"
-        boundSymbol == "≤" -> "${FitnessAgeEngine.minAge.roundToInt()} or younger"
-        boundSymbol == "≥" && deltaYears < 0 ->
-            "At least ${kotlin.math.abs(deltaYears)} ${yearWord(deltaYears)} older than your age"
-        boundSymbol == "≥" -> "${FitnessAgeEngine.maxAge.roundToInt()} or older"
-        deltaYears == 0 -> "About your age"
-        younger -> "$deltaYears ${yearWord(deltaYears)} younger than your age"
-        else -> "${kotlin.math.abs(deltaYears)} ${yearWord(deltaYears)} older than your age"
+    val deltaYears = if (chronoAge > 0) (chronoAge - fitnessAge).roundToInt() else 0
+    val younger = chronoAge > 0 && fitnessAge < chronoAge
+    val older = chronoAge > 0 && fitnessAge > chronoAge
+    val accent = when {
+        younger -> Palette.recoveryColor(100.0)
+        older -> Palette.strainColor(20.0)
+        else -> Palette.metricCyan
     }
-    // Vessel fill: a bounded, honest reading of the SAME younger/older signal the card already states,
-    // mapped across the ±5 yr band the section advertises — "about your age" is half-full, younger fills
-    // it up, older empties it, clamped to the band. Presentation only; the shown number is unchanged.
-    val youthFraction = if (chronoAge > 0) {
-        (0.5 + (chronoAge - fitnessAge) / 10.0).coerceIn(0.0, 1.0)
-    } else 0.5
+    val comparison = when {
+        chronoAge <= 0 -> "Add your age to unlock comparison"
+        boundSymbol == "≤" && deltaYears > 0 -> "At least $deltaYears ${yearWord(deltaYears)} younger"
+        boundSymbol == "≥" && deltaYears < 0 -> "At least ${kotlin.math.abs(deltaYears)} ${yearWord(deltaYears)} older"
+        deltaYears == 0 -> "About your age"
+        younger -> "$deltaYears ${yearWord(deltaYears)} younger"
+        else -> "${kotlin.math.abs(deltaYears)} ${yearWord(deltaYears)} older"
+    }
+    val position = ((fitnessAge.coerceIn(FitnessAgeEngine.minAge, FitnessAgeEngine.maxAge) - FitnessAgeEngine.minAge) /
+        (FitnessAgeEngine.maxAge - FitnessAgeEngine.minAge)).toFloat().coerceIn(0f, 1f)
 
-    // The "How accurate is this?" toggle presses inward on tap (the pilot liquidPress feel); the SAME
-    // interactionSource drives its clickable + press.
-    val howAccurateInteraction = remember { MutableInteractionSource() }
-
-    // The frosted liquid hero-card wrapper floats the vessel + white count-up over the sky (the pilot).
     LiquidHeroCard {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Overline("Fitness Age")
-                    // The hero age rides a filling LiquidVessel on the gold Charge world, the age number
-                    // rolled up over it (white, tabular) — the Today HeroScoreVessel idiom. The shown NUMBER
-                    // is the same value (fitnessAge, rounded) as the bare headline this replaced.
-                    HealthHeroVessel(
-                        fraction = youthFraction,
-                        value = shown.toDouble(),
-                        tint = Palette.chargeColor,
-                        diameter = 96.dp,
-                        // The vessel already takes a formatter, so a bounded reading needs no change
-                        // to the component: the count-up still runs, it just arrives at "≤20".
-                        format = { "$boundSymbol${it.roundToInt()}" },
-                    )
-                    Text(
-                        text = deltaWord,
-                        style = NoopType.subhead,
-                        color = if (deltaYears == 0) Palette.textSecondary
-                        else if (younger) Palette.statusPositive else Palette.statusWarning,
-                    )
-                }
-                if (vo2max != null) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        StatePill(
-                            title = uiString(R.string.l10n_health_screen_vo_max_vo2max_roundtoint_c32a04b3, vo2max.roundToInt()),
-                            tone = StrandTone.Accent,
-                            showsDot = false,
+                    Overline("THOOP FITNESS AGE")
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$boundSymbol$shown",
+                            style = NoopType.number(54f, weight = FontWeight.Bold),
+                            color = Color.White,
                         )
                         Text(
-                            text = uiString(vo2MaxAttributionLabelRes(vo2maxEstimator)),
-                            style = NoopType.footnote,
-                            color = Palette.textTertiary,
+                            " years",
+                            style = NoopType.body,
+                            color = Palette.textSecondary,
+                            modifier = Modifier.padding(bottom = 9.dp),
                         )
                     }
+                    Text(comparison, style = NoopType.title2, color = accent)
+                }
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(accent.copy(alpha = 0.14f))
+                        .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    Overline("YOUR AGE")
+                    Text(
+                        if (chronoAge > 0) chronoAge.toString() else "--",
+                        style = NoopType.number(26f, weight = FontWeight.Bold),
+                        color = Color.White,
+                    )
                 }
             }
 
-            // At a bound the age has stopped carrying information: every model output past the end of
-            // the scale banks as the same number, so someone who is still improving sees nothing move
-            // (#2184). The VO₂max in the row above is NOT clamped and is the same estimate this age is
-            // derived from, so it keeps resolving where the age cannot. Pointing at it asserts nothing
-            // the model cannot support, which an extended reporting floor could not manage: two more
-            // years of range would still sit inside the ±5 band the line below already states.
-            //
-            // FULL WIDTH, beside that band line, rather than inside the weighted column with the vessel:
-            // a 44-character sentence in half a hero's width wraps to three lines and crowds the number
-            // it is explaining. Same trap as #2145, where the reading and its chip each got half a row
-            // and neither fitted.
-            if (boundSymbol.isNotEmpty() && vo2max != null) {
-                Text(
-                    text = uiString(R.string.l10n_health_screen_fitness_age_stops_here_vo_max_383d989a),
-                    style = NoopType.footnote,
-                    color = Palette.textTertiary,
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Palette.textTertiary.copy(alpha = 0.18f)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(position)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(accent),
+                    )
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Younger", style = NoopType.caption, color = Palette.textTertiary)
+                    Text("Older", style = NoopType.caption, color = Palette.textTertiary)
+                }
+            }
+
+            Text("WHAT SHAPES THIS WEEK", style = NoopType.caption, color = Palette.textTertiary)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FitnessAgeFactorTile(
+                    label = "Aerobic fitness",
+                    value = vo2max?.let { "${it.roundToInt()} VO₂ max" } ?: "Building baseline",
+                    modifier = Modifier.weight(1f),
+                )
+                FitnessAgeFactorTile(
+                    label = "Weekly signal",
+                    value = "Health + activity",
+                    modifier = Modifier.weight(1f),
                 )
             }
+
             Text(
-                text = uiString(R.string.l10n_health_screen_5_yr_a_fitness_comparison_not_418aa11d),
+                "THOOP updates this estimate weekly from available health and activity signals. Use it to follow direction over time, not as a diagnosis.",
                 style = NoopType.footnote,
-                color = Palette.textTertiary,
+                color = Palette.textSecondary,
             )
 
-            // "How accurate is this?" affordance — toggles the readiness checklist below the hero.
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(Metrics.cornerSm))
-                    .liquidPress(howAccurateInteraction)
-                    .clickable(
-                        interactionSource = howAccurateInteraction,
-                        indication = null,
-                        onClick = onHowAccurate,
-                    )
-                    .padding(vertical = Metrics.space4)
-                    .semantics { contentDescription = uiString(R.string.l10n_health_screen_how_accurate_is_this_fitness_age_935c9a6d) },
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClick = onHowAccurate)
+                    .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Metrics.space6),
             ) {
-                Text(
-                    uiString(R.string.l10n_health_screen_how_accurate_is_this_dae653a8),
-                    style = NoopType.captionNumber,
-                    color = Palette.accent,
-                )
-                Text(
-                    if (checklistOpen) "▾" else "›",
-                    style = NoopType.captionNumber,
-                    color = Palette.accent,
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("How this estimate is built", style = NoopType.body, color = Color.White)
+                    Text(
+                        if (checklistOpen) "Hide data-readiness details" else "View data readiness and accuracy",
+                        style = NoopType.footnote,
+                        color = Palette.textSecondary,
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Palette.textTertiary,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun FitnessAgeFactorTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Palette.heroFill.copy(alpha = 0.55f))
+            .border(1.dp, Palette.heroBorder.copy(alpha = 0.75f), RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(label, style = NoopType.caption, color = Palette.textTertiary)
+        Text(value, style = NoopType.body, color = Color.White, maxLines = 2)
     }
 }
 
@@ -2118,11 +2142,37 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             if (isStepsDetail) projectStepsDetail(detail.readings, effectiveRange) else null
         }
         val filteredPoints = stepsSeries?.points ?: filteredReadings.map { it.day to it.value }
-        if (filteredPoints.isEmpty() || (!isStepsDetail && filteredPoints.size < 2)) {
+        if (filteredPoints.isEmpty()) {
             DataPendingNote(
                 title = uiString(R.string.l10n_health_screen_not_enough_history_in_this_range_2da72f80),
-                body = if (isStepsDetail) uiString(R.string.steps_empty_range) else "Try a longer interval like 3M, 6M, 1Y, or ALL to see this vital’s trend.",
+                body = if (isStepsDetail) uiString(R.string.steps_empty_range) else "No reading is available in this range yet.",
             )
+            return@ScreenScaffold
+        }
+        if (!isStepsDetail && filteredPoints.size == 1) {
+            val one = filteredPoints.single()
+            SectionHeader(
+                detail.title,
+                overline = if (key == "fitness_age") "Weekly" else "Vital Signs",
+                trailing = "Latest",
+            )
+            NoopCard {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Overline(if (key == "fitness_age") "Current Fitness Age" else "Latest")
+                    Text(
+                        text = "${detail.format(one.second)} ${detail.unit}".trim(),
+                        style = NoopType.chartValueLarge,
+                        color = detail.color,
+                    )
+                    Text(
+                        text = if (key == "fitness_age")
+                            "Weekly value as of ${shortDayLabel(one.first)}. More weekly points will build the trend."
+                        else "As of ${shortDayLabel(one.first)}. Trend to follow.",
+                        style = NoopType.footnote,
+                        color = Palette.textTertiary,
+                    )
+                }
+            }
             return@ScreenScaffold
         }
 
@@ -2141,7 +2191,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
 
         if (!isStepsDetail) SectionHeader(
             detail.title,
-            overline = "Vital Signs",
+            overline = if (key == "fitness_age") "Weekly" else "Vital Signs",
             trailing = stepsSeries?.let { "${it.buckets.size} bars" } ?: "${filteredReadings.size} readings",
         )
         NoopCard {

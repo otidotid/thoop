@@ -441,7 +441,7 @@ object AppleHealthImporter {
         repo.upsertAppleDaily(appleDailyRows)
         if (dailyMetricRows.isNotEmpty()) repo.upsertDailyMetrics(dailyMetricRows)
         if (metricSeriesRows.isNotEmpty()) repo.upsertMetricSeries(metricSeriesRows)
-        if (workoutRows.isNotEmpty()) repo.upsertWorkouts(workoutRows)
+        if (workoutRows.isNotEmpty()) repo.saveCandidateWorkoutsNoOverlap(workoutRows)
 
         val skipped = agg.skippedSpanCount()
 

@@ -59,7 +59,7 @@ private val LIMIT_ROWS: List<LimitRow> = listOf(
     LimitRow("Workout detection", LimitState.FULL, LimitState.FULL),
     LimitRow("Skin temperature", LimitState.PARTIAL, LimitState.FULL),
     LimitRow("Steps", LimitState.PARTIAL, LimitState.FULL),
-    LimitRow("Blood oxygen (SpO₂ %)", LimitState.NONE, LimitState.NONE),
+    LimitRow("Blood oxygen (SpO₂ %)", LimitState.PARTIAL, LimitState.PARTIAL),
     LimitRow("ECG", LimitState.NONE, LimitState.PARTIAL),
     LimitRow("Blood pressure", LimitState.NONE, LimitState.NONE),
 )
@@ -108,9 +108,9 @@ private fun LegendCard() {
     NoopCard(padding = 20.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Overline("Legend")
-            LegendRow(LimitState.FULL, "Read live off the strap")
-            LegendRow(LimitState.PARTIAL, "On-device estimate, or experimental / firmware-gated")
-            LegendRow(LimitState.NONE, "Not from the strap. SpO₂ can be filled by importing a WHOOP or Health export.")
+            LegendRow(LimitState.FULL, "✓ Direct")
+            LegendRow(LimitState.PARTIAL, "≙ THOOP estimate")
+            LegendRow(LimitState.NONE, "× Unavailable")
         }
     }
 }
@@ -126,11 +126,12 @@ private fun LegendRow(state: LimitState, label: String) {
 @Composable
 private fun SupportCell(state: LimitState) {
     Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-        when (state) {
-            LimitState.FULL -> SupportGlyph(Icons.Filled.Check, Palette.statusPositive, "yes")
-            LimitState.PARTIAL -> SupportGlyph(Icons.Filled.Remove, Palette.statusWarning, "partly")
-            LimitState.NONE -> SupportGlyph(Icons.Filled.Close, Palette.textTertiary, "no")
+        val (mark, tint, label) = when (state) {
+            LimitState.FULL -> Triple("✓", Palette.statusPositive, "Direct")
+            LimitState.PARTIAL -> Triple("≙", Palette.statusWarning, "THOOP estimate")
+            LimitState.NONE -> Triple("×", Palette.textTertiary, "Unavailable")
         }
+        Text(mark, style = NoopType.title2, color = tint, modifier = Modifier.semantics { contentDescription = label })
     }
 }
 

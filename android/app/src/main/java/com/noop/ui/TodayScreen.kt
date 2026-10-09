@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Bedtime
@@ -1391,7 +1392,7 @@ fun TodayScreen(
         //   LEFT  — a tappable title block: the big rounded-bold day title ("Today" / "Yesterday" / the
         //           weekday) over a human date line ("Friday, 3 July"). Tap opens the day picker.
         //   RIGHT — exactly the iOS four controls, in order: a filled HEART (→ Support), the PROFILE
-        //           AVATAR (→ Settings), a "+" ADD button (→ quick actions), and the strap BATTERY RING.
+        //           AVATAR (→ Settings), a NOTIFICATIONS bell (→ full Updates inbox), and the strap BATTERY RING.
         // The recording-status light and the notifications BELL are GONE from the header (iOS has neither);
         // the Updates inbox is relocated into the "+" quick-actions sheet (AppRoot), so the feature stays one
         // tap away without sitting in the Today header. Staggered in as the first section (index 0).
@@ -1439,7 +1440,7 @@ fun TodayScreen(
                 // something already connected.
                 onRescan = if (liveSnap.connected) null else requestScan,
                 onPickDay = { offset -> selectedDayOffset = offset },
-                onQuickActions = onQuickActions,
+                onOpenUpdates = onOpenUpdates,
                 onOpenSettings = onOpenSettings,
                 onOpenDevices = onOpenDevices,
             )
@@ -2472,7 +2473,7 @@ private fun CustomizeDisc(onClick: () -> Unit) {
 }
 
 @Composable
-private fun QuickActionDisc(onClick: () -> Unit) {
+private fun UpdatesDisc(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
@@ -2492,7 +2493,7 @@ private fun QuickActionDisc(onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Filled.Add,
+            Icons.Filled.Notifications,
             contentDescription = null,
             tint = Color.White,
             modifier = Modifier.size(16.dp),
@@ -2610,7 +2611,7 @@ private fun LiquidTodayHeader(
     scanning: Boolean = false,
     onRescan: (() -> Unit)? = null,
     onPickDay: (Int) -> Unit,
-    onQuickActions: () -> Unit,
+    onOpenUpdates: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDevices: () -> Unit,
     modifier: Modifier = Modifier,
@@ -2687,7 +2688,7 @@ private fun LiquidTodayHeader(
             )
         }
 
-        // RIGHT: the controls, in order — [sync chip] · avatar · + · battery ring. Each ~36dp, 8dp apart.
+        // RIGHT: the controls, in order — [sync chip] · avatar · notifications · battery ring. Each ~36dp, 8dp apart.
         //
         // #2110: deliberately NOT where the Customize control went, even though that is where iOS keeps it.
         // The title Column beside this is weight(1f) with maxLines=1 + Ellipsis, so every control added here
@@ -2724,9 +2725,28 @@ private fun LiquidTodayHeader(
             ) {
                 ProfileAvatar(size = HeaderClusterControl)
             }
-            // (b) Quick-add (+), the accented primary. Mirrors iOS's LiquidAddButton (a glyph on a translucent
-            // disc → the quick-actions menu). Sized to match the rest of the liquid cluster (shared HeaderClusterControl).
-            QuickActionDisc(onClick = onQuickActions)
+            // (b) Full notifications inbox. This deliberately occupies the former quick-add slot so the
+            // legacy + is not composed, cannot overlap, and leaves no blank spacer in the trailing cluster.
+            Box(
+                modifier = Modifier
+                    .size(HeaderClusterControl)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.12f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpenUpdates,
+                    )
+                    .semantics { contentDescription = "Notifications" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Notifications,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             // (c) Active-device battery ring showing the % (iOS LiquidBatteryButton). Tap → Devices.
             // Not drawn when the active device is neither the strap nor a ring with a charge of its own to
             // show: an empty "Strap battery" ring under a streaming ring is a control asserting something
@@ -7069,6 +7089,23 @@ private fun OverviewHRChart(
             .onSizeChanged { plotW = it.width.toFloat(); plotH = it.height.toFloat() }
             .semantics { contentDescription = markerDescription },
     ) {
+        // Patch Age: workouts render as orange time intervals behind the HR curve.
+        if (plotW > 0f && plotH > 0f && workouts.isNotEmpty()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                workouts.forEach { workout ->
+                    val left = xFor(workout.startTs)?.coerceIn(0f, plotW) ?: return@forEach
+                    val right = xFor(workout.endTs)?.coerceIn(0f, plotW) ?: return@forEach
+                    if (right > left) {
+                        drawRect(
+                            color = Color(0xFFF28C28).copy(alpha = 0.18f),
+                            topLeft = Offset(left, 0f),
+                            size = Size(right - left, plotH),
+                        )
+                    }
+                }
+            }
+        }
+
         // #765 (z-order / background layering): the sleep band must sit BEHIND the HR curve, matching the
         // iOS OverviewHRChart whose RectangleMark is "drawn first so the HR line/area sit on top". Android
         // previously drew the band in the SAME Canvas as the dashed rules, AFTER the LineChart, so the
@@ -7200,20 +7237,6 @@ private fun OverviewHRChart(
                     color = Palette.effortTint(strain / StrainScorer.maxStrain),
                     modifier = Modifier.markerOffset(plotW, density, topPadDp, alignEnd = true),
                 )
-            }
-            // Sport glyph at each workout's in-window HR peak.
-            workouts.forEach { w ->
-                val peak = hrPeakIn(buckets, w.startTs, w.endTs)
-                if (peak != null) {
-                    val px = xForStrict(peak.bucket)
-                    if (px != null) {
-                        val py = yForBpm(peak.avgBpm)
-                        WorkoutGlyph(
-                            icon = sportIcon(w.sport),
-                            modifier = Modifier.glyphOffset(px, py, plotW, plotH, density),
-                        )
-                    }
-                }
             }
         }
     }
