@@ -323,14 +323,6 @@ fun TrendsScreen(vm: AppViewModel) {
             }
         }
 
-        // --- Export trends report (#436) , the shareable offline PDF exporter. Mirrors the iOS
-        // TrendsView.exportReportRow footer; the same composable Settings hosts, so both surfaces
-        // offer it. Routed through NoopButton like every other CTA (no gold). ---
-        item {
-            Column(modifier = Modifier.staggeredAppear(index = 7)) {
-                TrendsReportExportSection(vm)
-            }
-        }
     }
 }
 
@@ -381,12 +373,6 @@ private fun WeeklyDigestNav(
     val digest = remember(days, anchorDay, factor) {
         buildWeeklyDigest(days, anchorDay, effortDisplayFactor = factor)
     }
-    // "Share recap" capture: track the card's on-screen bounds, then draw the Compose host view + crop
-    // (RecapShare.captureCropped) — the Compose-1.7 GraphicsLayer capture API isn't in this 1.6.8 build.
-    val scope = rememberCoroutineScope()
-    val hostView = LocalView.current
-    var cardBounds by remember { mutableStateOf<Rect?>(null) }
-
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         WeekNavBar(weekOffset = weekOffset, minWeekOffset = minWeekOffset, onStep = onStep)
         if (digest.isEmpty) {
@@ -395,19 +381,7 @@ private fun WeeklyDigestNav(
                 body = stringResource(R.string.trends_no_readings_body),
             )
         } else {
-            Box(modifier = Modifier.onGloballyPositioned { cardBounds = it.boundsInRoot() }) {
-                NoopCard { WeeklyDigestContent(digest = digest, compact = true) }
-            }
-            NoopButton(
-                text = "Share recap",
-                leadingIcon = Icons.Filled.IosShare,
-                kind = NoopButtonKind.Secondary,
-                onClick = {
-                    val bounds = cardBounds
-                    val bmp = bounds?.let { RecapShare.captureCropped(hostView, it) }
-                    if (bmp != null) scope.launch { RecapShare.share(context, bmp, anchorDay) }
-                },
-            )
+            NoopCard { WeeklyDigestContent(digest = digest, compact = true) }
         }
     }
 }

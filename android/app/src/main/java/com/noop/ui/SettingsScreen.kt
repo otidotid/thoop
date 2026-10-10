@@ -3233,9 +3233,6 @@ fun SettingsScreen(
             }
         }
 
-        // --- Trends report (#436) — shareable offline PDF over a date range. Self-contained
-        // card (its own NoopCard + range picker + CTA), so it drops in without a SettingsSection wrapper.
-        TrendsReportExportSection(vm)
         } // end Advanced disclosure content Column
         } // end SettingsDisclosureGroup("Advanced")
 
