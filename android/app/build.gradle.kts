@@ -23,11 +23,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.noop.whoop"
+        applicationId = "com.otidotid.thoop"
         minSdk = 26
         targetSdk = 34
-        versionCode = 555
-        versionName = "12.1.0"
+        versionCode = 549
+        versionName = "11.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -76,7 +76,7 @@ android {
             if (!keystorePropsFile.exists() && !isStagingRelease && requestedReleaseBuild) {
                 throw GradleException(
                     "Refusing to build a real release without keystore.properties. " +
-                        "Use -PstagingRelease for debug-key staging artifacts only."
+                            "Use -PstagingRelease for debug-key staging artifacts only."
                 )
             }
             // Real release key when keystore.properties is present. The debug-key fallback is allowed
@@ -113,7 +113,7 @@ android {
             applicationIdSuffix = ".demo"
             versionNameSuffix = "-demo"
             buildConfigField("String", "TIER", "\"demo\"")
-            buildConfigField("boolean", "ENABLE_DEMO", "true")
+            buildConfigField("boolean", "ENABLE_DEMO", "false")
         }
     }
 
@@ -273,6 +273,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2") // collectAsStateWithLifecycle
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    // Google Sign-In via Android Credential Manager.
+    // Pinned for compatibility with THOOP's current build system.
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("com.google.android.gms:play-services-auth:21.1.1")
 
     // --- Coroutines ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
