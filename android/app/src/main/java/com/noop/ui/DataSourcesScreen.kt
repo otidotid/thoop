@@ -119,9 +119,6 @@ fun DataSourcesScreen(vm: AppViewModel) {
     val hrBroadcastAdvertising by vm.hrBroadcastAdvertising.collectAsStateWithLifecycle()
     val hrBroadcastSubscribers by vm.hrBroadcastSubscribers.collectAsStateWithLifecycle()
     val hrBroadcastStatus by vm.hrBroadcastStatus.collectAsStateWithLifecycle()
-    val hcAutoSync by vm.hcAutoSync.collectAsStateWithLifecycle()
-    val hcSyncHours by vm.hcSyncHours.collectAsStateWithLifecycle()
-    val hcLastSync by vm.hcLastSync.collectAsStateWithLifecycle()
     val hcWriteback by vm.hcWriteback.collectAsStateWithLifecycle()
     val hcWbStatus by vm.hcWritebackStatus.collectAsStateWithLifecycle()
     DisposableEffect(Unit) {
@@ -197,6 +194,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
 
     // Busy flag shared by every importer's Export/Import buttons.
     var busy by remember { mutableStateOf(false) }
+    var confirmHealthConnectImport by remember { mutableStateOf(false) }
     // ah-delete (#616): drives the "Remove Apple Health imported data" confirm dialog.
     var confirmDeleteApple by remember { mutableStateOf(false) }
 
@@ -306,7 +304,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
     ) { granted ->
         val selectedPermissions = HealthConnectImporter.permissionsFor(hcReadCategories)
         if (granted.any { it in selectedPermissions }) {
-            runImport { HealthConnectImporter.import(context, vm.repo, ProfileStore.from(context).heightCm) }
+            confirmHealthConnectImport = true
         } else {
             Toast.makeText(context, "Health Connect access not granted.", Toast.LENGTH_LONG).show()
         }
@@ -321,25 +319,15 @@ fun DataSourcesScreen(vm: AppViewModel) {
     // where it's install-time) the VM starts the HR peripheral.
     val requestAdvertise = rememberRequestAdvertise(onGranted = { vm.setHrBroadcast(true) })
 
-    // Import directly if permissions already granted, otherwise request them first.
+    // Manual-only: permission grant never starts an import. It only opens the final confirmation.
     fun startHealthConnect() {
         scope.launch {
+            val selectedPermissions = HealthConnectImporter.permissionsFor(hcReadCategories)
             val granted = runCatching {
                 HealthConnectImporter.client(context).permissionController.getGrantedPermissions()
             }.getOrDefault(emptySet())
-            // #645: a user who predates the selector has nothing stored. Recover their real scope from
-            // what Android already grants BEFORE the checkboxes are read back, or a first visit would
-            // show Recovery-only and saving it would lock in the narrowing.
-            HealthConnectImporter.migrateSelectionFromGrants(context, granted)
-            hcReadCategories = HealthConnectImporter.selectedCategories(context)
-            val selectedPermissions = HealthConnectImporter.permissionsFor(hcReadCategories)
-            // `any` (not `all`) is deliberate — partial grants are supported (#150). But that alone
-            // would never ASK about a permission added in an update, so a newly-read type would come
-            // back empty forever (#949). Route through the request once when the set has grown.
-            if (granted.any { it in selectedPermissions } &&
-                !HealthConnectImporter.hasUnaskedPermissions(context, hcReadCategories)
-            ) {
-                runImport { HealthConnectImporter.import(context, vm.repo, ProfileStore.from(context).heightCm) }
+            if (granted.any { it in selectedPermissions }) {
+                confirmHealthConnectImport = true
             } else {
                 HealthConnectImporter.markPermissionsAsked(context, hcReadCategories)
                 hcPermissionLauncher.launch(selectedPermissions)
@@ -496,9 +484,9 @@ fun DataSourcesScreen(vm: AppViewModel) {
         SourceCard(
             title = uiString(R.string.l10n_data_sources_screen_health_connect_be6bca3e),
             icon = Icons.Filled.MonitorHeart,
-            subtitle = "Pull steps, heart rate, HRV, sleep, SpO₂, weight and workouts straight from " +
-                "Android's Health Connect. No file needed. On-device; it never overwrites richer " +
-                "WHOOP data, and writes nothing unless you opt in to sharing back below.",
+            subtitle = "Manual import only. Activity only imports steps and calories; All also imports " +
+                "exercise sessions and their distance. Sleep, HR, HRV, SpO₂, VO₂ max and body " +
+                "composition are never read.",
         ) {
             val hasHc = (hcDays ?: 0) > 0 || (hcWorkouts ?: 0) > 0
             if (hasHc) {
@@ -522,67 +510,6 @@ fun DataSourcesScreen(vm: AppViewModel) {
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) { startHealthConnect() }
-
-                // Auto-sync: pull new Health Connect data when you open NOOP, if it's been longer than
-                // the chosen interval — no manual taps. On-open only (no background worker): it avoids a
-                // sensitive background-health permission and is reliable, and opening the app is enough.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(uiString(R.string.l10n_data_sources_screen_auto_sync_periodically_5f3041e8), style = NoopType.subhead, color = Palette.textPrimary)
-                        Text(
-                            uiString(R.string.l10n_data_sources_screen_re_pull_new_health_connect_data_3e9c3914),
-                            style = NoopType.footnote,
-                            color = Palette.textTertiary,
-                        )
-                    }
-                    Switch(
-                        checked = hcAutoSync,
-                        onCheckedChange = { on ->
-                            vm.setHcAutoSync(on)
-                            // Ensure permissions (and an immediate first sync) when turning it on.
-                            if (on) startHealthConnect()
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Palette.surfaceBase,
-                            checkedTrackColor = Palette.accent,
-                            uncheckedThumbColor = Palette.textSecondary,
-                            uncheckedTrackColor = Palette.surfaceInset,
-                            uncheckedBorderColor = Palette.hairline,
-                        ),
-                        modifier = Modifier.semantics {
-                            contentDescription = uiString(R.string.l10n_data_sources_screen_auto_sync_health_connect_periodically_6f3f4d92)
-                        },
-                    )
-                }
-                if (hcAutoSync) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(uiString(R.string.l10n_data_sources_screen_every_3560d90b), style = NoopType.footnote, color = Palette.textSecondary)
-                        SegmentedPillControl(
-                            items = listOf(6, 12, 24),
-                            selection = hcSyncHours,
-                            label = { "${it}h" },
-                            onSelect = { vm.setHcSyncHours(it) },
-                        )
-                    }
-                    Text(
-                        uiString(
-                            R.string.l10n_data_sources_screen_last_sync_b793ffab,
-                            if (hcLastSync == 0L) "not yet"
-                            else DateUtils.getRelativeTimeSpanString(hcLastSync).toString(),
-                        ),
-                        style = NoopType.footnote,
-                        color = Palette.textTertiary,
-                    )
-                }
-
                 // Writeback: the inverse direction. Opt-in, default OFF, computed metrics only.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -952,6 +879,38 @@ fun DataSourcesScreen(vm: AppViewModel) {
         // Keep the final control clear of the app and system navigation bars on shorter phones.
         item { Spacer(Modifier.height(96.dp)) }
 
+    }
+
+    if (confirmHealthConnectImport) {
+        AlertDialog(
+            onDismissRequest = { confirmHealthConnectImport = false },
+            containerColor = Palette.surfaceOverlay,
+            title = { Text("Import Health Connect data?", style = NoopType.title2, color = Palette.textPrimary) },
+            text = {
+                Text(
+                    "This manual import may replace existing Health Connect activity or workout records " +
+                        "for the same dates. THOOP device history, sleep, recovery and manually entered data " +
+                        "will not be deleted. Continue?",
+                    style = NoopType.subhead,
+                    color = Palette.textSecondary,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmHealthConnectImport = false
+                    runImport {
+                        HealthConnectImporter.import(
+                            context, vm.repo, ProfileStore.from(context).heightCm, hcReadCategories,
+                        )
+                    }
+                }) { Text("Yes, import", style = NoopType.body, color = Palette.accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHealthConnectImport = false }) {
+                    Text("No, cancel", style = NoopType.body, color = Palette.textSecondary)
+                }
+            },
+        )
     }
 
     // ah-delete (#616): strongly-worded confirm before purging the "apple-health" source. On confirm,

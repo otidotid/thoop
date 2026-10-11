@@ -107,41 +107,29 @@ object HealthConnectImporter {
         val storageKey: String,
         internal val recordTypes: Set<KClass<out Record>>,
     ) {
-        RECOVERY(
-            "recovery",
-            setOf(
-                HeartRateRecord::class,
-                RestingHeartRateRecord::class,
-                HeartRateVariabilityRmssdRecord::class,
-                SleepSessionRecord::class,
-                OxygenSaturationRecord::class,
-                RespiratoryRateRecord::class,
-                HydrationRecord::class,
-            ),
-        ),
-        ACTIVITY(
-            "activity",
+        ACTIVITY_ONLY(
+            "activity-only",
             setOf(
                 StepsRecord::class,
                 TotalCaloriesBurnedRecord::class,
                 ActiveCaloriesBurnedRecord::class,
-                Vo2MaxRecord::class,
+            ),
+        ),
+        ALL(
+            "all",
+            setOf(
+                StepsRecord::class,
+                TotalCaloriesBurnedRecord::class,
+                ActiveCaloriesBurnedRecord::class,
                 ExerciseSessionRecord::class,
                 DistanceRecord::class,
             ),
         ),
-        BODY_COMPOSITION(
-            "body-composition",
-            setOf(
-                WeightRecord::class,
-                BodyFatRecord::class,
-                LeanBodyMassRecord::class,
-            ),
-        ),
     }
 
+    /** Health Connect import is intentionally limited to activity and exercise data. */
     internal val ALL_CATEGORIES: Set<ImportCategory> = ImportCategory.entries.toSet()
-    internal val DEFAULT_CATEGORIES: Set<ImportCategory> = setOf(ImportCategory.RECOVERY)
+    internal val DEFAULT_CATEGORIES: Set<ImportCategory> = setOf(ImportCategory.ACTIVITY_ONLY)
 
     /** Every supported read permission. Kept as the compatibility/all-capabilities view. */
     val PERMISSIONS: Set<String> = permissionsFor(ALL_CATEGORIES)
@@ -177,58 +165,38 @@ object HealthConnectImporter {
      * enabled so an update never silently stops importing data it imported before (#645).
      */
     fun selectedCategories(context: Context): Set<ImportCategory> {
-        val preferences = prefs(context)
-        return categoriesFromStoredKeys(
-            preferences.getStringSet(CATEGORY_SELECTION_KEY, null)?.toSet(),
-            preferences.contains(PERMISSION_SIGNATURE_KEY),
-        )
+        val stored = prefs(context).getStringSet(CATEGORY_SELECTION_KEY, null).orEmpty()
+        return if (ImportCategory.ALL.storageKey in stored) {
+            setOf(ImportCategory.ALL)
+        } else {
+            DEFAULT_CATEGORIES
+        }
     }
 
     fun setSelectedCategories(context: Context, categories: Set<ImportCategory>) {
-        require(categories.isNotEmpty()) { "At least one Health Connect category must be selected" }
+        val safe = if (ImportCategory.ALL in categories) {
+            setOf(ImportCategory.ALL)
+        } else {
+            DEFAULT_CATEGORIES
+        }
         prefs(context).edit()
-            .putStringSet(CATEGORY_SELECTION_KEY, categories.mapTo(linkedSetOf()) { it.storageKey })
+            .putStringSet(CATEGORY_SELECTION_KEY, safe.mapTo(linkedSetOf()) { it.storageKey })
             .apply()
     }
 
-    /**
-     * The categories implied by grants Android already holds.
-     *
-     * A user who granted Health Connect before #645 existed has no stored selection, and — if they
-     * onboarded before #949 added it — no permission signature either. The importer has shipped since
-     * 2026-06-07 and that key only since 2026-07-30, so there is a real cohort with neither. Falling back
-     * to [DEFAULT_CATEGORIES] for them would silently stop importing Activity and Body composition while
-     * Android still shows those permissions as granted: nothing on screen would say why steps stopped.
-     *
-     * Their grants are the honest record of what they agreed to, so read the scope back off those.
-     */
+    /** Legacy grants never broaden the manual import scope. */
     internal fun categoriesFromGrantedPermissions(granted: Set<String>): Set<ImportCategory> =
-        ImportCategory.entries.filterTo(linkedSetOf()) { category ->
-            permissionsFor(setOf(category)).any { it in granted }
-        }
+        DEFAULT_CATEGORIES
 
-    /**
-     * One-time backfill of the selection for a user who predates it, from what Android has granted.
-     *
-     * Only ever writes when NOTHING is stored, so a user who deliberately narrows to Recovery is never
-     * re-broadened, and it is safe to call from every entry point that can be the first one reached.
-     */
-    fun migrateSelectionFromGrants(context: Context, granted: Set<String>) {
-        if (prefs(context).getStringSet(CATEGORY_SELECTION_KEY, null) != null) return
-        val inferred = categoriesFromGrantedPermissions(granted)
-        if (inferred.isNotEmpty()) setSelectedCategories(context, inferred)
-    }
+    /** Kept for source compatibility; legacy grants are deliberately ignored. */
+    fun migrateSelectionFromGrants(context: Context, granted: Set<String>) = Unit
 
     internal fun categoriesFromStoredKeys(
         storedKeys: Set<String>?,
         hadLegacyPermissionSignature: Boolean,
-    ): Set<ImportCategory> {
-        if (storedKeys != null) {
-            val restored = ImportCategory.entries.filterTo(linkedSetOf()) { it.storageKey in storedKeys }
-            if (restored.isNotEmpty()) return restored
-        }
-        return if (hadLegacyPermissionSignature) ALL_CATEGORIES else DEFAULT_CATEGORIES
-    }
+    ): Set<ImportCategory> =
+        if (ImportCategory.ALL.storageKey in storedKeys.orEmpty()) setOf(ImportCategory.ALL)
+        else DEFAULT_CATEGORIES
 
     /**
      * Whether the user has been asked about every permission in the selected categories (#949/#645).
@@ -317,16 +285,6 @@ object HealthConnectImporter {
             return ImportSummary.failure(SOURCE, "Health Connect is not available on this device.")
         }
 
-        // Refile any legacy Health Connect data that landed in the shared "apple-health" bucket before
-        // #34 BEFORE importing, so a re-import refiles cleanly instead of duplicating across both sources.
-        try { repo.refileLegacyHealthConnect() } catch (_: Exception) { /* best-effort */ }
-        // #112 follow-up heal: purge the shadow rows earlier imports wrote while the covered-days
-        // gate missed active-strap ids — sparse HC-shaped "my-whoop" sleep/daily rows sitting over
-        // nights the strap's computed ("-noop") source already covers. Runs BEFORE this import's
-        // own gate is read so the healed coverage is what gets consulted. Idempotent, best-effort
-        // like the refile above.
-        try { repo.purgeHcShadowedStrapDays() } catch (_: Exception) { /* best-effort */ }
-
         val client = client(context)
 
         // Verify the permissions really are granted (the UI may have been dismissed).
@@ -338,8 +296,12 @@ object HealthConnectImporter {
         // #645 follow-up: a user who predates the category selector has nothing stored — recover their
         // real scope from the grants before deciding what to read, or the first import after the update
         // would quietly narrow them to Recovery.
-        migrateSelectionFromGrants(context, granted)
-        val effectiveCategories = categories ?: selectedCategories(context)
+        val requestedCategories = categories ?: selectedCategories(context)
+        val effectiveCategories = if (ImportCategory.ALL in requestedCategories) {
+            setOf(ImportCategory.ALL)
+        } else {
+            DEFAULT_CATEGORIES
+        }
 
         // Partial permissions are fine (#150): import the record types the user DID grant and skip the
         // rest, instead of refusing the whole import when any single type is missing. Each per-type read
@@ -942,65 +904,8 @@ object HealthConnectImporter {
      * is unavailable / steps aren't granted / there's nothing at all. Never throws.
      */
     suspend fun refreshTodaySteps(context: Context, repo: WhoopRepository): Int? {
-        if (sdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return null
-        if (ImportCategory.ACTIVITY !in selectedCategories(context)) return null
-        val client = client(context)
-        val granted = try {
-            client.permissionController.getGrantedPermissions()
-        } catch (e: Exception) {
-            return null
-        }
-        if (HealthPermission.getReadPermission(StepsRecord::class) !in granted) return null
-
-        val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
-        val dayKey = today.toString()
-        // #589: per-SOURCE sums so the live top-up de-overlaps a phone+watch pair exactly like [import]
-        // (sum within a source, MAX across sources), instead of summing them into a ~2x inflated count.
-        val stepsBySource = HashMap<String, Long>()
-        val selfPackage = context.packageName // #528: skip our own writes (see readAll / isSelfWritten)
-        // readAll swallows a failed read (the map stays empty), so a flaky provider degrades to the stored
-        // row below rather than clobbering it with zero.
-        readAll(
-            client, StepsRecord::class,
-            // #1002: reach back an extra day. The FILTER is in the phone's zone but the day key below is
-            // now the record's own, and a record whose offset sits EAST of the phone's zone can belong to
-            // today while having started before the phone's midnight — fetching only from midnight would
-            // miss it, and the write below replaces a stored count with any non-zero sum, so a miss would
-            // overwrite a good figure with a low one. A day of slack covers every real offset (-12..+14).
-            // The `== dayKey` test still decides membership, so the extra records are read and discarded;
-            // step records are coarse interval rows, a handful per day, so this is cheap on a screen refresh.
-            TimeRangeFilter.between(today.minusDays(1).atStartOfDay(zone).toInstant(), Instant.now()),
-            selfPackage,
-        ) { r ->
-            // The filter matches by overlap — drop records that STARTED yesterday so the bucketing
-            // agrees with [import]'s dayOf(r.startTime, r.startZoneOffset). #1002: keyed by the
-            // record's own offset for that agreement; `today` stays the phone's zone, which is what
-            // "today" means for a live top-up of the screen you are looking at.
-            if (localDayKey(r.startTime, r.startZoneOffset, zone) == dayKey) {
-                val src = r.metadata.dataOrigin.packageName
-                stepsBySource[src] = (stepsBySource[src] ?: 0L) + r.count
-            }
-        }
-        val sum = maxSourceLong(stepsBySource) // #589 de-overlap: max source, not cross-source sum
-
-        val existing = try {
-            repo.appleDaily(HC_DEVICE, dayKey, dayKey).firstOrNull()
-        } catch (e: Exception) {
-            null
-        }
-        // Zero is indistinguishable from "no data yet today" — never overwrite a stored count with it.
-        if (sum <= 0L) return existing?.steps
-
-        val updated = existing?.copy(steps = sum.toInt())
-            ?: AppleDaily(deviceId = HC_DEVICE, day = dayKey, steps = sum.toInt())
-        try {
-            if (existing == null) repo.upsertDevice(HC_DEVICE, name = "Health Connect")
-            repo.upsertAppleDaily(listOf(updated))
-        } catch (e: Exception) {
-            return existing?.steps
-        }
-        return sum.toInt()
+        // Health Connect reads are manual-only. Today never triggers a background/live top-up.
+        return null
     }
 
     // MARK: - paginated read helper
