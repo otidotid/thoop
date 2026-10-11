@@ -1012,6 +1012,36 @@ private fun FitnessAgeHero(
     val vo2Position = vo2max?.let { ((it - 15.0) / 55.0).toFloat().coerceIn(0f, 1f) }
     val rhrPosition = restingHr?.let { (1f - ((it - 40.0) / 40.0).toFloat()).coerceIn(0f, 1f) }
     val effortPosition = weeklyEffort?.let { (it / 100.0).toFloat().coerceIn(0f, 1f) }
+    // Animate the large THOOP Age hero that is actually visible on the Fitness Age surface.
+    // Presentation only: no metric value, engine input, persistence, or weekly calculation changes.
+    val visibleAgeHeroMotion = rememberInfiniteTransition(label = "visible-thoop-age-hero")
+    val visibleAgeHeroScale by visibleAgeHeroMotion.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.025f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "visible-thoop-age-scale",
+    )
+    val visibleAgeHeroGlow by visibleAgeHeroMotion.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.24f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "visible-thoop-age-glow",
+    )
+    val visibleAgeHeroShift by visibleAgeHeroMotion.animateFloat(
+        initialValue = -0.035f,
+        targetValue = 0.035f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 6_000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "visible-thoop-age-shift",
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         LiquidHeroCard {
@@ -1028,15 +1058,40 @@ private fun FitnessAgeHero(
                     Box(
                         modifier = Modifier
                             .size(142.dp)
+                            .graphicsLayer {
+                                scaleX = visibleAgeHeroScale
+                                scaleY = visibleAgeHeroScale
+                                shadowElevation = 18.dp.toPx() * visibleAgeHeroGlow
+                                shape = RoundedCornerShape(52.dp)
+                                clip = false
+                            }
                             .clip(RoundedCornerShape(52.dp))
                             .background(
                                 Brush.radialGradient(
-                                    listOf(accent.copy(alpha = 0.08f), accent.copy(alpha = 0.32f), accent.copy(alpha = 0.76f)),
+                                    listOf(
+                                        accent.copy(alpha = 0.08f + visibleAgeHeroGlow * 0.20f),
+                                        accent.copy(alpha = 0.32f + visibleAgeHeroGlow * 0.20f),
+                                        accent.copy(alpha = 0.76f),
+                                    ),
                                 ),
                             )
-                            .border(2.dp, accent.copy(alpha = 0.85f), RoundedCornerShape(52.dp)),
+                            .border(2.dp, accent.copy(alpha = 0.82f + visibleAgeHeroGlow * 0.50f), RoundedCornerShape(52.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
+                        Canvas(Modifier.matchParentSize()) {
+                            val shiftX = size.width * visibleAgeHeroShift
+                            val shiftY = size.height * visibleAgeHeroShift * 0.65f
+                            drawCircle(
+                                accent.copy(alpha = 0.14f + visibleAgeHeroGlow),
+                                radius = size.minDimension * (0.42f + visibleAgeHeroGlow * 0.08f),
+                                center = Offset(size.width * .46f + shiftX, size.height * .47f - shiftY),
+                            )
+                            drawCircle(
+                                Color.White.copy(alpha = 0.05f + visibleAgeHeroGlow * 0.18f),
+                                radius = size.minDimension * (0.25f + visibleAgeHeroGlow * 0.06f),
+                                center = Offset(size.width * .62f - shiftX, size.height * .34f + shiftY),
+                            )
+                        }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "$boundSymbol$shown",
@@ -2267,7 +2322,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             )
             return@ScreenScaffold
         }
-        if (!isStepsDetail && key != "vitality" && filteredPoints.size == 1) {
+        if (!isStepsDetail && key !in setOf("vitality", "vo2max_est") && filteredPoints.size == 1) {
             val one = filteredPoints.single()
             SectionHeader(
                 detail.title,
