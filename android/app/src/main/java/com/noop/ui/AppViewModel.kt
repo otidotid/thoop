@@ -2585,13 +2585,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (enabled) broadcaster.start() else broadcaster.stop()
     }
 
-    // --- Health Connect periodic auto-sync (Samsung Health → Health Connect → NOOP) ---
-    private val _hcAutoSync = MutableStateFlow(NoopPrefs.hcAutoSync(appContext))
-    val hcAutoSync: StateFlow<Boolean> = _hcAutoSync.asStateFlow()
-    private val _hcSyncHours = MutableStateFlow(NoopPrefs.hcSyncHours(appContext))
-    val hcSyncHours: StateFlow<Int> = _hcSyncHours.asStateFlow()
-    private val _hcLastSync = MutableStateFlow(NoopPrefs.hcLastSync(appContext))
-    val hcLastSync: StateFlow<Long> = _hcLastSync.asStateFlow()
+    // --- Health Connect writeback (manual import is handled only by the UI) ---
     private val _hcWriteback = MutableStateFlow(NoopPrefs.hcWriteback(appContext))
     val hcWriteback: StateFlow<Boolean> = _hcWriteback.asStateFlow()
 
@@ -2609,11 +2603,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshHcWritebackStatus() { _hcWritebackStatus.value = readHcWritebackStatus() }
 
     init {
-        // On app open, catch up the Health Connect sync if it's overdue. This on-open import is the
-        // ONLY auto-sync path: we deliberately skip a true-background worker — it needs a sensitive
-        // background-health permission and is unreliable on Android 14+, and opening the app regularly
-        // is enough for a personal health app.
-        syncHealthConnectIfStale()
 
         // If a GPS workout is still tracking in the background (the screen was off and this VM was
         // recreated on reopen), rebuild its active-workout card from the process-level session. Placed
@@ -2624,20 +2613,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // snapshot so an OS kill mid-session can still be ended + saved (#529). Order matters: a live GPS
         // session wins; the non-GPS path only fills in when [_activeWorkout] is still null.
         rehydrateActiveNonGpsWorkout()
-    }
-
-    /** Flip auto-sync. Persists and, on enable, kicks an immediate import; thereafter it catches up on
-     *  app open via [syncHealthConnectIfStale]. */
-    fun setHcAutoSync(enabled: Boolean) {
-        _hcAutoSync.value = enabled
-        NoopPrefs.setHcAutoSync(appContext, enabled)
-        if (enabled) syncHealthConnectIfStale(force = true)
-    }
-
-    /** Change the sync interval (hours). Takes effect on the next on-open catch-up sync. */
-    fun setHcSyncHours(hours: Int) {
-        _hcSyncHours.value = hours
-        NoopPrefs.setHcSyncHours(appContext, hours)
     }
 
     /** Flip Health Connect writeback (computed metrics → HC). Persists; the UI requests the write
@@ -2655,42 +2630,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { HealthConnectWriter.write(appContext, repository, deviceId) }
             }
             refreshHcWritebackStatus()   // #660: surface the just-recorded outcome in Data Sources
-        }
-    }
-
-    /**
-     * Foreground catch-up import: when auto-sync is on and the last sync is older than the chosen
-     * interval (or [force]), pull from Health Connect now. Health Connect background reads are
-     * restricted, so opening the app is the guaranteed sync point. No-ops silently if Health Connect
-     * is unavailable or its read permissions aren't granted (the UI requests them when enabling).
-     */
-    fun syncHealthConnectIfStale(force: Boolean = false) {
-        if (!_hcAutoSync.value) return
-        val intervalMs = _hcSyncHours.value.toLong() * 60 * 60 * 1000
-        val last = _hcLastSync.value
-        val now = System.currentTimeMillis()
-        if (!force && last != 0L && now - last < intervalMs) return
-        viewModelScope.launch {
-            val ran = withContext(Dispatchers.IO) {
-                if (HealthConnectImporter.sdkStatus(appContext) != HealthConnectClient.SDK_AVAILABLE) {
-                    return@withContext false
-                }
-                val granted = runCatching {
-                    HealthConnectImporter.client(appContext).permissionController.getGrantedPermissions()
-                }.getOrDefault(emptySet())
-                val selectedPermissions = HealthConnectImporter.permissionsFor(
-                    HealthConnectImporter.selectedCategories(appContext),
-                )
-                // Partial permissions are fine (#150): auto-import as long as at least one type is granted.
-                if (granted.none { it in selectedPermissions }) return@withContext false
-                // Pass the profile height so the importer can derive BMI (Health Connect has no BMI record).
-                runCatching { HealthConnectImporter.import(appContext, repository, profileStore.heightCm) }.isSuccess
-            }
-            if (ran) {
-                val t = System.currentTimeMillis()
-                NoopPrefs.setHcLastSync(appContext, t)
-                _hcLastSync.value = t
-            }
         }
     }
 

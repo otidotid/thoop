@@ -1,5 +1,7 @@
 package com.noop.ui
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import com.noop.R
 import androidx.compose.ui.res.stringResource
 import android.Manifest
@@ -794,6 +796,7 @@ private fun ImportStep(viewModel: AppViewModel) {
     // busy stays transient: a config change / process death cancels the import coroutine,
     // so a persisted busy=true would strand the buttons disabled with nothing running.
     var busy by remember { mutableStateOf(false) }
+    var confirmHealthConnectImport by remember { mutableStateOf(false) }
     var status by rememberSaveable { mutableStateOf<String?>(null) }
     var hcReadCategories by remember {
         mutableStateOf(HealthConnectImporter.selectedCategories(context))
@@ -832,7 +835,7 @@ private fun ImportStep(viewModel: AppViewModel) {
     ) { granted ->
         val selectedPermissions = HealthConnectImporter.permissionsFor(hcReadCategories)
         if (granted.any { it in selectedPermissions }) {
-            runImport { HealthConnectImporter.import(context, viewModel.repo, ProfileStore.from(context).heightCm) }
+            confirmHealthConnectImport = true
         } else {
             val message = healthConnectDenied
             status = message
@@ -846,22 +849,13 @@ private fun ImportStep(viewModel: AppViewModel) {
 
     fun startHealthConnect() {
         scope.launch {
+            val selectedPermissions = HealthConnectImporter.permissionsFor(hcReadCategories)
             val granted = runCatching {
                 HealthConnectImporter.client(context).permissionController.getGrantedPermissions()
             }.getOrDefault(emptySet())
-            // #645: a user who predates the selector has nothing stored. Recover their real scope from
-            // what Android already grants BEFORE the checkboxes are read back, or a first visit would
-            // show Recovery-only and saving it would lock in the narrowing.
-            HealthConnectImporter.migrateSelectionFromGrants(context, granted)
-            hcReadCategories = HealthConnectImporter.selectedCategories(context)
-            val selectedPermissions = HealthConnectImporter.permissionsFor(hcReadCategories)
-            if (granted.any { it in selectedPermissions } &&
-                !HealthConnectImporter.hasUnaskedPermissions(context, hcReadCategories)
-            ) {
-                runImport { HealthConnectImporter.import(context, viewModel.repo, ProfileStore.from(context).heightCm) }
+            if (granted.any { it in selectedPermissions }) {
+                confirmHealthConnectImport = true
             } else {
-                // Marked before launching so the request is made ONCE per permission set: a user who
-                // declines is not asked again on every visit (#949).
                 HealthConnectImporter.markPermissionsAsked(context, hcReadCategories)
                 hcPermissionLauncher.launch(selectedPermissions)
             }
@@ -932,6 +926,27 @@ private fun ImportStep(viewModel: AppViewModel) {
             }
         }
     }
+    if (confirmHealthConnectImport) {
+        AlertDialog(
+            onDismissRequest = { confirmHealthConnectImport = false },
+            title = { Text("Import Health Connect data?") },
+            text = { Text("This manual import may replace existing Health Connect activity or workout records for the same dates. THOOP device history, sleep, recovery and manually entered data will not be deleted. Continue?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmHealthConnectImport = false
+                    runImport {
+                        HealthConnectImporter.import(
+                            context, viewModel.repo, ProfileStore.from(context).heightCm, hcReadCategories,
+                        )
+                    }
+                }) { Text("Yes, import") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHealthConnectImport = false }) { Text("No, cancel") }
+            },
+        )
+    }
+
 }
 
 @Composable

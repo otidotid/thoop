@@ -1,6 +1,8 @@
 package com.noop.ingest
 
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
@@ -10,124 +12,161 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Pure coverage for the category consent contract in issue #645. */
+/**
+ * Pure coverage for THOOP's manual Health Connect import contract.
+ *
+ * Health Connect is limited to activity and exercise records. Existing Android grants never broaden
+ * the selected scope, and opening Today must not trigger an automatic Health Connect read.
+ */
 class HealthConnectPermissionCategoryTest {
-    private val recovery = setOf(ImportCategory.RECOVERY)
-    private val activity = setOf(ImportCategory.ACTIVITY)
-    private val body = setOf(ImportCategory.BODY_COMPOSITION)
+    private val activityOnly = setOf(ImportCategory.ACTIVITY_ONLY)
+    private val allActivity = setOf(ImportCategory.ALL)
 
     @Test
-    fun categoriesPartitionEverySupportedPermissionExactlyOnce() {
-        val perCategory = ImportCategory.entries.map { HealthConnectImporter.permissionsFor(setOf(it)) }
-
-        assertEquals(perCategory.sumOf { it.size }, perCategory.flatten().toSet().size)
-        assertEquals(HealthConnectImporter.PERMISSIONS, perCategory.flatten().toSet())
+    fun defaultScopeIsActivityOnly() {
+        assertEquals(activityOnly, HealthConnectImporter.DEFAULT_CATEGORIES)
     }
 
     @Test
-    fun recoveryDoesNotRequestActivityOrBodyComposition() {
-        val permissions = HealthConnectImporter.permissionsFor(recovery)
+    fun activityOnlyRequestsActivityButNotExerciseRecoveryOrBodyComposition() {
+        val permissions = HealthConnectImporter.permissionsFor(activityOnly)
 
-        assertTrue(HealthPermission.getReadPermission(HeartRateRecord::class) in permissions)
-        assertFalse(HealthPermission.getReadPermission(StepsRecord::class) in permissions)
+        assertTrue(HealthPermission.getReadPermission(StepsRecord::class) in permissions)
+        assertFalse(HealthPermission.getReadPermission(ExerciseSessionRecord::class) in permissions)
+        assertFalse(HealthPermission.getReadPermission(DistanceRecord::class) in permissions)
+        assertFalse(HealthPermission.getReadPermission(HeartRateRecord::class) in permissions)
         assertFalse(HealthPermission.getReadPermission(WeightRecord::class) in permissions)
     }
 
     @Test
-    fun newInstallsDefaultNarrowWhileLegacyInstallsKeepExistingImports() {
+    fun allScopeAddsExerciseButNeverRecoveryOrBodyComposition() {
+        val permissions = HealthConnectImporter.permissionsFor(allActivity)
+
+        assertTrue(HealthPermission.getReadPermission(StepsRecord::class) in permissions)
+        assertTrue(HealthPermission.getReadPermission(ExerciseSessionRecord::class) in permissions)
+        assertTrue(HealthPermission.getReadPermission(DistanceRecord::class) in permissions)
+        assertFalse(HealthPermission.getReadPermission(HeartRateRecord::class) in permissions)
+        assertFalse(HealthPermission.getReadPermission(WeightRecord::class) in permissions)
+    }
+
+    @Test
+    fun supportedPermissionsMatchTheActivityAndExerciseContract() {
         assertEquals(
-            recovery,
-            HealthConnectImporter.categoriesFromStoredKeys(null, hadLegacyPermissionSignature = false),
+            HealthConnectImporter.permissionsFor(HealthConnectImporter.ALL_CATEGORIES),
+            HealthConnectImporter.PERMISSIONS,
         )
-        assertEquals(
-            HealthConnectImporter.ALL_CATEGORIES,
-            HealthConnectImporter.categoriesFromStoredKeys(null, hadLegacyPermissionSignature = true),
+        assertFalse(
+            HealthPermission.getReadPermission(HeartRateRecord::class) in
+                HealthConnectImporter.PERMISSIONS,
+        )
+        assertFalse(
+            HealthPermission.getReadPermission(WeightRecord::class) in
+                HealthConnectImporter.PERMISSIONS,
         )
     }
 
     @Test
-    fun storedSelectionWinsOverLegacyFallback() {
+    fun newAndLegacyInstallsDefaultToActivityOnly() {
         assertEquals(
-            activity + body,
+            activityOnly,
             HealthConnectImporter.categoriesFromStoredKeys(
-                setOf(ImportCategory.ACTIVITY.storageKey, ImportCategory.BODY_COMPOSITION.storageKey),
+                storedKeys = null,
+                hadLegacyPermissionSignature = false,
+            ),
+        )
+        assertEquals(
+            activityOnly,
+            HealthConnectImporter.categoriesFromStoredKeys(
+                storedKeys = null,
                 hadLegacyPermissionSignature = true,
             ),
         )
     }
 
     @Test
-    fun narrowingNeverRepromptsAndExpandingRequestsOnlyNewCategory() {
-        val recoveryPermissions = HealthConnectImporter.permissionsFor(recovery)
-
-        assertTrue(HealthConnectImporter.unaskedPermissions(recoveryPermissions, recovery).isEmpty())
+    fun storedAllSelectionIsRestored() {
         assertEquals(
-            HealthConnectImporter.permissionsFor(body),
-            HealthConnectImporter.unaskedPermissions(recoveryPermissions, recovery + body),
-        )
-    }
-
-    @Test
-    fun partialGrantReadsOnlyGrantedTypesInsideSelectedCategories() {
-        val heartRate = HealthPermission.getReadPermission(HeartRateRecord::class)
-        val steps = HealthPermission.getReadPermission(StepsRecord::class)
-        val readable = HealthConnectImporter.readableRecordTypes(
-            categories = recovery + activity,
-            grantedPermissions = setOf(heartRate, steps),
-        )
-
-        assertEquals(setOf(HeartRateRecord::class, StepsRecord::class), readable)
-        assertFalse(WeightRecord::class in readable)
-    }
-
-    @Test
-    fun grantFromDeselectedCategoryIsNotRead() {
-        val readable = HealthConnectImporter.readableRecordTypes(
-            categories = recovery,
-            grantedPermissions = setOf(
-                HealthPermission.getReadPermission(HeartRateRecord::class),
-                HealthPermission.getReadPermission(StepsRecord::class),
+            allActivity,
+            HealthConnectImporter.categoriesFromStoredKeys(
+                storedKeys = setOf(ImportCategory.ALL.storageKey),
+                hadLegacyPermissionSignature = true,
             ),
         )
-
-        assertEquals(setOf(HeartRateRecord::class), readable)
     }
 
-    /**
-     * #645 migration: a user who granted Health Connect before the selector existed has no stored
-     * selection, and if they onboarded before #949 no permission signature either — the importer has
-     * shipped since 2026-06-07 and that key only since 2026-07-30. Their Android grants are the only
-     * honest record of what they agreed to, so the scope is read back off those rather than defaulted.
-     *
-     * Without this they would silently stop importing Activity and Body composition while Android still
-     * showed those permissions as granted, with nothing on screen saying why steps had stopped.
-     */
     @Test
-    fun grantsFromBeforeTheSelectorRecoverTheirCategories() {
-        val granted = setOf(
+    fun unknownOrLegacyStoredKeysCannotBroadenTheScope() {
+        assertEquals(
+            activityOnly,
+            HealthConnectImporter.categoriesFromStoredKeys(
+                storedKeys = setOf("recovery", "activity", "body-composition"),
+                hadLegacyPermissionSignature = true,
+            ),
+        )
+    }
+
+    @Test
+    fun legacyAndroidGrantsNeverBroadenManualImport() {
+        val oldGrants = setOf(
             HealthPermission.getReadPermission(HeartRateRecord::class),
             HealthPermission.getReadPermission(StepsRecord::class),
+            HealthPermission.getReadPermission(WeightRecord::class),
         )
+
         assertEquals(
-            setOf(ImportCategory.RECOVERY, ImportCategory.ACTIVITY),
-            HealthConnectImporter.categoriesFromGrantedPermissions(granted),
+            activityOnly,
+            HealthConnectImporter.categoriesFromGrantedPermissions(oldGrants),
         )
     }
 
-    /** A fresh install grants nothing, so there is nothing to recover and the caller keeps its default. */
     @Test
-    fun noGrantsRecoversNothing() {
-        assertTrue(HealthConnectImporter.categoriesFromGrantedPermissions(emptySet()).isEmpty())
-    }
+    fun readableTypesRequireBothSelectionAndGrant() {
+        val granted = setOf(
+            HealthPermission.getReadPermission(StepsRecord::class),
+            HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+            HealthPermission.getReadPermission(HeartRateRecord::class),
+        )
 
-    /** One granted type is enough to claim its whole category — partial grants stay supported (#150). */
-    @Test
-    fun oneGrantedTypeClaimsItsCategory() {
         assertEquals(
-            setOf(ImportCategory.BODY_COMPOSITION),
-            HealthConnectImporter.categoriesFromGrantedPermissions(
-                setOf(HealthPermission.getReadPermission(WeightRecord::class)),
+            setOf(StepsRecord::class),
+            HealthConnectImporter.readableRecordTypes(
+                categories = activityOnly,
+                grantedPermissions = granted,
             ),
+        )
+
+        val allReadable = HealthConnectImporter.readableRecordTypes(
+            categories = allActivity,
+            grantedPermissions = granted,
+        )
+        assertTrue(StepsRecord::class in allReadable)
+        assertTrue(ExerciseSessionRecord::class in allReadable)
+        assertFalse(HeartRateRecord::class in allReadable)
+    }
+
+    @Test
+    fun unaskedPermissionsOnlyContainTheSelectedManualScope() {
+        val activityPermissions = HealthConnectImporter.permissionsFor(activityOnly)
+
+        assertTrue(
+            HealthConnectImporter.unaskedPermissions(
+                asked = activityPermissions,
+                categories = activityOnly,
+            ).isEmpty(),
+        )
+
+        val newlyNeeded = HealthConnectImporter.unaskedPermissions(
+            asked = activityPermissions,
+            categories = allActivity,
+        )
+        assertTrue(
+            HealthPermission.getReadPermission(ExerciseSessionRecord::class) in newlyNeeded,
+        )
+        assertFalse(
+            HealthPermission.getReadPermission(HeartRateRecord::class) in newlyNeeded,
+        )
+        assertFalse(
+            HealthPermission.getReadPermission(WeightRecord::class) in newlyNeeded,
         )
     }
 }
