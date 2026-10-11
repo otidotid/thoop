@@ -2184,7 +2184,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             // needs a second point. Show the value + when the chart fills in, never a no-data dead end.
             // Matches iOS, which renders the value hero at a single point. First hit on Fitness Age, then
             // Vitality — both weekly-ish computed scores that sit at one reading for a while.
-            if (!isStepsDetail && key != "fitness_age" && detail != null && detail.points.size == 1) {
+            if (!isStepsDetail && key !in setOf("fitness_age", "vo2max_est", "vitality") && detail != null && detail.points.size == 1) {
                 val one = detail.points.last()   // size 1: the single reading (last == the latest)
                 NoopCard {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2992,15 +2992,26 @@ internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): Vita
             .map { VitalReading(it.day, it.value, it.deviceId) },
         format = { it.roundToInt().toString() },
     )
-    "vitality" -> VitalDetailModel(
-        key = key,
-        title = uiString(R.string.l10n_health_screen_vitality_be320b06),
-        unit = "",
-        color = Palette.metricPurple,
-        readings = vm.repo.metricSeriesComputedUnion(vm.activeStrapId, "vitality", "0000-01-01", "9999-12-31")
-            .map { VitalReading(it.day, it.value, it.deviceId) },
-        format = { it.roundToInt().toString() },
-    )
+    "vitality" -> {
+        val stored = vm.repo.metricSeriesComputedUnion(
+            vm.activeStrapId, "vitality", "0000-01-01", "9999-12-31",
+        ).map { VitalReading(it.day, it.value, it.deviceId) }
+        // Display-only fallback to the same local value Today already resolved. Nothing is persisted.
+        val readings = stored.ifEmpty {
+            vm.todayVitalityCache
+                ?.takeIf { it.isFinite() && it > 0.0 }
+                ?.let { listOf(VitalReading(logicalDayKeyNow(), it, "On-device")) }
+                .orEmpty()
+        }
+        VitalDetailModel(
+            key = key,
+            title = uiString(R.string.l10n_health_screen_vitality_be320b06),
+            unit = "",
+            color = Palette.metricPurple,
+            readings = readings,
+            format = { it.roundToInt().toString() },
+        )
+    }
     // #1391: the VO₂max card (opt-in, #1393) taps through here. Like its sibling computed metrics
     // (fitness_age / vitality above), the weekly estimate is persisted under the "-noop" computed spine
     // (IntelligenceEngine writes "vo2max_est"), so its trend reads the COMPUTED union — not the raw
@@ -3011,6 +3022,13 @@ internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): Vita
         val points = vm.repo.metricSeriesComputedUnion(
             vm.activeStrapId, "vo2max_est", "0000-01-01", "9999-12-31",
         )
+        // Display-only fallback to the same local value Today already resolved. Nothing is persisted.
+        val localFallback = if (points.isEmpty()) {
+            vm.todayVo2maxCache
+                ?.takeIf { it.isFinite() && it > 0.0 }
+                ?.let { listOf(VitalReading(logicalDayKeyNow(), it, "On-device")) }
+                .orEmpty()
+        } else emptyList()
         VitalDetailModel(
             key = key,
             title = uiString(R.string.l10n_health_screen_vo2max_21214fb6),
@@ -3021,7 +3039,7 @@ internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): Vita
                     vm.repo.scoreInputSource(point.deviceId, point.day, point.key),
                 )
                 VitalReading(point.day, point.value, vo2MaxAttributionSource(estimator))
-            },
+            } + localFallback,
             // #1662: ONE decimal, matching the iOS catalog's `decimals: 1` for this key. Android rounded
             // to an integer, so a chart plotted at full precision sat under labels that could not move
             // with it: VO2max shifts well under 1 ml/kg between weekly points, so the line visibly sloped
