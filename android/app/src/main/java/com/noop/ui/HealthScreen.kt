@@ -3,6 +3,12 @@ package com.noop.ui
 import com.noop.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +66,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -2260,7 +2267,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             )
             return@ScreenScaffold
         }
-        if (!isStepsDetail && filteredPoints.size == 1) {
+        if (!isStepsDetail && key != "vitality" && filteredPoints.size == 1) {
             val one = filteredPoints.single()
             SectionHeader(
                 detail.title,
@@ -2761,6 +2768,36 @@ private fun FitnessAgeDetailExperience(
         unfavorable -> "${String.format(Locale.US, "%.1f", kotlin.math.abs(delta))} YEARS OLDER"
         else -> "ABOUT YOUR AGE"
     }
+    // Presentation-only motion for the large THOOP Age hero. The stored value and scoring path stay
+    // untouched: only the hero's scale, glow, and translucent inner layers breathe slowly.
+    val ageHeroMotion = rememberInfiniteTransition(label = "thoop-age-hero")
+    val ageHeroScale by ageHeroMotion.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.025f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "thoop-age-scale",
+    )
+    val ageHeroGlow by ageHeroMotion.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.24f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "thoop-age-glow",
+    )
+    val ageHeroShift by ageHeroMotion.animateFloat(
+        initialValue = -0.035f,
+        targetValue = 0.035f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 6_000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "thoop-age-blob-shift",
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         Box(
@@ -2798,22 +2835,39 @@ private fun FitnessAgeDetailExperience(
                     Box(
                         modifier = Modifier
                             .size(158.dp)
+                            .graphicsLayer {
+                                scaleX = ageHeroScale
+                                scaleY = ageHeroScale
+                                shadowElevation = 18.dp.toPx() * ageHeroGlow
+                                shape = RoundedCornerShape(58.dp)
+                                clip = false
+                            }
                             .clip(RoundedCornerShape(58.dp))
                             .background(
                                 Brush.radialGradient(
                                     listOf(
-                                        accent.copy(alpha = 0.10f),
-                                        accent.copy(alpha = 0.36f),
+                                        accent.copy(alpha = 0.10f + ageHeroGlow * 0.20f),
+                                        accent.copy(alpha = 0.36f + ageHeroGlow * 0.20f),
                                         accent.copy(alpha = 0.82f),
                                     ),
                                 ),
                             )
-                            .border(2.dp, accent, RoundedCornerShape(58.dp)),
+                            .border(2.dp, accent.copy(alpha = 0.86f + ageHeroGlow * 0.50f), RoundedCornerShape(58.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Canvas(Modifier.matchParentSize()) {
-                            drawCircle(accent.copy(alpha = 0.16f), radius = size.minDimension * 0.44f, center = Offset(size.width * .46f, size.height * .47f))
-                            drawCircle(Color.White.copy(alpha = 0.08f), radius = size.minDimension * 0.28f, center = Offset(size.width * .62f, size.height * .34f))
+                            val shiftX = size.width * ageHeroShift
+                            val shiftY = size.height * ageHeroShift * 0.65f
+                            drawCircle(
+                                accent.copy(alpha = 0.16f + ageHeroGlow),
+                                radius = size.minDimension * (0.42f + ageHeroGlow * 0.08f),
+                                center = Offset(size.width * .46f + shiftX, size.height * .47f - shiftY),
+                            )
+                            drawCircle(
+                                Color.White.copy(alpha = 0.06f + ageHeroGlow * 0.18f),
+                                radius = size.minDimension * (0.26f + ageHeroGlow * 0.06f),
+                                center = Offset(size.width * .62f - shiftX, size.height * .34f + shiftY),
+                            )
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(fitnessAgeBoundSymbol(latest.value) + format(latest.value), style = NoopType.number(42f, FontWeight.Bold), color = Color.White)
