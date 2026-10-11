@@ -1,0 +1,147 @@
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -26,8 +26,8 @@
+         applicationId = "com.otidotid.thoop"
+         minSdk = 26
+         targetSdk = 34
+-        versionCode = 549
+-        versionName = "11.8.0"
++        versionCode = 555
++        versionName = "12.1.0"
+ 
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables {
+--- a/android/app/src/main/java/com/noop/ui/HealthScreen.kt
++++ b/android/app/src/main/java/com/noop/ui/HealthScreen.kt
+@@ -2184,7 +2184,7 @@
+             // needs a second point. Show the value + when the chart fills in, never a no-data dead end.
+             // Matches iOS, which renders the value hero at a single point. First hit on Fitness Age, then
+             // Vitality — both weekly-ish computed scores that sit at one reading for a while.
+-            if (!isStepsDetail && key != "fitness_age" && detail != null && detail.points.size == 1) {
++            if (!isStepsDetail && key !in setOf("fitness_age", "vo2max_est", "vitality") && detail != null && detail.points.size == 1) {
+                 val one = detail.points.last()   // size 1: the single reading (last == the latest)
+                 NoopCard {
+                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+@@ -2992,15 +2992,26 @@
+             .map { VitalReading(it.day, it.value, it.deviceId) },
+         format = { it.roundToInt().toString() },
+     )
+-    "vitality" -> VitalDetailModel(
+-        key = key,
+-        title = uiString(R.string.l10n_health_screen_vitality_be320b06),
+-        unit = "",
+-        color = Palette.metricPurple,
+-        readings = vm.repo.metricSeriesComputedUnion(vm.activeStrapId, "vitality", "0000-01-01", "9999-12-31")
+-            .map { VitalReading(it.day, it.value, it.deviceId) },
+-        format = { it.roundToInt().toString() },
+-    )
++    "vitality" -> {
++        val stored = vm.repo.metricSeriesComputedUnion(
++            vm.activeStrapId, "vitality", "0000-01-01", "9999-12-31",
++        ).map { VitalReading(it.day, it.value, it.deviceId) }
++        // Display-only fallback to the same local value Today already resolved. Nothing is persisted.
++        val readings = stored.ifEmpty {
++            vm.todayVitalityCache
++                ?.takeIf { it.isFinite() && it > 0.0 }
++                ?.let { listOf(VitalReading(logicalDayKeyNow(), it, "On-device")) }
++                .orEmpty()
++        }
++        VitalDetailModel(
++            key = key,
++            title = uiString(R.string.l10n_health_screen_vitality_be320b06),
++            unit = "",
++            color = Palette.metricPurple,
++            readings = readings,
++            format = { it.roundToInt().toString() },
++        )
++    }
+     // #1391: the VO₂max card (opt-in, #1393) taps through here. Like its sibling computed metrics
+     // (fitness_age / vitality above), the weekly estimate is persisted under the "-noop" computed spine
+     // (IntelligenceEngine writes "vo2max_est"), so its trend reads the COMPUTED union — not the raw
+@@ -3011,6 +3022,13 @@
+         val points = vm.repo.metricSeriesComputedUnion(
+             vm.activeStrapId, "vo2max_est", "0000-01-01", "9999-12-31",
+         )
++        // Display-only fallback to the same local value Today already resolved. Nothing is persisted.
++        val localFallback = if (points.isEmpty()) {
++            vm.todayVo2maxCache
++                ?.takeIf { it.isFinite() && it > 0.0 }
++                ?.let { listOf(VitalReading(logicalDayKeyNow(), it, "On-device")) }
++                .orEmpty()
++        } else emptyList()
+         VitalDetailModel(
+             key = key,
+             title = uiString(R.string.l10n_health_screen_vo2max_21214fb6),
+@@ -3021,7 +3039,7 @@
+                     vm.repo.scoreInputSource(point.deviceId, point.day, point.key),
+                 )
+                 VitalReading(point.day, point.value, vo2MaxAttributionSource(estimator))
+-            },
++            } + localFallback,
+             // #1662: ONE decimal, matching the iOS catalog's `decimals: 1` for this key. Android rounded
+             // to an integer, so a chart plotted at full precision sat under labels that could not move
+             // with it: VO2max shifts well under 1 ml/kg between weekly points, so the line visibly sloped
+--- a/android/app/src/main/java/com/noop/ui/TrendsScreen.kt
++++ b/android/app/src/main/java/com/noop/ui/TrendsScreen.kt
+@@ -323,14 +323,6 @@
+             }
+         }
+ 
+-        // --- Export trends report (#436) , the shareable offline PDF exporter. Mirrors the iOS
+-        // TrendsView.exportReportRow footer; the same composable Settings hosts, so both surfaces
+-        // offer it. Routed through NoopButton like every other CTA (no gold). ---
+-        item {
+-            Column(modifier = Modifier.staggeredAppear(index = 7)) {
+-                TrendsReportExportSection(vm)
+-            }
+-        }
+     }
+ }
+ 
+@@ -381,12 +373,6 @@
+     val digest = remember(days, anchorDay, factor) {
+         buildWeeklyDigest(days, anchorDay, effortDisplayFactor = factor)
+     }
+-    // "Share recap" capture: track the card's on-screen bounds, then draw the Compose host view + crop
+-    // (RecapShare.captureCropped) — the Compose-1.7 GraphicsLayer capture API isn't in this 1.6.8 build.
+-    val scope = rememberCoroutineScope()
+-    val hostView = LocalView.current
+-    var cardBounds by remember { mutableStateOf<Rect?>(null) }
+-
+     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+         WeekNavBar(weekOffset = weekOffset, minWeekOffset = minWeekOffset, onStep = onStep)
+         if (digest.isEmpty) {
+@@ -395,19 +381,7 @@
+                 body = stringResource(R.string.trends_no_readings_body),
+             )
+         } else {
+-            Box(modifier = Modifier.onGloballyPositioned { cardBounds = it.boundsInRoot() }) {
+-                NoopCard { WeeklyDigestContent(digest = digest, compact = true) }
+-            }
+-            NoopButton(
+-                text = "Share recap",
+-                leadingIcon = Icons.Filled.IosShare,
+-                kind = NoopButtonKind.Secondary,
+-                onClick = {
+-                    val bounds = cardBounds
+-                    val bmp = bounds?.let { RecapShare.captureCropped(hostView, it) }
+-                    if (bmp != null) scope.launch { RecapShare.share(context, bmp, anchorDay) }
+-                },
+-            )
++            NoopCard { WeeklyDigestContent(digest = digest, compact = true) }
+         }
+     }
+ }
+--- a/android/app/src/main/java/com/noop/ui/SettingsScreen.kt
++++ b/android/app/src/main/java/com/noop/ui/SettingsScreen.kt
+@@ -3599,10 +3599,6 @@
+                         )
+                     }
+                 }
+-
+-                // --- Trends report (#436) — shareable offline PDF over a date range. Self-contained
+-                // card (its own NoopCard + range picker + CTA), so it drops in without a SettingsSection wrapper.
+-                TrendsReportExportSection(vm)
+             } // end Advanced disclosure content Column
+         } // end SettingsDisclosureGroup("Advanced")
+ 
