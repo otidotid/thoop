@@ -87,6 +87,7 @@ import com.noop.analytics.IllnessSignalEngine
 import com.noop.analytics.V5HealthSignals
 import com.noop.analytics.FitnessAgeEngine
 import com.noop.analytics.VitalityEngine
+import com.noop.analytics.TotalCaloriesEngine
 import com.noop.analytics.FitnessAgeReadiness
 import com.noop.analytics.FitnessReadinessItem
 import com.noop.analytics.FitnessReadinessRole
@@ -2191,7 +2192,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
     val showDayCycleBackground = remember { NoopPrefs.showDayCycleBackground(context) }
     val skyBehindCards = remember { NoopPrefs.skyBehindCards(context) }
     ScreenScaffold(
-        title = detail?.title ?: if (isStepsDetail) uiString(R.string.l10n_health_screen_steps_cdde4f20) else "Vital Signs",
+        title = if (key == "active_kcal") "Total Calories" else detail?.title ?: if (isStepsDetail) uiString(R.string.l10n_health_screen_steps_cdde4f20) else "Vital Signs",
         subtitle = when {
             isStepsDetail -> uiString(R.string.steps_history)
             key == "fitness_age" && loadedPoints == 0 -> "What your Fitness Age still needs."
@@ -2211,6 +2212,10 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             return@ScreenScaffold
         }
         if (detail == null || detail.points.isEmpty()) {
+            if (key == "active_kcal") {
+                CaloriesBreakdownCard(activeKcal = null, profile = profile, estimated = true)
+                return@ScreenScaffold
+            }
             if (isStepsDetail) {
                 DataPendingNote(title = uiString(R.string.steps_empty_title), body = uiString(R.string.steps_empty_body))
                 return@ScreenScaffold
@@ -2246,7 +2251,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             // needs a second point. Show the value + when the chart fills in, never a no-data dead end.
             // Matches iOS, which renders the value hero at a single point. First hit on Fitness Age, then
             // Vitality — both weekly-ish computed scores that sit at one reading for a while.
-            if (!isStepsDetail && key !in setOf("fitness_age", "vo2max_est", "vitality") && detail != null && detail.points.size == 1) {
+            if (!isStepsDetail && key !in setOf("fitness_age", "vo2max_est", "vitality", "active_kcal") && detail != null && detail.points.size == 1) {
                 val one = detail.points.last()   // size 1: the single reading (last == the latest)
                 NoopCard {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2297,6 +2302,16 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
                 format = detail.format,
             )
             return@ScreenScaffold
+        }
+
+        if (key == "active_kcal") {
+            val todayKey = java.time.LocalDate.now().toString()
+            val activeToday = detail.readings.lastOrNull { it.day == todayKey }?.value
+            CaloriesBreakdownCard(
+                activeKcal = activeToday,
+                profile = profile,
+                estimated = activeToday == null,
+            )
         }
 
         // #943 (ryanbr): gate the range chips by available history so short history can't draw six
@@ -3213,7 +3228,7 @@ internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): Vita
         }
         VitalDetailModel(
             key = key,
-            title = uiString(R.string.l10n_health_screen_active_energy_2d3288f9),
+            title = "Active Calories Trend",
             unit = "kcal",
             color = Palette.metricAmber,
             readings = mergeReadings(imported, real),   // imported wins its day, else on-device estimate
@@ -3221,6 +3236,49 @@ internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): Vita
         )
     }
     else -> null
+}
+
+@Composable
+private fun CaloriesBreakdownCard(activeKcal: Double?, profile: ProfileStore, estimated: Boolean) {
+    val now = java.time.LocalTime.now()
+    val energy = TotalCaloriesEngine.breakdown(
+        activeKcal = activeKcal,
+        weightKg = profile.weightKg,
+        heightCm = profile.heightCm,
+        age = profile.age,
+        sex = profile.sex,
+        elapsedLocalMinutes = now.hour * 60 + now.minute,
+        estimated = estimated,
+    )
+    val prefix = if (energy.estimated) "≈" else ""
+    NoopCard {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Overline("TODAY")
+            Text(
+                text = "$prefix${TotalCaloriesEngine.rounded(energy.totalKcal)} kcal",
+                style = NoopType.chartValueLarge,
+                color = Palette.metricAmber,
+            )
+            HorizontalDivider(color = Palette.heroBorder.copy(alpha = 0.7f))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Resting Calories", style = NoopType.body, color = Palette.textPrimary,
+                    modifier = Modifier.weight(1f))
+                Text("$prefix${TotalCaloriesEngine.rounded(energy.restingKcal)} kcal",
+                    style = NoopType.bodyNumber, color = Palette.textPrimary)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Active Calories", style = NoopType.body, color = Palette.textPrimary,
+                    modifier = Modifier.weight(1f))
+                Text("$prefix${TotalCaloriesEngine.rounded(energy.activeKcal)} kcal",
+                    style = NoopType.bodyNumber, color = Palette.textPrimary)
+            }
+            Text(
+                text = "Total Calories = Resting Calories + Active Calories. ≈ means today's calculation is still in progress.",
+                style = NoopType.footnote,
+                color = Palette.textTertiary,
+            )
+        }
+    }
 }
 
 // MARK: - Empty state

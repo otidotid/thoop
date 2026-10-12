@@ -102,3 +102,23 @@ internal fun weightTile(latestWeightKg: Double?, profileWeightKg: Double, system
     } else {
         WeightTileText(UnitFormatter.massFromKilograms(profileWeightKg, system), WeightCaption.FROM_PROFILE)
     }
+
+/** Display value for Today's Calories tile/card. [estimated] adds the visible ≈ refresh marker. */
+internal data class TodayCaloriesDisplay(val value: Double, val estimated: Boolean)
+
+/**
+ * Stale-while-refresh Calories display policy. A fresh non-negative value always wins. While TODAY is
+ * refreshing, retain its last value and mark it approximate; on a cold start use the conservative floor
+ * (≈0) rather than flashing "No Data". Past days remain strict and never borrow.
+ */
+internal fun todayCaloriesDisplay(
+    current: Double?,
+    lastKnownForDay: Double?,
+    isToday: Boolean,
+): TodayCaloriesDisplay? {
+    val fresh = current?.takeIf { it.isFinite() && it >= 0.0 }
+    if (fresh != null) return TodayCaloriesDisplay(fresh, estimated = false)
+    if (!isToday) return null
+    val retained = lastKnownForDay?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+    return TodayCaloriesDisplay(retained, estimated = true)
+}

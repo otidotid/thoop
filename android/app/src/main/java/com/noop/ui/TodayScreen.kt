@@ -158,6 +158,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.ai.AiKeyStore
 import com.noop.analytics.Baselines
+import com.noop.analytics.TotalCaloriesEngine
 import com.noop.analytics.ChargeBaselines
 import com.noop.analytics.BatteryEstimator
 import com.noop.analytics.ChargeDriver
@@ -696,6 +697,9 @@ fun TodayScreen(
     // Keyed by day; `caloriesByDay` feeds the SELECTED-day value the dashboard card + Key-Metrics tile both
     // read — day-scoped like every other card, and like steps.
     var caloriesByDay by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    // Stale-while-refresh cache: a transient empty resolver result must not turn a number the user just
+    // saw into "No Data". Scoped by ISO day, so yesterday never masquerades as today's Calories.
+    var lastKnownCaloriesByDay by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     LaunchedEffect(days) {
         caloriesByDay = runCatching {
             val onDevice = viewModel.repo.resolvedSeries("active_kcal", "my-whoop", "0000-00-00", "9999-99-99",
@@ -708,6 +712,31 @@ fun TodayScreen(
             (onDevice.keys + imported.keys)
                 .mapNotNull { day -> (imported[day] ?: onDevice[day])?.let { day to it } }.toMap()
         }.getOrDefault(emptyMap())
+    }
+    LaunchedEffect(caloriesByDay) {
+        val valid = caloriesByDay.filterValues { it.isFinite() && it >= 0.0 }
+        if (valid.isNotEmpty()) lastKnownCaloriesByDay = lastKnownCaloriesByDay + valid
+    }
+    val activeCaloriesDisplayForSelectedDay = todayCaloriesDisplay(
+        current = caloriesByDay[selectedDayKey],
+        lastKnownForDay = lastKnownCaloriesByDay[selectedDayKey],
+        isToday = selectedDayOffset == 0,
+    )
+    // Today shows TOTAL Calories only. Active remains the existing imported-first/device-first value;
+    // resting metabolism is added exactly once here, so workouts/steps are never counted again.
+    val caloriesDisplayForSelectedDay = activeCaloriesDisplayForSelectedDay?.let { activeDisplay ->
+        val now = java.time.LocalTime.now()
+        val energy = TotalCaloriesEngine.breakdown(
+            activeKcal = activeDisplay.value,
+            weightKg = profileStore.weightKg,
+            heightCm = profileStore.heightCm,
+            age = profileStore.age,
+            sex = profileStore.sex,
+            elapsedLocalMinutes = if (selectedDayOffset == 0) now.hour * 60 + now.minute
+                else TotalCaloriesEngine.MINUTES_PER_DAY,
+            estimated = activeDisplay.estimated,
+        )
+        TodayCaloriesDisplay(energy.totalKcal, energy.estimated)
     }
 
     // #616: the Calories tile's 14-day sparkline — the IMPORTED-FIRST resolved series (caloriesByDay),
@@ -1876,7 +1905,8 @@ fun TodayScreen(
                                     profileWeightKg = profileWeightKg,
                                     importedStepsForDay = importedStepsForDay,
                                     estimatedStepsForDay = stepsEstForDay,
-                                    caloriesForDay = caloriesByDay[selectedDayKey],
+                                    caloriesForDay = caloriesDisplayForSelectedDay?.value,
+                                    caloriesEstimated = caloriesDisplayForSelectedDay?.estimated == true,
                                     caloriesSpark = caloriesSpark,                    // #616: imported-first trend
                                     stepActivityClassForDay = stepActivityClassForDay,
                                     stepsEstimateCaption = stepsEstimateCaption(profileStore),
@@ -1947,7 +1977,8 @@ fun TodayScreen(
                             vitality = vitalityToday,
                             importedStepsForDay = importedStepsForDay,
                             estimatedStepsForDay = stepsEstForDay,
-                            caloriesForDay = caloriesByDay[selectedDayKey],
+                            caloriesForDay = caloriesDisplayForSelectedDay?.value,
+                            caloriesEstimated = caloriesDisplayForSelectedDay?.estimated == true,
                             hydrationTotalMl = hydrationTotalMl,
                             hydrationGoalMl = hydrationGoalMl,
                             onOpenHydration = onOpenHydration,
@@ -4210,6 +4241,7 @@ private fun YourCardsSection(
     importedStepsForDay: Int?,
     estimatedStepsForDay: Int?,
     caloriesForDay: Double?,
+    caloriesEstimated: Boolean,
     hydrationTotalMl: Double,
     hydrationGoalMl: Int,
     onOpenHydration: () -> Unit,
@@ -4276,6 +4308,7 @@ private fun YourCardsSection(
                         importedStepsForDay = importedStepsForDay,
                         estimatedStepsForDay = estimatedStepsForDay,
                         caloriesForDay = caloriesForDay,
+                        caloriesEstimated = caloriesEstimated,
                         hydrationTotalMl = hydrationTotalMl,
                         hydrationGoalMl = hydrationGoalMl,
                         spo2CandidateByDay = spo2CandidateByDay,
@@ -4498,6 +4531,7 @@ private fun dashboardCardValue(
     importedStepsForDay: Int?,
     estimatedStepsForDay: Int?,
     caloriesForDay: Double?,
+    caloriesEstimated: Boolean,
     hydrationTotalMl: Double,
     hydrationGoalMl: Int,
     spo2CandidateByDay: Map<String, Double> = emptyMap(),
@@ -4564,7 +4598,9 @@ private fun dashboardCardValue(
         }
         DashboardCard.STEPS_AVERAGE_30 -> stepsAverage30?.let { intStringGrouped(it) } ?: NO_DATA
         DashboardCard.CALORIES ->
-            withUnit(caloriesForDay?.let { intStringGrouped(it) } ?: NO_DATA)
+            withUnit(caloriesForDay?.let {
+                (if (caloriesEstimated) "≈" else "") + intStringGrouped(it)
+            } ?: NO_DATA)
         DashboardCard.STRESS ->
             // #706/#684: Stress is baseline-relative, so until the strap has banked enough worn nights to
             // seed the 30-day RHR/HRV baseline StressScreen reads, the front card has no number to show. The
@@ -5985,6 +6021,8 @@ private fun MetricGrid(
     // activeKcal ?: NOOP's on-device estimate), so the Calories tile matches the card + detail instead of
     // reading the on-device estimate alone (which left it NO_DATA / inconsistent). Mirrors the steps params.
     caloriesForDay: Double? = null,
+    // True only while Today serves a retained/conservative value during refresh.
+    caloriesEstimated: Boolean = false,
     // #616: the Calories tile's imported-first 14-day trend (see caloriesSpark above) — threaded like
     // restSpark because it isn't a plain DailyMetric column (it unions the imported + on-device series).
     caloriesSpark: List<Double> = emptyList(),
@@ -6176,7 +6214,7 @@ private fun MetricGrid(
             val kcal = caloriesForDay
             KeyTileData(
                 label = uiString(R.string.l10n_today_screen_calories_3e62ecfe),
-                value = kcal?.let { intString(it) } ?: NO_DATA,
+                value = kcal?.let { (if (caloriesEstimated) "≈" else "") + intString(it) } ?: NO_DATA,
                 unit = if (kcal != null) "kcal" else "",
                 tint = Palette.metricAmber,
                 frac = kcal?.let { (it / 800.0).coerceIn(0.0, 1.0) },
