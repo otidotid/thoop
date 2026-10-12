@@ -386,6 +386,10 @@ interface WhoopDao : DeviceRegistryDao {
     @Upsert
     suspend fun upsertDailyMetrics(rows: List<DailyMetric>)
 
+    /** Repair only the calorie column of an existing computed day; every other metric stays untouched. */
+    @Query("UPDATE dailyMetric SET activeKcalEst = :kcal WHERE deviceId = :deviceId AND day = :day")
+    suspend fun updateActiveKcalEst(deviceId: String, day: String, kcal: Double): Int
+
     @Upsert
     suspend fun upsertSleepSessions(rows: List<SleepSession>)
 

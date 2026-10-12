@@ -761,6 +761,10 @@ class WhoopRepository(
 
     suspend fun upsertDailyMetrics(days: List<DailyMetric>) = dao.upsertDailyMetrics(days)
 
+    /** Update Calories without replacing the DailyMetric row or any neighbouring metric. */
+    suspend fun updateActiveKcalEst(deviceId: String, day: String, kcal: Double): Int =
+        dao.updateActiveKcalEst(deviceId, day, kcal)
+
     private suspend fun reconcileAutoWorkoutsForSleep(activeDeviceId: String, sessions: List<SleepSession>) {
         val ids = listOf(activeDeviceId, "$activeDeviceId-noop", "my-whoop", "my-whoop-noop").distinct()
         for (session in sessions) {

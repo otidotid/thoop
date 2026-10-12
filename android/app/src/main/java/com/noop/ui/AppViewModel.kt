@@ -1247,8 +1247,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // attribution. Read the watermark ONCE — the gate and the log line must agree, and a second
                 // read could straddle a concurrent write from a completing pass.
                 val analyzeHasNewData = analyzeFp != NoopPrefs.analyzeWatermark(appContext)
-                if (analyzeHasNewData) ble.externalLog("re-score: trigger=idle newData=yes")
-                if (analyzeHasNewData) runCatching {
+                // A partial current-day row can have sleep/recovery but no Calories. Raw HR is already
+                // present, so allow one normal pass even when the persisted fingerprint was seen before.
+                val calorieRepairNeeded = todayNeedsCalorieRepair()
+                val analyzeShouldRun = analyzeHasNewData || calorieRepairNeeded
+                if (analyzeShouldRun) ble.externalLog(
+                    "re-score: trigger=idle newData=${if (analyzeHasNewData) "yes" else "no"} " +
+                        "calorieRepair=${if (calorieRepairNeeded) "yes" else "no"}",
+                )
+                if (analyzeShouldRun) runCatching {
                     // #1816: set the motion sink before the pass so the Today tile can name the right
                     // missing half (motion, not phone steps) when none has arrived yet. Cleared after.
                     IntelligenceEngine.stepsHasMotionSink = { hasMotion ->
@@ -1364,6 +1371,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         dayCycleMode = NoopPrefs.dayCycleMode(appContext),
                     )
                     PersonalOxygenEngine.refreshAfterRescore(appContext, repository, deviceId)
+                    repairTodayCaloriesIfMissing()
                     // analyzeRecent now hops to Dispatchers.Default; a scope cancellation surfaces as a
                     // CancellationException that runCatching would otherwise swallow, breaking the loop's
                     // own cancellation — rethrow it so onCleared() actually stops the loop. (#125)
@@ -3295,6 +3303,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // convenience (read your strap HR on nearby gym kit), not a background service. A relaunch
         // re-resumes it from the persisted toggle.
         broadcaster.stop()
+    }
+
+    /** True only for today's computed row when Calories is missing but raw strap HR exists. */
+    private suspend fun todayNeedsCalorieRepair(): Boolean {
+        val now = System.currentTimeMillis() / 1000L
+        val offset = TimeZone.getDefault().getOffset(now * 1000L) / 1000L
+        val day = AnalyticsEngine.dayString(now, offset)
+        val row = repository.computedDailyUnion(deviceId, day, day).firstOrNull() ?: return false
+        if (row.activeKcalEst != null) return false
+        val start = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toEpochSecond()
+        return repository.hasHrInWindow(deviceId, start, now)
+    }
+
+    /** Reuses the existing formula and updates only activeKcalEst on today's existing computed row. */
+    private suspend fun repairTodayCaloriesIfMissing() {
+        val now = System.currentTimeMillis() / 1000L
+        val offset = TimeZone.getDefault().getOffset(now * 1000L) / 1000L
+        val day = AnalyticsEngine.dayString(now, offset)
+        val row = repository.computedDailyUnion(deviceId, day, day).firstOrNull() ?: return
+        if (row.activeKcalEst != null) return
+        val start = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toEpochSecond()
+        val samples = repository.hrSamplesForDevice(deviceId, start, now)
+        if (samples.isEmpty()) return
+        val kcal = Calories.estimateDayCalories(
+            hrSamples = samples,
+            profile = currentProfile(),
+            hrmax = profileStore.hrMaxOverride.takeIf { it > 0 }?.toDouble(),
+            restingHR = row.restingHr?.toDouble(),
+        )
+        if (kcal.isFinite() && kcal > 0.0) repository.updateActiveKcalEst(row.deviceId, day, kcal)
     }
 
     private companion object {
