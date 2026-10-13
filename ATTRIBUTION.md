@@ -104,3 +104,10 @@ NOOP contains no WHOOP proprietary code, binaries, firmware, logos, or assets, a
 performs no DRM circumvention. It operates only with the user's own device and data.
 NOOP is **not a medical device**; all metrics (HR, HRV, recovery, strain, sleep,
 SpO₂, temperature) are approximations and not clinically validated.
+
+
+### GenieMax Core HRV and sleep architecture
+- **satayutata/geniemax-core** (MIT) — clean-room Kotlin ports of the published time-domain/Poincare
+  HRV equations and the conservative two-pass A-B-A sleep-stage despeckle rule. THOOP retains its own
+  WHOOP-specific RR quality gates, sleep-window detection, stage classifier, physiology guards, session
+  reconciliation, manual-edit precedence, persistence and UI. No Swift source is vendored.

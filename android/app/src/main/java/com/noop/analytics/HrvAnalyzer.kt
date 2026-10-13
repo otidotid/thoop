@@ -105,18 +105,15 @@ object HrvAnalyzer {
     }
 
     /**
-     * Sample standard deviation (ddof = 1) of NN intervals (ms). Returns null for
-     * fewer than 2 values. Matches neurokit2 HRV_SDNN. No filtering applied.
+     * Population SDNN over already-clean NN intervals, matching GenieMax Core. Returns null for
+     * fewer than 2 finite values. The five-minute SDNN index below deliberately remains sample-SD:
+     * it is a separate Task Force aggregate and is not silently redefined by this nightly kernel.
      */
     fun sdnnRaw(nn: List<Double>): Double? {
-        if (nn.size < 2) return null
+        if (nn.size < 2 || nn.any { !it.isFinite() || it <= 0.0 }) return null
         val mean = nn.sum() / nn.size.toDouble()
-        var ss = 0.0
-        for (v in nn) {
-            val d = v - mean
-            ss += d * d
-        }
-        return sqrt(ss / (nn.size - 1).toDouble())
+        val ss = nn.sumOf { (it - mean) * (it - mean) }
+        return sqrt(ss / nn.size.toDouble())
     }
 
     /**
@@ -140,7 +137,20 @@ object HrvAnalyzer {
         }
         val values = segments.keys.sorted().mapNotNull { bucket ->
             val start = first + bucket * segmentLength
-            analyze(segments.getValue(bucket), windowStart = start, windowEnd = start + segmentLength - 1).sdnn
+            val result = analyze(
+                segments.getValue(bucket),
+                windowStart = start,
+                windowEnd = start + segmentLength - 1,
+            )
+            val populationSdnn = result.sdnn ?: return@mapNotNull null
+            if (result.nClean < 2) return@mapNotNull null
+
+            // SDNN Index retains its established sample-SD contract (N - 1), while
+            // nightly authoritative GenieMax SDNN uses population SD (N).
+            populationSdnn * sqrt(
+                result.nClean.toDouble() /
+                    (result.nClean - 1).toDouble(),
+            )
         }
         return if (values.isEmpty()) null else values.sum() / values.size.toDouble()
     }
@@ -326,9 +336,10 @@ object HrvAnalyzer {
         // RMSSD and pNN50 are gap-aware: a successive difference across a dropped beat is skipped so a
         // removed out-of-range/ectopic beat cannot splice its neighbours into a spurious delta. SDNN and
         // meanNN use every clean beat (no successive differences), so they are unchanged.
+        val contiguousMetrics = GenieMaxHrvCore.metrics(clean)
         val rmssd = rmssdGapAware(cleaned.nn, cleaned.contiguous)
-        val sdnn = sdnnRaw(clean)
-        val mean = clean.sum() / clean.size.toDouble()
+        val sdnn = contiguousMetrics?.sdnn
+        val mean = contiguousMetrics?.meanNN
         val pnn50 = pnn50GapAware(cleaned.nn, cleaned.contiguous)
 
         return HrvResult(rmssd = rmssd, sdnn = sdnn, meanNN = mean, pnn50 = pnn50,

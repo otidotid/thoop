@@ -3009,7 +3009,7 @@ object SleepStager {
 
         // Classify + post-process exactly as stageSession does, so we explain the SAME hypnogram.
         val labels = classifyEpochs(feats)
-        val smoothed = smoothLabels(labels)
+        val smoothed = GenieMaxSleepArchitecture.hybridSmooth(labels, ::smoothLabels)
         val reimposed = reimposePhysiology(smoothed, features = feats,
             onsetIdx = onsetIdx, finalWakeIdx = finalWakeIdx)
 
