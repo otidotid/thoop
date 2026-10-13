@@ -2106,7 +2106,6 @@ object IntelligenceEngine {
         val postLoop = AnalysisPhaseMarks()
         // ── Fitness Age (Phase 2) , weekly, keyed to the week's Saturday ──
         val fa7 = dailies.sortedBy { it.day }.takeLast(7)
-        val faRHRs = fa7.mapNotNull { it.restingHr }.map { it.toDouble() }
         // Gate + compute Fitness Age on the UNION of the pre-rewrite persisted history and THIS pass's
         // fresh scores (by day, fresh wins) , so an RHR night counts whether it survives in the store OR was
         // just scored, whether it sits under this id or a re-added strap's sibling id, or came from an
@@ -2128,27 +2127,15 @@ object IntelligenceEngine {
             )
         }
 
-        // ── Vitality / Body Age (Phase 7) , weekly, keyed to the week's Saturday ──
-        // Roll the last 7 days' wearable signals into the mortality-hazard model; VitalityEngine gates on
-        // ≥3 inputs. VO₂max is omitted (fitness is Fitness Age's headline); Vitality leans on resting HR,
-        // sleep duration + regularity, HRV-vs-age-norm, and steps.
-        val vNights = fa7.mapNotNull { it.totalSleepMin }.map { it / 60.0 }.filter { it > 0 }
-        val vHRVs = fa7.mapNotNull { it.avgHrv }
-        val vSteps = fa7.mapNotNull { it.steps }.map { it.toDouble() }
-        val vInputs = VitalityEngine.Inputs(
-            chronoAge = profile.age,
-            restingHR = if (faRHRs.isEmpty()) null else medianOfDoubles(faRHRs),
-            sleepHours = if (vNights.isEmpty()) null else vNights.average(),
-            sleepConsistency = VitalityEngine.sleepConsistency(vNights),
-            rmssd = if (vHRVs.isEmpty()) null else medianOfDoubles(vHRVs),
-            rmssdNorm = VitalityEngine.rmssdNorm(profile.age),
-            steps = if (vSteps.isEmpty()) null else vSteps.average())
-        VitalityEngine.compute(vInputs)?.let { vRes ->
-            val satKey = saturdayKeyOnOrBefore(newestDay)
-            repo.upsertMetricSeries(listOf(
-                MetricSeriesRow(deviceId = computedId, day = satKey, key = "vitality", value = vRes.vitality),
-                MetricSeriesRow(deviceId = computedId, day = satKey, key = "body_age", value = vRes.bodyAge)))
-        }
+        // ── Vitality / Body Age (Phase 7), weekly, keyed to the week's Saturday ──
+        val currentVitalityRows = vitalityRows(fa7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
+        if (currentVitalityRows.isNotEmpty()) repo.upsertMetricSeries(currentVitalityRows)
+
+        // Older installs have only the first/current Saturday persisted. Backfill the missing historical
+        // Saturdays once, then leave the normal current-week path above unchanged.
+        backfillWeeklyFitnessAndVitalityIfNeeded(
+            repo, profile, importedDeviceId, computedId, newestDay, diag,
+        )
 
         postLoop.mark("weekly")
         // ── Steps ESTIMATE (WHOOP 4.0) , DAILY, keyed to each strap-only day ──
@@ -2723,6 +2710,76 @@ object IntelligenceEngine {
         }
         if (vo2 != null) rows.add(MetricSeriesRow(deviceId = computedId, day = satKey, key = "vo2max_est", value = vo2))
         return rows
+    }
+
+    /** Vitality + Body Age rows for one seven-day window, using the production formula. */
+    internal fun vitalityRows(
+        gateDays: List<DailyMetric>, profile: UserProfile, computedId: String, satKey: String,
+    ): List<MetricSeriesRow> {
+        val ordered = gateDays.sortedBy { it.day }.takeLast(7)
+        val rhrs = ordered.mapNotNull { it.restingHr }.map { it.toDouble() }
+        val nights = ordered.mapNotNull { it.totalSleepMin }.map { it / 60.0 }.filter { it > 0 }
+        val hrvs = ordered.mapNotNull { it.avgHrv }
+        val steps = ordered.mapNotNull { it.steps }.map { it.toDouble() }
+        val result = VitalityEngine.compute(VitalityEngine.Inputs(
+            chronoAge = profile.age,
+            restingHR = if (rhrs.isEmpty()) null else medianOfDoubles(rhrs),
+            sleepHours = if (nights.isEmpty()) null else nights.average(),
+            sleepConsistency = VitalityEngine.sleepConsistency(nights),
+            rmssd = if (hrvs.isEmpty()) null else medianOfDoubles(hrvs),
+            rmssdNorm = VitalityEngine.rmssdNorm(profile.age),
+            steps = if (steps.isEmpty()) null else steps.average(),
+        )) ?: return emptyList()
+        return listOf(
+            MetricSeriesRow(computedId, satKey, "vitality", result.vitality),
+            MetricSeriesRow(computedId, satKey, "body_age", result.bodyAge),
+        )
+    }
+
+    /** Missing historical weekly points only. Current Saturday remains owned by the normal path. */
+    internal fun weeklyHistoricalRows(
+        history: List<DailyMetric>, profile: UserProfile, computedId: String, newestDay: String,
+        existing: Set<Pair<String, String>>,
+    ): List<MetricSeriesRow> {
+        val currentSaturday = saturdayKeyOnOrBefore(newestDay)
+        val byDay = history.associateBy { it.day }
+        val anchors = history.asSequence().map { saturdayKeyOnOrBefore(it.day) }
+            .filter { it < currentSaturday }.distinct().sorted().toList()
+        val rows = ArrayList<MetricSeriesRow>()
+        for (anchorDay in anchors) {
+            val anchor = runCatching { java.time.LocalDate.parse(anchorDay) }.getOrNull() ?: continue
+            val from = anchor.minusDays(6).toString()
+            val week = byDay.values.filter { it.day in from..anchorDay }.sortedBy { it.day }
+            val candidates = fitnessAgeRows(week, profile, computedId, anchorDay) +
+                vitalityRows(week, profile, computedId, anchorDay)
+            for (row in candidates) if ((row.day to row.key) !in existing) rows.add(row)
+        }
+        return rows
+    }
+
+    private suspend fun backfillWeeklyFitnessAndVitalityIfNeeded(
+        repo: WhoopRepository, profile: UserProfile, importedDeviceId: String, computedId: String,
+        newestDay: String, diag: (String) -> Unit,
+    ) {
+        val from = "0000-01-01"; val to = "9999-12-31"
+        val fitness = repo.metricSeriesComputedUnion(importedDeviceId, "fitness_age", from, to)
+        val vo2 = repo.metricSeriesComputedUnion(importedDeviceId, "vo2max_est", from, to)
+        val vitality = repo.metricSeriesComputedUnion(importedDeviceId, "vitality", from, to)
+        val bodyAge = repo.metricSeriesComputedUnion(importedDeviceId, "body_age", from, to)
+        if (vo2.size > 1 && vitality.size > 1) return
+        val existing = (fitness + vo2 + vitality + bodyAge).mapTo(HashSet()) { it.day to it.key }
+        val rows = weeklyHistoricalRows(
+            repo.daysMerged(importedDeviceId), profile, computedId, newestDay, existing,
+        )
+        if (rows.isEmpty()) {
+            diag("weekly backfill: no eligible missing historical points")
+            return
+        }
+        val provenance = rows.groupBy { it.day }.values.flatMap {
+            vo2MaxProvenance(it, profile.waistCm, computedId)
+        }
+        repo.upsertMetricSeriesWithProvenance(rows, provenance)
+        diag("weekly backfill: inserted ${rows.size} point(s) across ${rows.map { it.day }.distinct().size} week(s)")
     }
 
     /** Method metadata for a newly computed VO₂max point. Empty when [rows] contains no VO₂max value.
