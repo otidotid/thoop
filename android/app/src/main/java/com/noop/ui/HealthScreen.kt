@@ -37,6 +37,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import android.widget.Toast
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
@@ -2312,6 +2318,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
                 profile = profile,
                 estimated = activeToday == null,
             )
+            TotalCaloriesTargetCard(activeToday, profile, activeToday == null)
         }
 
         // #943 (ryanbr): gate the range chips by available history so short history can't draw six
@@ -3279,6 +3286,39 @@ private fun CaloriesBreakdownCard(activeKcal: Double?, profile: ProfileStore, es
             )
         }
     }
+}
+
+
+@Composable
+private fun TotalCaloriesTargetCard(activeKcal: Double?, profile: ProfileStore, estimated: Boolean) {
+    val context = LocalContext.current
+    var target by remember { mutableStateOf(CaloriesTargetPrefs.get(context)) }
+    var editing by remember { mutableStateOf(false) }
+    var draft by remember(target) { mutableStateOf(target?.toString().orEmpty()) }
+    val now = java.time.LocalTime.now()
+    val total = TotalCaloriesEngine.breakdown(activeKcal, profile.weightKg, profile.heightCm, profile.age,
+        profile.sex, now.hour * 60 + now.minute, estimated).totalKcal
+    val progress = DashboardRingProgress.totalCalories(total, target) ?: 0.0
+    SectionHeader("Total Calories Target", overline = "Manual daily goal")
+    NoopCard {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (target == null) Text("Set a daily Total Calories target. This changes display progress only, not calorie calculation.", style = NoopType.body, color = Palette.textSecondary)
+            else {
+                Text("${TotalCaloriesEngine.rounded(total)} / $target kcal", style = NoopType.title2, color = Palette.metricAmber)
+                LinearProgressIndicator(progress = { progress.toFloat() }, modifier = Modifier.fillMaxWidth(), color = Palette.metricAmber, trackColor = Palette.hairline)
+                val remaining = (target!! - total).roundToInt()
+                Text(if (remaining <= 0) "Target reached" else "$remaining kcal remaining", style = NoopType.footnote, color = Palette.textSecondary)
+            }
+            Text(if (target == null) "SET TARGET" else "EDIT TARGET", modifier = Modifier.clickable { editing = true }, style = NoopType.title2, color = Palette.accent)
+        }
+    }
+    if (editing) AlertDialog(
+        onDismissRequest = { editing = false },
+        title = { Text("Total Calories Target") },
+        text = { OutlinedTextField(value = draft, onValueChange = { draft = it.filter(Char::isDigit).take(5) }, label = { Text("kcal per day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true) },
+        confirmButton = { TextButton(onClick = { draft.toIntOrNull()?.takeIf { it in CaloriesTargetPrefs.MIN..CaloriesTargetPrefs.MAX }?.let { CaloriesTargetPrefs.set(context, it); target = it; editing = false } }) { Text("SAVE") } },
+        dismissButton = { Row { if (target != null) TextButton(onClick = { CaloriesTargetPrefs.set(context, null); target = null; draft = ""; editing = false }) { Text("REMOVE") }; TextButton(onClick = { editing = false }) { Text("CANCEL") } } },
+    )
 }
 
 // MARK: - Empty state

@@ -4256,7 +4256,9 @@ private fun YourCardsSection(
     // #1331 parity: honor the °C/°F preference on the Skin Temp card, the way Health / Compare (and the
     // Swift twin) do. The classic dashboard hardcoded Celsius here alone, so a °F user saw °C on this
     // screen only.
-    val fahrenheit = UnitPrefs.temperature(LocalContext.current) == TemperatureUnit.FAHRENHEIT
+    val localContext = LocalContext.current
+    val fahrenheit = UnitPrefs.temperature(localContext) == TemperatureUnit.FAHRENHEIT
+    val caloriesTargetKcal = remember { CaloriesTargetPrefs.get(localContext) }
     // #1862: the optional Coach card opens a launcher BOTTOM SHEET rather than a destination. Local
     // presentation state — showing it requests nothing from a provider.
     var showCoachLauncher by remember { mutableStateOf(false) }
@@ -4327,6 +4329,10 @@ private fun YourCardsSection(
                         vitality = vitality,
                         importedStepsForDay = importedStepsForDay,
                         estimatedStepsForDay = estimatedStepsForDay,
+                        spo2Day = spo2Day,
+                        skinTempDay = skinTempDay,
+                        caloriesForDay = caloriesForDay,
+                        caloriesTargetKcal = caloriesTargetKcal,
                     ),
                     tint = dashboardCardTint(card),
                     // #110: label the sleep row with its source + night (this section renders at offset 0
@@ -4471,6 +4477,10 @@ private fun dashboardCardFraction(
     vitality: Double?,
     importedStepsForDay: Int?,
     estimatedStepsForDay: Int?,
+    spo2Day: DailyMetric?,
+    skinTempDay: DailyMetric?,
+    caloriesForDay: Double?,
+    caloriesTargetKcal: Int?,
 ): Double? {
     fun over(v: Double?, ceiling: Double): Double? = v?.let { (it / ceiling).coerceIn(0.0, 1.0) }
     val vd = carriedDay ?: day
@@ -4494,8 +4504,13 @@ private fun dashboardCardFraction(
         DashboardCard.STEPS_AVERAGE_30 -> over(stepsAverage30, 10000.0)
         DashboardCard.COUPLED -> 0.6
         DashboardCard.COACH -> 0.5
-        // Not wired to a real read yet — an EMPTY ring (not half-full) so it doesn't imply a reading.
-        DashboardCard.BLOOD_OXYGEN, DashboardCard.SKIN_TEMP, DashboardCard.CALORIES,
+        DashboardCard.BLOOD_OXYGEN -> DashboardRingProgress.bloodOxygen(day?.spo2Pct ?: spo2Day?.spo2Pct)
+        DashboardCard.SKIN_TEMP -> DashboardRingProgress.skinTemperature(
+            deviationC = day?.skinTempDevC ?: skinTempDay?.skinTempDevC,
+            hasReading = day?.skinTempC != null || day?.skinTempDevC != null ||
+                skinTempDay?.skinTempC != null || skinTempDay?.skinTempDevC != null,
+        )
+        DashboardCard.CALORIES -> DashboardRingProgress.totalCalories(caloriesForDay, caloriesTargetKcal)
         DashboardCard.HYDRATION -> null
     }
 }
