@@ -18,6 +18,14 @@ val requestedReleaseBuild = gradle.startParameter.taskNames.any {
     it.contains("Release", ignoreCase = true)
 }
 
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val cloudCoachBaseUrl = (localProps.getProperty("THOOP_CLOUD_COACH_URL")
+    ?: System.getenv("THOOP_CLOUD_COACH_URL")
+    ?: "").trim().trimEnd('/')
+
 android {
     namespace = "com.noop"
     compileSdk = 35
@@ -30,6 +38,7 @@ android {
         versionName = "12.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "CLOUD_COACH_BASE_URL", "\"${cloudCoachBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         vectorDrawables {
             useSupportLibrary = true
         }

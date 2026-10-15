@@ -78,11 +78,7 @@ import com.noop.ai.CustomAiAuthHeader
 @Composable
 fun CoachScreen(vm: CoachViewModel = viewModel(), onOpenSettings: () -> Unit = {}) {
     val context = LocalContext.current
-    val keyVersion by vm.keyVersion.collectAsStateWithLifecycle()
-    val provider by vm.provider.collectAsStateWithLifecycle()
-    val customConnected by vm.customConnected.collectAsStateWithLifecycle()
-    // Re-evaluate the gate whenever the stored key, provider, or custom-connect state changes.
-    val configured = remember(keyVersion, provider, customConnected) { vm.isConfigured(context) }
+    val configured = remember { vm.isConfigured() }
     // #1862: a question handed over by the Today launcher sheet. Consumed once — `consume()` clears it —
     // so a recomposition cannot resend it, and only when the coach can actually send, so an unconfigured
     // handoff degrades to showing setup rather than a failed request. Swift twin: CoachView's task.
@@ -106,10 +102,19 @@ fun CoachScreen(vm: CoachViewModel = viewModel(), onOpenSettings: () -> Unit = {
         // down (Today / Trends / Sleep / metric-detail parity - same two prefs, same two behaviours).
         fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
     ) {
-        if (!configured) {
-            CoachSetup(vm = vm)
-        } else {
+        if (configured) {
             CoachChat(vm = vm, onOpenSettings = onOpenSettings)
+        } else {
+            NoopCard(padding = 18.dp, tint = Palette.chargeColor) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("THOOP Cloud Coach", style = NoopType.headline, color = Palette.textPrimary)
+                    Text(
+                        "Cloud Coach is not configured in this build.",
+                        style = NoopType.subhead,
+                        color = Palette.statusCritical,
+                    )
+                }
+            }
         }
     }
 }
@@ -271,10 +276,6 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
     val messages by vm.messages.collectAsStateWithLifecycle()
     val sending by vm.sending.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
-    // Also controls the editor's rejection hint when the wearer opens Update key manually.
-    val keyRejected by vm.keyRejected.collectAsStateWithLifecycle()
-    val provider by vm.provider.collectAsStateWithLifecycle()
-    val model by vm.model.collectAsStateWithLifecycle()
     val suggestions by vm.suggestions.collectAsStateWithLifecycle()
     // K15: the composer draft is persisted to SharedPreferences so it survives an app relaunch.
     // Restored on first composition, saved on every change. Keyed identically to the iOS twin.
@@ -282,11 +283,6 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
     var input by remember { mutableStateOf(draftPrefs.getString("draft", "") ?: "") }
     // K2: confirmation gate for the destructive "Clear conversation" action.
     var showClearConfirm by remember { mutableStateOf(false) }
-    // The corrected key, typed into the editor the rejection message opens. Separate from `input` so a
-    // half-typed question is not lost while fixing the key, and cleared on save so a secret does not
-    // sit in composition state after it has been stored.
-    var keyFix by remember { mutableStateOf("") }
-    var showKeyEditor by remember { mutableStateOf(false) }
 
     // Refresh the contextual chips whenever the chat empties (so a fresh sync updates them) and
     // once on first show. Best-effort; the VM falls back to the generic set on any failure.
@@ -330,24 +326,24 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
-        // Active-provider strip. The consent toggle, the coach instructions and the morning brief
-        // moved to CoachSettingsScreen (#2243) so this tab is the conversation; what stays is the one
-        // line saying which model is answering, and the way through to the rest.
-        //
-        // Connection management stays HERE rather than moving with settings. Keeping it on the
-        // conversation screen on both platforms also keeps that one split identical,
-        // which is the part worth keeping identical. The two settings screens do NOT hold the same
-        // cards: see CoachSettingsScreen's own note on the two Gemini/signals opt-ins.
+        // Cloud identity strip: the Coach has one backend and one memory system.
         NoopCard(padding = 14.dp, tint = Palette.chargeColor) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // The pill takes the flexible space (ellipsizing a long model id); the actions
-                // keep their intrinsic single-line width so they can never be squeezed into a vertical
-                // stack (#1074).
-                StatePill(
-                    title = uiString(R.string.l10n_coach_screen_provider_displayname_model_8b39f761, provider.displayName, model),
-                    tone = StrandTone.Accent, showsDot = true,
+                Column(
                     modifier = Modifier.weight(1f),
-                )
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    StatePill(
+                        title = "THOOP Cloud Coach",
+                        tone = StrandTone.Accent,
+                        showsDot = true,
+                    )
+                    Text(
+                        "Connected • Cloud Memory active",
+                        style = NoopType.footnote,
+                        color = Palette.textSecondary,
+                    )
+                }
                 Spacer(Modifier.width(8.dp))
                 val settingsInteraction = remember { MutableInteractionSource() }
                 Icon(
@@ -361,40 +357,8 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                         .padding(6.dp)
                         .size(20.dp),
                 )
-                Spacer(Modifier.width(4.dp))
-                val keyInteraction = remember { MutableInteractionSource() }
-                Icon(
-                    Icons.Filled.Edit,
-                    contentDescription = uiString(R.string.coach_key_rejected_action),
-                    tint = Palette.textSecondary,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .liquidPress(keyInteraction)
-                        .clickable(interactionSource = keyInteraction, indication = null) {
-                            showKeyEditor = !showKeyEditor
-                            if (!showKeyEditor) keyFix = ""
-                        }
-                        .padding(6.dp)
-                        .size(20.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-                val disconnectInteraction = remember { MutableInteractionSource() }
-                Text(
-                    uiString(R.string.l10n_coach_screen_disconnect_ed28e068),
-                    style = NoopType.caption,
-                    color = Palette.textSecondary,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .liquidPress(disconnectInteraction)
-                        .clickable(interactionSource = disconnectInteraction, indication = null) { vm.disconnect(context) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .semantics { contentDescription = uiString(R.string.l10n_coach_screen_disconnect_provider_fa13625c) },
-                )
             }
         }
-
         if (showClearConfirm) {
             AlertDialog(
                 onDismissRequest = { showClearConfirm = false },
@@ -447,37 +411,6 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                 modifier = Modifier.semantics { contentDescription = uiString(R.string.l10n_coach_screen_coach_error_error_ad9c8c46, errorMsg) },
             )
         }
-        if (keyRejected || showKeyEditor) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (keyRejected) {
-                    Text(
-                        uiString(R.string.coach_key_rejected_hint),
-                        style = NoopType.footnote,
-                        color = Palette.textSecondary,
-                    )
-                }
-                CoachKeyField(
-                    value = keyFix,
-                    onValueChange = { keyFix = it },
-                    placeholder = uiString(R.string.coach_key_rejected_placeholder, provider.displayName),
-                )
-                CoachPrimaryButton(
-                    label = uiString(R.string.coach_key_rejected_action),
-                    enabled = keyFix.isNotBlank(),
-                    onClick = {
-                        vm.saveKey(context, keyFix)
-                        keyFix = ""
-                        showKeyEditor = false
-                    },
-                )
-                if (showKeyEditor && !keyRejected) {
-                    TextButton(onClick = { showKeyEditor = false; keyFix = "" }) {
-                        Text(stringResource(R.string.l10n_coach_screen_cancel_77dfd213))
-                    }
-                }
-            }
-        }
-
         // Input row + Send, a frosted overlay surface so the composer reads as a docked input bar.
         // K4: the mic button (on-device voice input) sits between the text field and Send.
         MicComposerRow(
@@ -529,7 +462,7 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
         }
 
         // Privacy note repeated under the input so it's always on screen.
-        PrivacyNote(local = provider == AiProvider.CUSTOM)
+        CloudPrivacyNote()
     }
 }
 
@@ -1105,6 +1038,24 @@ private fun SendButton(enabled: Boolean, sending: Boolean, onClick: () -> Unit) 
 }
 
 // MARK: - Privacy note (one line)
+// MARK: - Cloud privacy note
+@Composable
+private fun CloudPrivacyNote() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.Lock, contentDescription = null, tint = Palette.textTertiary, modifier = Modifier.size(13.dp))
+        Text(
+            "Questions and a compact THOOP metrics summary are sent to THOOP Cloud Coach. " +
+                "Conversation summaries and durable preferences are stored in Cloud Memory.",
+            style = NoopType.footnote,
+            color = Palette.textTertiary,
+        )
+    }
+}
+
 
 @Composable
 private fun PrivacyNote(local: Boolean = false) {

@@ -10,6 +10,7 @@ import com.noop.ai.AiKeyRejectedException
 import com.noop.ai.AiKeyStore
 import com.noop.ai.AiProvider
 import com.noop.ai.ChatMsg
+import com.noop.BuildConfig
 import com.noop.ai.CustomAiAuthHeader
 import com.noop.R
 import com.noop.data.CoachMessageRow
@@ -53,6 +54,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
     // PRD-K2: persisted conversation history (Room `coachMessage` table).
     private val coachDao = WhoopDatabase.get(app.applicationContext).whoopDao()
     private var didLoadPersistedMessages = false
+    private var cloudConversationId: String? = null
 
     // MARK: - Transcript
 
@@ -130,7 +132,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun estimatedTokens(draft: String): Int? {
         val app = getApplication<Application>()
-        if (!isConfigured(app.applicationContext)) return null
+        if (!isConfigured()) return null
         val systemPrompt = AiCoach.resolveSystemPrompt(app.applicationContext)
         val systemPromptTokens = systemPrompt.length / 4
         val contextTokens = if (consent.value) 750 else 50
@@ -210,8 +212,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
      * True once the coach can actually send: a stored key for the cloud providers, or, for the
      * Custom (local) provider, a committed base URL (a key is optional there). Gates setup vs. chat.
      */
-    fun isConfigured(ctx: Context): Boolean =
-        if (_provider.value == AiProvider.CUSTOM) _customConnected.value else hasKey(ctx)
+    fun isConfigured(): Boolean = BuildConfig.CLOUD_COACH_BASE_URL.startsWith("https://")
 
     // MARK: - Selection mutators
 
@@ -479,22 +480,18 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
                 // must not be able to survive in memory on the one call that egresses data.
                 val consentNow = AiKeyStore.readConsent(appCtx)
                 _consent.value = consentNow
-                aiCoach.chatStream(
+                val cloudReply = aiCoach.chatCloud(
                     ctx = appCtx,
                     history = _messages.value.dropLast(1), // exclude the placeholder
-                    provider = _provider.value,
-                    model = _model.value,
+                    conversationId = cloudConversationId,
                     consent = consentNow,
-                    customBaseUrl = _customBaseUrl.value,
-                    customAuthHeader = _customAuthHeader.value,
                     includeSignals = consentNow && NoopPrefs.coachSignals(appCtx),
-                ) { delta ->
-                    accumulated += delta
-                    // Replace the placeholder's text with the accumulated stream so far.
-                    _messages.value = _messages.value.map { msg ->
-                        if (msg.id == placeholderId) ChatMsg(id = placeholderId, role = "assistant", text = accumulated)
-                        else msg
-                    }
+                )
+                cloudConversationId = cloudReply.conversationId
+                accumulated = cloudReply.answer
+                _messages.value = _messages.value.map { msg ->
+                    if (msg.id == placeholderId) ChatMsg(id = placeholderId, role = "assistant", text = accumulated)
+                    else msg
                 }
                 // Finalize: trim whitespace. If the stream produced nothing, show "(no reply)".
                 val clean = accumulated.trim()
@@ -584,7 +581,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
      *  blocks the UI — the in-memory transcript (what the user sees) is unaffected either way. */
     private fun persistMessages() {
         val snapshot = _messages.value
-        val providerId = _provider.value.name
+        val providerId = "THOOP_CLOUD"
         viewModelScope.launch {
             val rows = snapshot.mapIndexed { index, m ->
                 CoachMessageRow(
@@ -599,6 +596,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
     /** The Coach toolbar's "Clear conversation" action: wipes both the in-memory transcript and the
      *  persisted table. */
     fun clearConversation() {
+        cloudConversationId = null
         _messages.value = emptyList()
         // Goes with the transcript, as in [clearKey] and [disconnect]: a field claiming the empty
         // transcript belongs to some past day would not be true.

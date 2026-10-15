@@ -31,7 +31,7 @@ import com.noop.R
  * would drift from the first, and #1862 explicitly defers the persistent-workspace redesign (threads,
  * retention, backup policy) to a follow-up.
  *
- * NO PROVIDER REQUEST IS MADE BY SHOWING THIS. [isConfigured] is a local key read and the prompts are
+ * NO CLOUD REQUEST IS MADE BY SHOWING THIS. [isConfigured] is a local build-config read and the prompts are
  * static copy; the first network call still happens where it always did, after an explicit send.
  *
  * Presentational by construction — every input is injected — so it can be exercised without a provider,
@@ -57,7 +57,7 @@ fun CoachLauncherSheet(
         ) {
             Overline(uiString(R.string.nav_coach))
             // Frames BOTH branches, so the sheet says what Coach is before it either offers questions or
-            // asks for a provider. Using it once also avoids the duplicate that an unconfigured-only
+            // reports that Cloud Coach is unavailable. Using it once also avoids duplicate copy in the unconfigured
             // explainer produced, where "Connect a provider" read as both the description and the button.
             Text(
                 uiString(R.string.l10n_coach_screen_ask_anything_about_your_recent_recovery_e6c287ca),
@@ -69,9 +69,9 @@ fun CoachLauncherSheet(
                     PromptRow(prompt = prompt, onClick = { onPick(prompt) })
                 }
             } else {
-                // The Coach screen stays the only place a key is entered; this just routes there.
+                // The Coach screen explains that this build has no Cloud Coach endpoint.
                 PromptRow(
-                    prompt = uiString(R.string.l10n_coach_screen_connect_a_provider_6967f288),
+                    prompt = "Cloud Coach unavailable",
                     onClick = onSetup,
                 )
             }

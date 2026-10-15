@@ -85,6 +85,42 @@ class AiCoach(
      * key, network, rate limit, malformed response); the ViewModel maps that to a visible
      * error message and the app never crashes.
      */
+    /** Cloud-only Coach path. Existing THOOP health context remains authoritative. */
+    suspend fun chatCloud(
+        ctx: Context,
+        history: List<ChatMsg>,
+        conversationId: String?,
+        consent: Boolean,
+        includeSignals: Boolean = true,
+    ): CloudCoachClient.Reply = withContext(Dispatchers.IO) {
+        require(history.isNotEmpty()) { "Ask a question first." }
+        require(history.last().role == "user") { "The last message must be your question." }
+
+        val healthContext = if (consent) {
+            val days = runCatching { repo.daysMerged(activeStrapId()) }.getOrDefault(emptyList())
+            val stress = runCatching { stressLineToday() }.getOrNull()
+            val signals = if (includeSignals) runCatching { buildSignalsContext() }.getOrNull() else null
+            val workouts = runCatching { recentWorkoutsBlock(ctx) }.getOrNull()
+            buildString {
+                append(buildContext(days))
+                if (!workouts.isNullOrBlank()) append("\n\n").append(workouts)
+                if (!stress.isNullOrBlank()) append("\n\n").append(stress)
+                if (!signals.isNullOrBlank()) append("\n\n").append(signals)
+            }
+        } else {
+            NO_CONSENT_NOTE
+        }
+
+        CloudCoachClient().ask(
+            context = ctx,
+            conversationId = conversationId,
+            question = history.last().text,
+            recentMessages = history.dropLast(1),
+            healthContext = healthContext,
+            systemPrompt = resolveSystemPrompt(ctx),
+        )
+    }
+
     suspend fun chat(
         ctx: Context,
         history: List<ChatMsg>,

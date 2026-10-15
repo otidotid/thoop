@@ -83,8 +83,7 @@ fun CoachSettingsScreen(vm: CoachViewModel) {
         // stays on the coach page). A "not connected yet" card would be unreachable, and the Swift twin
         // has no equivalent.
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            CoachModelCard(vm = vm)
-            CoachConsentCard(vm = vm)
+                CoachConsentCard(vm = vm)
             CoachInstructions(vm = vm)
             MorningBriefCard(vm = vm)
         }
