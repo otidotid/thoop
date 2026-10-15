@@ -2026,6 +2026,49 @@ fun SettingsScreen(
             title = uiString(R.string.l10n_settings_screen_bottom_bar_f84098a9),
             blurb = uiString(R.string.l10n_settings_screen_how_the_navigation_bar_looks_f186b099),
         ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Choose bottom bar modules", style = NoopType.headline, color = Palette.textPrimary)
+                Text(
+                    "Today is locked. Pick up to three modules; everything else stays organised inside More.",
+                    style = NoopType.footnote,
+                    color = Palette.textTertiary,
+                )
+                BottomBarLockedRow()
+                BottomBarModuleStore.selected.forEachIndexed { index, destination ->
+                    BottomBarSelectedRow(
+                        destination = destination,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < BottomBarModuleStore.selected.lastIndex,
+                        onMoveUp = { BottomBarModuleStore.move(context, destination, -1) },
+                        onMoveDown = { BottomBarModuleStore.move(context, destination, 1) },
+                        onRemove = { BottomBarModuleStore.setPinned(context, destination, false) },
+                    )
+                }
+                Text(
+                    "${BottomBarModuleStore.selected.size}/${BottomBarModuleStore.MAX_PINNED} optional slots used",
+                    style = NoopType.caption,
+                    color = Palette.accent,
+                )
+                configurableBottomBarDestinations
+                    .filterNot { it in BottomBarModuleStore.selected }
+                    .forEach { destination ->
+                        SettingsToggleRow(
+                            title = stringResource(destination.titleRes),
+                            detail = "Show in bottom bar instead of More",
+                            checked = false,
+                            onCheckedChange = { pinned ->
+                                if (pinned) BottomBarModuleStore.setPinned(context, destination, true)
+                            },
+                        )
+                    }
+                NoopButton(
+                    text = "Reset bottom bar",
+                    kind = NoopButtonKind.Tertiary,
+                    fullWidth = true,
+                    onClick = { BottomBarModuleStore.reset(context) },
+                )
+            }
+            SettingsRowDivider()
             // The Coach tab's master switch. It sits in this section because the tab is where a wearer
             // meets the feature, but it is NOT tab chrome: switching it off disables the AI itself, takes
             // the Today launcher card with it, and cancels the daily brief (which otherwise keeps calling
@@ -4790,6 +4833,46 @@ private fun AccentCustomPicker(hex: String, onHexChange: (String) -> Unit) {
                     .border(2.dp, Color.White, CircleShape),
             )
         }
+    }
+}
+
+@Composable
+private fun BottomBarLockedRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(Destination.Today.icon, contentDescription = null, tint = Palette.accent)
+        Text(stringResource(Destination.Today.titleRes), style = NoopType.body, color = Palette.textPrimary, modifier = Modifier.weight(1f))
+        StatePill("Locked", tone = StrandTone.Neutral, showsDot = false)
+    }
+}
+
+@Composable
+private fun BottomBarSelectedRow(
+    destination: Destination,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(destination.icon, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(20.dp))
+        Text(stringResource(destination.titleRes), style = NoopType.body, color = Palette.textPrimary, modifier = Modifier.weight(1f))
+        StepperButton("↑", onMoveUp, "Move ${destination.route} up", enabled = canMoveUp)
+        StepperButton("↓", onMoveDown, "Move ${destination.route} down", enabled = canMoveDown)
+        Text(
+            "More",
+            style = NoopType.footnote,
+            color = Palette.accent,
+            modifier = Modifier.clickable(onClick = onRemove).padding(8.dp),
+        )
     }
 }
 

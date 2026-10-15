@@ -240,12 +240,12 @@ internal val drawerGroups: List<DrawerGroup> = listOf(
         // promoted to a top-level tab — no longer listed under More." Leaving it would have put the
         // same destination in two places at once, which is the duplication the note above says this
         // list exists to avoid. (#2218)
-        Destination.InsightsHub, Destination.Intelligence,
+        Destination.Coach, Destination.Trends, Destination.InsightsHub, Destination.Intelligence,
         Destination.Insights, Destination.Explore, Destination.Compare,
     ), defaultExpanded = true),
     DrawerGroup("Body", R.string.more_group_body, listOf(
-        Destination.Live, Destination.LabBook, Destination.Breathe, Destination.Intervals,
-        Destination.Rhythm,
+        Destination.Sleep, Destination.Workouts, Destination.Health, Destination.Live,
+        Destination.LabBook, Destination.Breathe, Destination.Intervals, Destination.Rhythm,
     ), defaultExpanded = true),
     DrawerGroup("Data", R.string.more_group_data, listOf(
         Destination.FusedRecord, Destination.AppleHealth, Destination.DataSources,
@@ -256,6 +256,105 @@ internal val drawerGroups: List<DrawerGroup> = listOf(
         Destination.TestCentre, Destination.PowerSaving, Destination.Settings,
     ), defaultExpanded = false),
 )
+
+/** Modules that may be pinned between the locked Today and More slots. */
+internal val configurableBottomBarDestinations: List<Destination> = listOf(
+    Destination.Coach,
+    Destination.Trends,
+    Destination.Sleep,
+    Destination.Workouts,
+    Destination.Health,
+    Destination.Live,
+    Destination.InsightsHub,
+    Destination.Intelligence,
+    Destination.Insights,
+    Destination.Explore,
+    Destination.Compare,
+    Destination.LabBook,
+    Destination.Breathe,
+    Destination.Intervals,
+    Destination.Rhythm,
+    Destination.FusedRecord,
+    Destination.AppleHealth,
+    Destination.DataSources,
+    Destination.BackupSync,
+    Destination.Devices,
+    Destination.NoopLimitations,
+    Destination.Automations,
+    Destination.SmartAlarm,
+    Destination.Notifications,
+    Destination.TestCentre,
+    Destination.PowerSaving,
+    Destination.Settings,
+)
+
+/**
+ * User-owned bottom-bar layout. Today and More are structural and never stored; this list is only the
+ * three optional middle slots. Stable route ids are persisted, never translated labels.
+ */
+internal object BottomBarModuleStore {
+    const val KEY = "noop.bottomBarModules"
+    const val MAX_PINNED = 3
+    val defaults = listOf(Destination.Workouts, Destination.Trends, Destination.Sleep)
+
+    var selected by mutableStateOf(defaults)
+        private set
+
+    fun decode(raw: String?): List<Destination> {
+        if (raw == null) return defaults
+        val allowed = configurableBottomBarDestinations.toSet()
+        return raw.split(',')
+            .mapNotNull { token -> Destination.entries.firstOrNull { it.route == token.trim() } }
+            .filter { it in allowed }
+            .distinct()
+            .take(MAX_PINNED)
+            .ifEmpty { defaults }
+    }
+
+    fun encode(items: List<Destination>): String = items.joinToString(",") { it.route }
+
+    fun load(ctx: Context) {
+        selected = decode(NoopPrefs.of(ctx.applicationContext).getString(KEY, null))
+    }
+
+    private fun persist(ctx: Context, value: List<Destination>) {
+        selected = value.distinct().take(MAX_PINNED)
+        NoopPrefs.of(ctx.applicationContext).edit().putString(KEY, encode(selected)).apply()
+    }
+
+    fun setPinned(ctx: Context, destination: Destination, pinned: Boolean): Boolean {
+        if (destination !in configurableBottomBarDestinations) return false
+        val next = selected.toMutableList()
+        if (pinned) {
+            if (destination in next) return true
+            if (next.size >= MAX_PINNED) return false
+            next += destination
+        } else {
+            next -= destination
+        }
+        persist(ctx, next)
+        return true
+    }
+
+    fun move(ctx: Context, destination: Destination, delta: Int) {
+        val from = selected.indexOf(destination)
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, selected.lastIndex)
+        if (from == to) return
+        val next = selected.toMutableList()
+        next.add(to, next.removeAt(from))
+        persist(ctx, next)
+    }
+
+    fun reset(ctx: Context) = persist(ctx, defaults)
+}
+
+/** More categories always contain every unpinned module, while Today stays locked outside More. */
+internal fun visibleMoreGroups(pinned: List<Destination>): List<DrawerGroup> {
+    val pinnedSet = pinned.toSet()
+    return drawerGroups.map { group -> group.copy(items = group.items.filterNot { it in pinnedSet }) }
+        .filter { it.items.isNotEmpty() }
+}
 
 /** The headers open by default at first run, derived from [drawerGroups.defaultExpanded] (Insights +
  *  Body), so the seed lives in one place and the persistence default can't drift from the UI default. */
@@ -490,6 +589,7 @@ object BottomBarStyleStore {
         opacityStep = prefs.getInt(NoopPrefs.KEY_BOTTOM_BAR_OPACITY_STEP, DEFAULT_OPACITY_STEP)
             .coerceIn(MIN_OPACITY_STEP, MAX_OPACITY_STEP)
         scale = nearestScale(prefs.getFloat(NoopPrefs.KEY_BOTTOM_BAR_SCALE, DEFAULT_SCALE))
+        BottomBarModuleStore.load(ctx)
     }
 
     fun set(ctx: Context, value: Boolean) {
@@ -1006,7 +1106,7 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
         // Mirror the iOS More page: each group is a tappable UPPERCASE overline header (with a disclosure
         // chevron) over a single grouped white NoopCard whose rows are tight (accent icon + title +
         // chevron) and separated by inset hairlines (NOT loose NavigationDrawerItems on the bare surface).
-        drawerGroups.forEach { group ->
+        visibleMoreGroups(BottomBarModuleStore.selected).forEach { group ->
             val isOpen = expanded[group.header] ?: group.defaultExpanded
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MoreGroupHeader(
@@ -1109,36 +1209,16 @@ private fun MoreRow(dest: Destination, onClick: () -> Unit) {
 /** A single bottom-bar nav slot: the destination it switches to, plus the bar-specific icon/label. */
 internal data class BarTab(val dest: Destination, val icon: ImageVector, @StringRes val labelRes: Int)
 
-/** The nav slots in iOS order: Today · Workouts · Trends · Sleep · Coach · More.
- *  More is special-cased (it opens the sheet rather than a route), so it is appended at the call site. */
-internal val barLeadingTabs = listOf(
-    BarTab(Destination.Today, Icons.Outlined.GridView, R.string.nav_today),
-    BarTab(Destination.Workouts, Icons.Filled.FitnessCenter, R.string.nav_workouts),
-    // chart.line.uptrend.xyaxis on iOS — the rising-trend glyph, not a flat bar chart.
-    BarTab(Destination.Trends, Icons.AutoMirrored.Filled.TrendingUp, R.string.nav_trends),
-)
-/**
- * The trailing tabs, as shipped. [barTrailingTabsFor] is what the bar actually draws: Coach is
- * conditional, so this list is the full set rather than the visible one.
- */
-internal val barTrailingTabs = listOf(
-    BarTab(Destination.Sleep, Icons.Filled.Bedtime, R.string.nav_sleep),
-    // #2218: Coach was promoted to a top-level tab on iOS and this side did not follow, so it sat in
-    // the More list while the comment above claimed the two bars matched. AutoAwesome is the sparkles
-    // glyph iOS uses, and the same one the More row already shows, so the entry a wearer has learned
-    // keeps its face when it moves up.
-    BarTab(Destination.Coach, Icons.Filled.AutoAwesome, R.string.nav_coach),
-)
+internal fun barTabsFor(selected: List<Destination>): List<BarTab> =
+    listOf(BarTab(Destination.Today, Icons.Outlined.GridView, R.string.nav_today)) +
+        selected.distinct().take(BottomBarModuleStore.MAX_PINNED).map {
+            BarTab(it, it.icon, it.titleRes)
+        }
 
-/**
- * The trailing tabs to draw for a given Coach setting.
- *
- * A function rather than a filter written inline at the bar so the Kotlin unit tests can assert the
- * two shapes directly, and so every surface that needs "which tabs are there" agrees by construction
- * instead of by two copies of the same predicate.
- */
-internal fun barTrailingTabsFor(coachEnabled: Boolean): List<BarTab> =
-    if (coachEnabled) barTrailingTabs else barTrailingTabs.filterNot { it.dest == Destination.Coach }
+internal fun visibleBarDestinationsFor(
+    selected: List<Destination>,
+    coachEnabled: Boolean,
+): List<Destination> = selected.filterNot { it == Destination.Coach && !coachEnabled }
 
 @Composable
 private fun GlassBottomBar(
@@ -1149,7 +1229,9 @@ private fun GlassBottomBar(
     // One binding, used by BOTH the slots and the More-lit predicate below. #2218's note applies here
     // twice over: a second copy of "which tabs exist" is what let Coach light two slots at once, and a
     // conditional tab makes that failure available again to anyone who filters in one place only.
-    val visibleTrailing = barTrailingTabsFor(BottomBarStyleStore.coachEnabled)
+    val visibleTabs = barTabsFor(
+        visibleBarDestinationsFor(BottomBarModuleStore.selected, BottomBarStyleStore.coachEnabled),
+    )
     val barShape = RoundedCornerShape(50)
     Box(
         modifier = modifier
@@ -1189,16 +1271,7 @@ private fun GlassBottomBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                barLeadingTabs.forEach { tab ->
-                    BarSlot(
-                        icon = tab.icon,
-                        label = stringResource(tab.labelRes),
-                        active = current == tab.dest,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onTabSelected(tab.dest) },
-                    )
-                }
-                visibleTrailing.forEach { tab ->
+                visibleTabs.forEach { tab ->
                     BarSlot(
                         icon = tab.icon,
                         label = stringResource(tab.labelRes),
@@ -1217,8 +1290,7 @@ private fun GlassBottomBar(
                     // Derived from the bar's own lists rather than restated. Spelling the tabs out here
                     // is what made adding Coach a two-part change: the slot alone would have lit Coach
                     // AND More together, because this predicate had never heard of it. (#2218)
-                    active = barLeadingTabs.none { it.dest == current } &&
-                        visibleTrailing.none { it.dest == current },
+                    active = visibleTabs.none { it.dest == current },
                     modifier = Modifier.weight(1f),
                     onClick = { onTabSelected(Destination.More) },
                 )
