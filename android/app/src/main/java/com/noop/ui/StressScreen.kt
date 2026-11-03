@@ -115,9 +115,9 @@ fun StressScreen(vm: AppViewModel, onBreathe: () -> Unit = {}) {
     var stored by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var storedLoaded by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        val rows = runCatching {
+        val rows = StressLoadCancellation.read {
             vm.repo.metricSeries("my-whoop", "stress", "0000-01-01", "9999-12-31")
-        }.getOrDefault(emptyList())
+        }.orEmpty()
         stored = rows.associate { it.day to it.value.coerceIn(0.0, 3.0) }
         storedLoaded = true
     }
@@ -140,20 +140,21 @@ fun StressScreen(vm: AppViewModel, onBreathe: () -> Unit = {}) {
     // one. Both surfaces now age at the same rate, which is the actual ask in the report.
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.LaunchedEffect(vm.activeStrapId, lifecycleOwner) {
-        // Guarded on the same fingerprint the widget producer memoises against, for the same reason.
+        // Guarded on the same union fingerprint the widget producer memoises against. This includes archived
+        // aliases and imported rows read by the union queries, so a backfill cannot leave the open curve stale.
         // `loadDaytimeStress` is the expensive read on this screen, three windowed row fetches plus the
         // two HRV engines, and repeating it was free when it happened once on open. On a timer it is
         // not: with the strap disconnected, or simply quiet, nothing about today's heart rate has moved
         // and re-reading produces a result identical to the one already on screen. An indexed count and
         // max answers that for the price of neither.
-        var lastHrFingerprint: Pair<Int, Long>? = null
+        var lastHrFingerprint: String? = null
         lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
             while (true) {
                 val nowSeconds = System.currentTimeMillis() / 1000L
                 val window = stressLocalDayWindowContaining(nowSeconds, ZoneId.systemDefault())
-                val fingerprint = runCatching {
-                    vm.repo.hrFingerprintWindow(vm.activeStrapId, window.fromEpochSecond, nowSeconds)
-                }.getOrNull()
+                val fingerprint = StressLoadCancellation.read {
+                    vm.repo.hrUnionFingerprint(vm.activeStrapId, window.fromEpochSecond, nowSeconds)
+                }
                 // A failed fingerprint reads as "cannot tell", which loads rather than skips: being
                 // wrong about this costs one pass, being wrong the other way freezes the screen.
                 if (fingerprint == null || fingerprint != lastHrFingerprint) {
@@ -169,11 +170,11 @@ fun StressScreen(vm: AppViewModel, onBreathe: () -> Unit = {}) {
                     daytime = core?.daytime ?: DaytimeStress.Result.EMPTY
                     daytimeUsesPersonalBaseline = core?.usesPersonalBaseline == true
                     val beats = core?.rr.orEmpty()
-                    val lenses = if (beats.isEmpty()) null else runCatching {
+                    val lenses = if (beats.isEmpty()) null else StressLoadCancellation.read {
                         withContext(Dispatchers.Default) {
                             StressIndex.components(beats) to HrvFreqDomain.freqDomain(beats)
                         }
-                    }.getOrNull()
+                    }
                     stressIndex = lenses?.first
                     freqHrv = lenses?.second
                 }
