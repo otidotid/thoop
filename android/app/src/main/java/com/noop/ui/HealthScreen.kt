@@ -92,6 +92,7 @@ import com.noop.analytics.Baselines
 import com.noop.analytics.IllnessSignalEngine
 import com.noop.analytics.V5HealthSignals
 import com.noop.analytics.FitnessAgeEngine
+import com.noop.analytics.FitnessAgePaceEngine
 import com.noop.analytics.VitalityEngine
 import com.noop.analytics.TotalCaloriesEngine
 import com.noop.analytics.FitnessAgeReadiness
@@ -2831,6 +2832,9 @@ private fun FitnessAgeDetailExperience(
 ) {
     val ordered = readings.sortedBy { it.day }
     val latest = ordered.last()
+    val fitnessPace = remember(ordered) {
+        FitnessAgePaceEngine.calculate(ordered.map { FitnessAgePaceEngine.Point(it.day, it.value) })
+    }
     val delta = if (chronologicalAge > 0) chronologicalAge - latest.value else 0.0
     val favorable = delta > 0.5
     val unfavorable = delta < -0.5
@@ -2838,12 +2842,6 @@ private fun FitnessAgeDetailExperience(
         favorable -> Palette.recoveryColor(100.0)
         unfavorable -> Palette.strainColor(20.0)
         else -> color
-    }
-    val comparison = when {
-        chronologicalAge <= 0 -> "ADD AGE IN SETTINGS"
-        favorable -> "${String.format(Locale.US, "%.1f", delta)} YEARS YOUNGER"
-        unfavorable -> "${String.format(Locale.US, "%.1f", kotlin.math.abs(delta))} YEARS OLDER"
-        else -> "ABOUT YOUR AGE"
     }
     // Presentation-only motion for the large THOOP Age hero. The stored value and scoring path stay
     // untouched: only the hero's scale, glow, and translucent inner layers breathe slowly.
@@ -2952,11 +2950,23 @@ private fun FitnessAgeDetailExperience(
                         }
                     }
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("WEEKLY", style = NoopType.number(19f, FontWeight.Bold), color = Color.White)
-                        Text("UPDATE", style = NoopType.caption, color = Palette.textSecondary)
+                        Text(
+                            fitnessPace.pace?.let { String.format(Locale.US, "%.1fx", it) } ?: "--",
+                            style = NoopType.number(19f, FontWeight.Bold),
+                            color = if (fitnessPace.ready) accent else Palette.textSecondary,
+                        )
+                        Text("FITNESS PACE", style = NoopType.caption, color = Palette.textSecondary,
+                            textAlign = TextAlign.Center)
                     }
                 }
-                Text(comparison, style = NoopType.title2, color = accent, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text(
+                    if (fitnessPace.ready) "${FitnessAgePaceEngine.label(fitnessPace)} · ${fitnessPace.sampleWeeks} WEEKLY READINGS"
+                    else "NEED ${fitnessPace.weeksNeeded} MORE WEEKLY ${if (fitnessPace.weeksNeeded == 1) "READING" else "READINGS"}",
+                    style = NoopType.footnote,
+                    color = Palette.textTertiary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Text("Latest week: ${shortDayLabel(latest.day)}", style = NoopType.footnote, color = Palette.textTertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
