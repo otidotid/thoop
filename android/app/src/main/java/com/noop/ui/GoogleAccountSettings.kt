@@ -11,9 +11,7 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-
-private const val GOOGLE_WEB_CLIENT_ID =
-    "542598370283-1g40ddq1h2ieus49dnf6v0msoqdqdpb9.apps.googleusercontent.com"
+import com.noop.BuildConfig
 
 internal data class GoogleAccountState(
     val accountId: String,
@@ -89,8 +87,16 @@ internal class GoogleSignInController(
                 "Google Sign-In requires an active THOOP screen.",
             )
 
+        val webClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID.trim()
+        if (webClientId.isBlank()) {
+            return GoogleSignInResult.Failure(
+                "Google Sign-In is not configured for this THOOP build. " +
+                    "Set THOOP_GOOGLE_WEB_CLIENT_ID in android/local.properties, then rebuild.",
+            )
+        }
+
         val googleOption = GetSignInWithGoogleOption.Builder(
-            GOOGLE_WEB_CLIENT_ID,
+            webClientId,
         ).build()
 
         val request = GetCredentialRequest.Builder()
@@ -133,8 +139,12 @@ internal class GoogleSignInController(
         } catch (_: GetCredentialCancellationException) {
             GoogleSignInResult.Cancelled
         } catch (failure: GetCredentialException) {
+            val detail = failure.message?.takeIf { it.isNotBlank() }
             GoogleSignInResult.Failure(
-                failure.message ?: "Google Sign-In did not complete.",
+                buildString {
+                    append("Google Sign-In failed. Verify the OAuth Android client package name and SHA-1 for this APK, plus THOOP_GOOGLE_WEB_CLIENT_ID.")
+                    if (detail != null) append(" Details: $detail")
+                },
             )
         } catch (failure: Exception) {
             GoogleSignInResult.Failure(

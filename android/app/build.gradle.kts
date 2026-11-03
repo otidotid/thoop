@@ -25,6 +25,9 @@ val localProps = Properties().apply {
 val cloudCoachBaseUrl = (localProps.getProperty("THOOP_CLOUD_COACH_URL")
     ?: System.getenv("THOOP_CLOUD_COACH_URL")
     ?: "").trim().trimEnd('/')
+val googleWebClientId = (localProps.getProperty("THOOP_GOOGLE_WEB_CLIENT_ID")
+    ?: System.getenv("THOOP_GOOGLE_WEB_CLIENT_ID")
+    ?: "").trim()
 
 android {
     namespace = "com.noop"
@@ -39,6 +42,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CLOUD_COACH_BASE_URL", "\"${cloudCoachBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         vectorDrawables {
             useSupportLibrary = true
         }
