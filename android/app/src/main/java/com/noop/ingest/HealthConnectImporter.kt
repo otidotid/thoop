@@ -127,6 +127,22 @@ object HealthConnectImporter {
         ),
     }
 
+    /**
+     * Hard security boundary for manual Health Connect import.
+     *
+     * Keep this separate from [ImportCategory] so a future category or a stale Android permission cannot
+     * accidentally activate the dormant readers below for HR, HRV, sleep, weight, body composition,
+     * oxygen, respiration, VO2 max, or hydration. Export/write permissions are governed separately by
+     * HealthConnectWriter and are not broadened by this read allowlist.
+     */
+    internal val IMPORT_READ_ALLOWLIST: Set<KClass<out Record>> = setOf(
+        StepsRecord::class,
+        TotalCaloriesBurnedRecord::class,
+        ActiveCaloriesBurnedRecord::class,
+        ExerciseSessionRecord::class,
+        DistanceRecord::class,
+    )
+
     /** Health Connect import is intentionally limited to activity and exercise data. */
     internal val ALL_CATEGORIES: Set<ImportCategory> = ImportCategory.entries.toSet()
     internal val DEFAULT_CATEGORIES: Set<ImportCategory> = setOf(ImportCategory.ACTIVITY_ONLY)
@@ -140,6 +156,7 @@ object HealthConnectImporter {
 
     internal fun recordTypesFor(categories: Set<ImportCategory>): Set<KClass<out Record>> =
         categories.flatMapTo(linkedSetOf()) { it.recordTypes }
+            .filterTo(linkedSetOf()) { it in IMPORT_READ_ALLOWLIST }
 
     internal fun readableRecordTypes(
         categories: Set<ImportCategory>,
@@ -160,7 +177,7 @@ object HealthConnectImporter {
     private const val HYDRATION_WINDOW_DAYS = 30L
 
     /**
-     * The selected categories. New installs start with the narrow recovery/wellness group; an
+     * The selected categories. New installs start with activity-only import; an
      * existing install that was already prompted under the old all-at-once flow keeps all categories
      * enabled so an update never silently stops importing data it imported before (#645).
      */
@@ -332,7 +349,9 @@ object HealthConnectImporter {
             range: TimeRangeFilter = filter,
             onRecord: (T) -> Unit,
         ): Boolean {
-            if (type !in selectedRecordTypes) return false
+            // Defense in depth: selection + grant are necessary, but never sufficient to escape the
+            // permanent activity/exercise-only boundary.
+            if (type !in IMPORT_READ_ALLOWLIST || type !in selectedRecordTypes) return false
             return readAll(client, type, range, selfPackage, onRecord)
         }
 

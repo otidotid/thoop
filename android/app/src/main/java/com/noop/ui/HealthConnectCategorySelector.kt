@@ -15,7 +15,7 @@ internal fun HealthConnectCategorySelector(
     SegmentedPillControl(
         items = listOf(ImportCategory.ACTIVITY_ONLY, ImportCategory.ALL),
         selection = choice,
-        label = { if (it == ImportCategory.ACTIVITY_ONLY) "Activity only" else "All" },
+        label = { if (it == ImportCategory.ACTIVITY_ONLY) "Activity only" else "Activity + workouts" },
         onSelect = { onSelectionChange(setOf(it)) },
         modifier = modifier,
     )

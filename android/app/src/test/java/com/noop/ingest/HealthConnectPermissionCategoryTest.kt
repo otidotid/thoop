@@ -4,6 +4,13 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.HydrationRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
+import androidx.health.connect.client.records.RespiratoryRateRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
+import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 import com.noop.ingest.HealthConnectImporter.ImportCategory
@@ -142,6 +149,34 @@ class HealthConnectPermissionCategoryTest {
         assertTrue(StepsRecord::class in allReadable)
         assertTrue(ExerciseSessionRecord::class in allReadable)
         assertFalse(HeartRateRecord::class in allReadable)
+    }
+
+    @Test
+    fun hardAllowlistRejectsHealthAndProfileRecordsEvenWhenGranted() {
+        val forbidden = setOf(
+            HeartRateRecord::class,
+            RestingHeartRateRecord::class,
+            HeartRateVariabilityRmssdRecord::class,
+            SleepSessionRecord::class,
+            WeightRecord::class,
+            Vo2MaxRecord::class,
+            OxygenSaturationRecord::class,
+            RespiratoryRateRecord::class,
+            HydrationRecord::class,
+        )
+        val granted = forbidden.mapTo(linkedSetOf()) { HealthPermission.getReadPermission(it) } +
+            HealthConnectImporter.permissionsFor(allActivity)
+
+        val readable = HealthConnectImporter.readableRecordTypes(
+            categories = allActivity,
+            grantedPermissions = granted,
+        )
+
+        assertTrue(readable.all { it in HealthConnectImporter.IMPORT_READ_ALLOWLIST })
+        assertTrue(forbidden.none { it in readable })
+        assertFalse(HealthConnectImporter.IMPORT_READ_ALLOWLIST.contains(HeartRateRecord::class))
+        assertFalse(HealthConnectImporter.IMPORT_READ_ALLOWLIST.contains(SleepSessionRecord::class))
+        assertFalse(HealthConnectImporter.IMPORT_READ_ALLOWLIST.contains(WeightRecord::class))
     }
 
     @Test
