@@ -1472,6 +1472,10 @@ object IntelligenceEngine {
         val dayCacheWindow = (0 until maxDays)
             .map { AnalyticsEngine.dayString(nowLocalMidnight - it * SECONDS_PER_DAY, tzOffsetSeconds) }.toHashSet()
         dayScanCache.keys.retainAll(dayCacheWindow)
+        // A full-history repair may request thousands of days. Keep only compact scored results for the
+        // newest bounded slice so the process cache cannot become another source of memory pressure.
+        // Normal analyzeRecent remains unchanged because its default 21-day window is below the ceiling.
+        dayScanCache.keys.retainAll(AnalyticsCachePolicy.retainedDays(dayScanCache.keys))
         skippedSleepDays.emit(MIN_HR_SAMPLES, diag)
         // #1538: the denominator is the number of CACHEABLE days this pass (reused + freshly cached), not
         // [maxDays]. A day that never reaches the cache — an import/ring owner, an active trace, an
