@@ -5595,15 +5595,17 @@ private fun RecoveryDriversSection(
     // Read the row the Charge ring itself reads: today's own when scored, else the carried last-scored
     // day (#543) so the breakdown matches the carried ring instead of vanishing at the rollover. The
     // baselines already carry both recalibration epochs (#2315), applied where they were resolved (#2525).
-    val readDay = carriedDay ?: displayDay
-    val drivers = remember(chargeBaselines, readDay) {
-        recoveryChargeDrivers(chargeBaselines, readDay)
+    val snapshot = remember(chargeBaselines, displayDay, carriedDay) {
+        ResolvedReadinessSnapshot.resolve(
+            baselines = chargeBaselines,
+            displayDay = displayDay,
+            carriedDay = carriedDay,
+        )
     }
+    val drivers = snapshot.drivers
     if (drivers.isEmpty()) return
 
-    val tier = remember(chargeBaselines, readDay) {
-        chargeConfidenceTier(chargeBaselines, readDay)
-    }
+    val tier = snapshot.confidence ?: return
     val overline = carriedDay?.let { uiString(R.string.today_charge_carried, carriedCaption(it.day).localized()) }
         ?: uiString(R.string.trends_charge)
 
