@@ -57,6 +57,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -103,6 +104,8 @@ import com.noop.analytics.SkinTempDisplay
 import com.noop.analytics.VitalBands
 import com.noop.ble.LiveState
 import com.noop.data.DailyMetric
+import com.noop.data.FoodIntakeRepository
+import com.noop.data.NutritionTotals
 import com.noop.data.Vo2MaxEstimator
 import java.time.Instant
 import java.time.LocalDate
@@ -111,6 +114,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -2314,12 +2318,36 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
         if (key == "active_kcal") {
             val todayKey = java.time.LocalDate.now().toString()
             val activeToday = detail.readings.lastOrNull { it.day == todayKey }?.value
+            val foodRepo = remember(context) { FoodIntakeRepository.get(context) }
+            var foodRevision by remember { mutableIntStateOf(0) }
+            val todayFood by produceState(emptyList(), todayKey, foodRevision) {
+                value = runCatching { foodRepo.entriesForDay(todayKey) }.getOrDefault(emptyList())
+            }
+            val allFood by produceState(emptyList(), foodRevision) {
+                value = runCatching { foodRepo.allEntries() }.getOrDefault(emptyList())
+            }
+            val nutritionTotals = remember(todayFood) { NutritionTotals.from(todayFood) }
+            val calorieNow = java.time.LocalTime.now()
+            val totalBurned = TotalCaloriesEngine.breakdown(
+                activeToday, profile.weightKg, profile.heightCm, profile.age, profile.sex,
+                calorieNow.hour * 60 + calorieNow.minute, activeToday == null,
+            ).totalKcal
+            val foodScope = rememberCoroutineScope()
             CaloriesBreakdownCard(
                 activeKcal = activeToday,
                 profile = profile,
                 estimated = activeToday == null,
+                consumedKcal = nutritionTotals.caloriesKcal,
+                hasConsumedData = todayFood.isNotEmpty(),
             )
             TotalCaloriesTargetCard(activeToday, profile, activeToday == null)
+            CaloriesIntakeSection(
+                todayEntries = todayFood,
+                allEntries = allFood,
+                totalBurnedKcal = totalBurned,
+                onSave = { entry -> foodScope.launch { foodRepo.save(entry); foodRevision++ } },
+                onDelete = { entry -> foodScope.launch { foodRepo.delete(entry.id); foodRevision++ } },
+            )
         }
 
         // #943 (ryanbr): gate the range chips by available history so short history can't draw six
@@ -3256,7 +3284,7 @@ internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): Vita
 }
 
 @Composable
-private fun CaloriesBreakdownCard(activeKcal: Double?, profile: ProfileStore, estimated: Boolean) {
+private fun CaloriesBreakdownCard(activeKcal: Double?, profile: ProfileStore, estimated: Boolean, consumedKcal: Double = 0.0, hasConsumedData: Boolean = false) {
     val now = java.time.LocalTime.now()
     val energy = TotalCaloriesEngine.breakdown(
         activeKcal = activeKcal,
@@ -3287,6 +3315,12 @@ private fun CaloriesBreakdownCard(activeKcal: Double?, profile: ProfileStore, es
                 Text("Active Calories", style = NoopType.body, color = Palette.textPrimary,
                     modifier = Modifier.weight(1f))
                 Text("$prefix${TotalCaloriesEngine.rounded(energy.activeKcal)} kcal",
+                    style = NoopType.bodyNumber, color = Palette.textPrimary)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Consumed Calories", style = NoopType.body, color = Palette.textPrimary,
+                    modifier = Modifier.weight(1f))
+                Text(if (hasConsumedData) "${consumedKcal.roundToInt()} kcal" else "No data",
                     style = NoopType.bodyNumber, color = Palette.textPrimary)
             }
             Text(
