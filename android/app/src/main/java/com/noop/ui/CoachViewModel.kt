@@ -10,11 +10,14 @@ import com.noop.ai.AiKeyRejectedException
 import com.noop.ai.AiKeyStore
 import com.noop.ai.AiProvider
 import com.noop.ai.ChatMsg
+import com.noop.ai.CloudCoachClient
 import com.noop.BuildConfig
 import com.noop.ai.CustomAiAuthHeader
 import com.noop.R
 import com.noop.data.CoachMessageRow
 import com.noop.data.JournalEntry
+import com.noop.data.FoodIntakeEntry
+import com.noop.data.FoodIntakeRepository
 import com.noop.data.WhoopDatabase
 import com.noop.data.WhoopRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +68,9 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
     private val _sending = MutableStateFlow(false)
     /** True while a request is in flight, the UI disables Send and shows a thinking state. */
     val sending: StateFlow<Boolean> = _sending.asStateFlow()
+
+    private val _pendingNutrition = MutableStateFlow<CloudCoachClient.NutritionEstimate?>(null)
+    val pendingNutrition: StateFlow<CloudCoachClient.NutritionEstimate?> = _pendingNutrition.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     /** Non-null when the last send failed; the UI shows it in red. Cleared on the next send. */
@@ -488,6 +494,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
                     includeSignals = consentNow && NoopPrefs.coachSignals(appCtx),
                 )
                 cloudConversationId = cloudReply.conversationId
+                _pendingNutrition.value = cloudReply.nutrition
                 accumulated = cloudReply.answer
                 _messages.value = _messages.value.map { msg ->
                     if (msg.id == placeholderId) ChatMsg(id = placeholderId, role = "assistant", text = accumulated)
@@ -523,6 +530,41 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
                 // stream removal) — not per streamed chunk, so a long reply doesn't hammer the store.
                 persistMessages()
             }
+        }
+    }
+
+    fun dismissNutritionEstimate() {
+        _pendingNutrition.value = null
+    }
+
+    fun saveNutritionEstimate(ctx: Context) {
+        val estimate = _pendingNutrition.value ?: return
+        val now = System.currentTimeMillis()
+        val day = java.time.Instant.ofEpochMilli(now)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+            .toString()
+        viewModelScope.launch {
+            FoodIntakeRepository.get(ctx.applicationContext).save(
+                FoodIntakeEntry(
+                    localDay = day,
+                    consumedAt = now / 1000L,
+                    foodName = estimate.foodName,
+                    servingDescription = estimate.servingDescription.takeIf { it.isNotBlank() },
+                    servingGrams = estimate.servingGrams,
+                    caloriesKcal = estimate.caloriesKcal,
+                    proteinGrams = estimate.proteinGrams,
+                    carbohydrateGrams = estimate.carbohydrateGrams,
+                    fatGrams = estimate.fatGrams,
+                    fiberGrams = estimate.fiberGrams,
+                    confidence = estimate.confidence,
+                    assumptions = estimate.assumptions.joinToString(" | ").takeIf { it.isNotBlank() },
+                    referenceSummary = estimate.sources.joinToString(" | ").takeIf { it.isNotBlank() },
+                ),
+            )
+            _pendingNutrition.value = null
+            appendMessage(ChatMsg(role = "assistant", text = "Saved to Calories Intake."))
+            persistMessages()
         }
     }
 

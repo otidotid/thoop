@@ -23,7 +23,27 @@ class CloudCoachClient(
         .build(),
     private val baseUrl: String = BuildConfig.CLOUD_COACH_BASE_URL.trim().trimEnd('/'),
 ) {
-    data class Reply(val answer: String, val conversationId: String)
+    data class NutritionEstimate(
+        val foodName: String,
+        val servingDescription: String,
+        val servingGrams: Double?,
+        val caloriesKcal: Double,
+        val minimumCaloriesKcal: Double?,
+        val maximumCaloriesKcal: Double?,
+        val proteinGrams: Double?,
+        val carbohydrateGrams: Double?,
+        val fatGrams: Double?,
+        val fiberGrams: Double?,
+        val confidence: String?,
+        val assumptions: List<String>,
+        val sources: List<String>,
+    )
+
+    data class Reply(
+        val answer: String,
+        val conversationId: String,
+        val nutrition: NutritionEstimate? = null,
+    )
 
     val configured: Boolean get() = baseUrl.startsWith("https://")
 
@@ -66,9 +86,34 @@ class CloudCoachClient(
             val json = JSONObject(text)
             val answer = json.optString("answer").trim()
             check(answer.isNotEmpty()) { "Cloud Coach mengembalikan jawaban kosong." }
-            Reply(answer, json.optString("conversationId", id))
+            val nutrition = json.optJSONObject("nutrition")?.let { item ->
+                NutritionEstimate(
+                    foodName = item.optString("foodName").trim(),
+                    servingDescription = item.optString("servingDescription").trim(),
+                    servingGrams = item.optDoubleOrNull("servingGrams"),
+                    caloriesKcal = item.optDouble("caloriesKcal", Double.NaN),
+                    minimumCaloriesKcal = item.optDoubleOrNull("minimumCaloriesKcal"),
+                    maximumCaloriesKcal = item.optDoubleOrNull("maximumCaloriesKcal"),
+                    proteinGrams = item.optDoubleOrNull("proteinGrams"),
+                    carbohydrateGrams = item.optDoubleOrNull("carbohydrateGrams"),
+                    fatGrams = item.optDoubleOrNull("fatGrams"),
+                    fiberGrams = item.optDoubleOrNull("fiberGrams"),
+                    confidence = item.optString("confidence").trim().takeIf { it.isNotEmpty() },
+                    assumptions = item.optJSONArray("assumptions").toStringList(),
+                    sources = item.optJSONArray("sources").toStringList(),
+                ).takeIf { it.foodName.isNotBlank() && it.caloriesKcal.isFinite() && it.caloriesKcal >= 0.0 }
+            }
+            Reply(answer, json.optString("conversationId", id), nutrition)
         }
     }
+
+    private fun JSONObject.optDoubleOrNull(key: String): Double? =
+        if (has(key) && !isNull(key)) optDouble(key).takeIf { it.isFinite() } else null
+
+    private fun JSONArray?.toStringList(): List<String> =
+        if (this == null) emptyList() else (0 until length()).mapNotNull { index ->
+            optString(index).trim().takeIf { it.isNotEmpty() }
+        }
 
     private companion object {
         val JSON = "application/json; charset=utf-8".toMediaType()

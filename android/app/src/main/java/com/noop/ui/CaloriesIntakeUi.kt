@@ -123,22 +123,6 @@ internal fun CaloriesIntakeSection(
     SectionHeader("Nutrition Trend", overline = "7D")
     NutritionTrendCard(allEntries)
 
-    SectionHeader("Data Readings")
-    NoopCard {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            NutritionMetric.entries.forEach { metric ->
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Text(metric.label, style = NoopType.body, modifier = Modifier.weight(1f))
-                    Text(if (todayEntries.isEmpty()) "No data" else "${metric.value(totals).roundToInt()} ${metric.unit}", style = NoopType.bodyNumber)
-                }
-            }
-            if (todayEntries.isNotEmpty()) Text(
-                "Confirmed entries: ${todayEntries.size} · Values marked ≈ are nutrition estimates.",
-                style = NoopType.footnote,
-                color = Palette.textSecondary,
-            )
-        }
-    }
 
     selectedMetric?.let { NutritionHistoryDialog(it, allEntries) { selectedMetric = null } }
     editing?.let { entry -> FoodEditDialog(entry, { editing = null }) { editing = null; onSave(it) } }

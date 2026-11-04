@@ -1,5 +1,7 @@
 package com.noop.ui
 
+import kotlin.math.roundToInt
+
 import com.noop.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
@@ -61,6 +63,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.noop.ai.AiProvider
 import com.noop.ai.ChatMsg
+import com.noop.ai.CloudCoachClient
 import com.noop.ai.CustomAiAuthHeader
 
 /**
@@ -277,6 +280,7 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
     val sending by vm.sending.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val suggestions by vm.suggestions.collectAsStateWithLifecycle()
+    val pendingNutrition by vm.pendingNutrition.collectAsStateWithLifecycle()
     // K15: the composer draft is persisted to SharedPreferences so it survives an app relaunch.
     // Restored on first composition, saved on every change. Keyed identically to the iOS twin.
     val draftPrefs = remember { context.getSharedPreferences("noop_coach_draft", android.content.Context.MODE_PRIVATE) }
@@ -391,6 +395,13 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                 messages.forEach { msg -> ChatBubble(msg, vm) }
                 if (sending) ThinkingBubble()
                 // K7: follow-up suggestion chips after each assistant reply (when not mid-send).
+                pendingNutrition?.let { estimate ->
+                    NutritionReviewCard(
+                        estimate = estimate,
+                        onSave = { vm.saveNutritionEstimate(context) },
+                        onDismiss = vm::dismissNutritionEstimate,
+                    )
+                }
                 if (!sending && messages.isNotEmpty() && messages.last().role == "assistant") {
                     SuggestedPrompts(prompts = vm.followUpSuggestions, onPick = { input = it })
                 }
@@ -1001,6 +1012,43 @@ private fun MicButton(
             tint = tint,
             modifier = Modifier.size(20.dp),
         )
+    }
+}
+
+@Composable
+private fun NutritionReviewCard(
+    estimate: CloudCoachClient.NutritionEstimate,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    NoopCard(padding = 16.dp, tint = Palette.metricAmber) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Nutrition Review", style = NoopType.title2, color = Palette.textPrimary)
+            Text(estimate.foodName, style = NoopType.body, color = Palette.textPrimary)
+            if (estimate.servingDescription.isNotBlank()) {
+                Text(estimate.servingDescription, style = NoopType.footnote, color = Palette.textSecondary)
+            }
+            Text("≈${estimate.caloriesKcal.roundToInt()} kcal", style = NoopType.chartValueLarge, color = Palette.metricAmber)
+            Text(
+                "Protein ${estimate.proteinGrams?.roundToInt() ?: 0} g · Carbs ${estimate.carbohydrateGrams?.roundToInt() ?: 0} g · Fat ${estimate.fatGrams?.roundToInt() ?: 0} g · Fiber ${estimate.fiberGrams?.roundToInt() ?: 0} g",
+                style = NoopType.footnote,
+                color = Palette.textSecondary,
+            )
+            val low = estimate.minimumCaloriesKcal?.roundToInt()
+            val high = estimate.maximumCaloriesKcal?.roundToInt()
+            if (low != null && high != null) Text(
+                "Estimated range $low–$high kcal · Confidence ${estimate.confidence ?: "not specified"}",
+                style = NoopType.footnote,
+                color = Palette.textSecondary,
+            )
+            estimate.assumptions.takeIf { it.isNotEmpty() }?.let {
+                Text("Assumptions: ${it.joinToString()}", style = NoopType.footnote, color = Palette.textTertiary)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text("DISMISS") }
+                TextButton(onClick = onSave) { Text("SAVE TO CALORIES INTAKE") }
+            }
+        }
     }
 }
 
