@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
@@ -349,13 +350,21 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                     )
                 }
                 if (messages.isNotEmpty()) {
-                    TextButton(onClick = { showClearConfirm = true }) {
-                        Text(
-                            text = "Clear",
-                            style = NoopType.footnote,
-                            color = Palette.statusCritical,
-                        )
-                    }
+                    val clearInteraction = remember { MutableInteractionSource() }
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Clear conversation",
+                        tint = Palette.textSecondary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .liquidPress(clearInteraction)
+                            .clickable(
+                                interactionSource = clearInteraction,
+                                indication = null,
+                            ) { showClearConfirm = true }
+                            .padding(6.dp)
+                            .size(20.dp),
+                    )
                 }
                 Spacer(Modifier.width(8.dp))
                 val settingsInteraction = remember { MutableInteractionSource() }
