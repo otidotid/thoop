@@ -42,7 +42,9 @@ class CloudCoachClient(
     data class Reply(
         val answer: String,
         val conversationId: String,
+        val intent: String = "chat",
         val nutrition: NutritionEstimate? = null,
+        val references: List<String> = emptyList(),
     )
 
     val configured: Boolean get() = baseUrl.startsWith("https://")
@@ -103,7 +105,17 @@ class CloudCoachClient(
                     sources = item.optJSONArray("sources").toStringList(),
                 ).takeIf { it.foodName.isNotBlank() && it.caloriesKcal.isFinite() && it.caloriesKcal >= 0.0 }
             }
-            Reply(answer, json.optString("conversationId", id), nutrition)
+            val intent = json.optString("intent", "chat")
+                .takeIf { it in SUPPORTED_INTENTS }
+                ?: "chat"
+            val references = json.optJSONArray("references").toReferenceList()
+            Reply(
+                answer = answer,
+                conversationId = json.optString("conversationId", id),
+                intent = intent,
+                nutrition = nutrition.takeIf { intent == "food_log" },
+                references = references,
+            )
         }
     }
 
@@ -115,7 +127,18 @@ class CloudCoachClient(
             optString(index).trim().takeIf { it.isNotEmpty() }
         }
 
+    private fun JSONArray?.toReferenceList(): List<String> =
+        if (this == null) emptyList() else (0 until length()).mapNotNull { index ->
+            val item = optJSONObject(index) ?: return@mapNotNull null
+            val source = item.optString("source").trim()
+            val title = item.optString("title").trim()
+            val url = item.optString("url").trim()
+            listOf(source, title, url).filter { it.isNotBlank() }.joinToString(" | ")
+                .takeIf { it.isNotBlank() }
+        }
+
     private companion object {
+        val SUPPORTED_INTENTS = setOf("chat", "food_log", "food_preview", "nutrition_summary")
         val JSON = "application/json; charset=utf-8".toMediaType()
     }
 }

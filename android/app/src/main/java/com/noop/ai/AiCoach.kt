@@ -9,6 +9,8 @@ import com.noop.analytics.SseDeltas
 import com.noop.analytics.SseProvider
 import com.noop.analytics.StressIndex
 import com.noop.data.DailyMetric
+import com.noop.data.FoodIntakeRepository
+import com.noop.data.NutritionTotals
 import com.noop.data.JournalEntry
 import com.noop.data.LabMarkerRow
 import com.noop.data.WhoopRepository
@@ -96,6 +98,10 @@ class AiCoach(
         require(history.isNotEmpty()) { "Ask a question first." }
         require(history.last().role == "user") { "The last message must be your question." }
 
+        val todayNutrition = if (consent) {
+            runCatching { buildTodayNutritionContext(ctx) }.getOrNull()
+        } else null
+
         val healthContext = if (consent) {
             val days = runCatching { repo.daysMerged(activeStrapId()) }.getOrDefault(emptyList())
             val stress = runCatching { stressLineToday() }.getOrNull()
@@ -106,6 +112,7 @@ class AiCoach(
                 if (!workouts.isNullOrBlank()) append("\n\n").append(workouts)
                 if (!stress.isNullOrBlank()) append("\n\n").append(stress)
                 if (!signals.isNullOrBlank()) append("\n\n").append(signals)
+                if (!todayNutrition.isNullOrBlank()) append("\n\n").append(todayNutrition)
             }
         } else {
             NO_CONSENT_NOTE
@@ -275,6 +282,32 @@ class AiCoach(
         }
     }
 
+    private suspend fun buildTodayNutritionContext(ctx: Context): String {
+        val day = java.time.LocalDate.now().toString()
+        val entries = FoodIntakeRepository.get(ctx.applicationContext).entriesForDay(day)
+        if (entries.isEmpty()) {
+            return "TODAY'S CONFIRMED NUTRITION LOG ($day): No confirmed food entries."
+        }
+        val totals = NutritionTotals.from(entries)
+        return buildString {
+            append("TODAY'S CONFIRMED NUTRITION LOG ($day):\n")
+            append("Consumed calories: ${totals.caloriesKcal.roundToInt()} kcal\n")
+            append("Protein: ${totals.proteinGrams.roundToInt()} g\n")
+            append("Carbohydrates: ${totals.carbohydrateGrams.roundToInt()} g\n")
+            append("Fat: ${totals.fatGrams.roundToInt()} g\n")
+            append("Fiber: ${totals.fiberGrams.roundToInt()} g\n")
+            append("Confirmed foods:\n")
+            entries.forEach { entry ->
+                append("- ${entry.foodName}")
+                entry.servingDescription?.takeIf { it.isNotBlank() }?.let { append(", $it") }
+                append("; ${entry.caloriesKcal.roundToInt()} kcal")
+                entry.confidence?.takeIf { it.isNotBlank() }?.let { append("; confidence $it") }
+                append("\n")
+            }
+            append("Use this section for nutrition summaries. Never create a new food log from a question about today's existing food.")
+        }.trim()
+    }
+
     /**
      * Today's derived stress line for the consent-gated coach context. Reads R-R for the local day
      * via [WhoopRepository.rrIntervalsUnion] (the SAME path StressScreen uses) and summarises it with the
@@ -369,15 +402,18 @@ class AiCoach(
         customAuthHeader: CustomAiAuthHeader = CustomAiAuthHeader.BEARER,
         includeSignals: Boolean = false,
     ): String? {
+        // Morning Brief follows the same Cloud Coach route as interactive chat. The provider/model
+        // parameters remain for source compatibility with existing scheduler call sites, but are no
+        // longer used to require a legacy direct-provider API key.
         if (!consent) return null
-        val key = AiKeyStore.read(ctx, provider)
-        if (key == null && provider != AiProvider.CUSTOM) return null
-        if (provider == AiProvider.CUSTOM && (customBaseUrl.isBlank() || model.isBlank())) return null
         return runCatching {
-            val history = listOf(ChatMsg(role = "user", text = BRIEF_INSTRUCTION))
-            chat(ctx, history, provider, model, consent, customBaseUrl, customAuthHeader, includeSignals)
-                .trim()
-                .ifBlank { null }
+            chatCloud(
+                ctx = ctx,
+                history = listOf(ChatMsg(role = "user", text = BRIEF_INSTRUCTION)),
+                conversationId = null,
+                consent = true,
+                includeSignals = includeSignals,
+            ).answer.trim().ifBlank { null }
         }.getOrNull()
     }
 

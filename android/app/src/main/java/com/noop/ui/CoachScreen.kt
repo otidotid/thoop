@@ -348,6 +348,15 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                         color = Palette.textSecondary,
                     )
                 }
+                if (messages.isNotEmpty()) {
+                    TextButton(onClick = { showClearConfirm = true }) {
+                        Text(
+                            text = "Clear",
+                            style = NoopType.footnote,
+                            color = Palette.statusCritical,
+                        )
+                    }
+                }
                 Spacer(Modifier.width(8.dp))
                 val settingsInteraction = remember { MutableInteractionSource() }
                 Icon(

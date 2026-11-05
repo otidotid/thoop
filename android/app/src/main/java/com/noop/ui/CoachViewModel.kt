@@ -494,7 +494,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
                     includeSignals = consentNow && NoopPrefs.coachSignals(appCtx),
                 )
                 cloudConversationId = cloudReply.conversationId
-                _pendingNutrition.value = cloudReply.nutrition
+                _pendingNutrition.value = cloudReply.nutrition.takeIf { cloudReply.intent == "food_log" }
                 accumulated = cloudReply.answer
                 _messages.value = _messages.value.map { msg ->
                     if (msg.id == placeholderId) ChatMsg(id = placeholderId, role = "assistant", text = accumulated)
@@ -639,6 +639,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
      *  persisted table. */
     fun clearConversation() {
         cloudConversationId = null
+        _pendingNutrition.value = null
         _messages.value = emptyList()
         // Goes with the transcript, as in [clearKey] and [disconnect]: a field claiming the empty
         // transcript belongs to some past day would not be true.
@@ -737,7 +738,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
                 conversationDay = LocalDate.now().toEpochDay()
                 persistMessages()
             } else {
-                _briefStatus.value = "Couldn't generate a brief right now — check your key and data access."
+                _briefStatus.value = "Couldn't generate a brief right now — check Cloud Coach and data access."
             }
             _briefGenerating.value = false
         }

@@ -1,4 +1,4 @@
-const WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
 
 export default {
   async fetch(request, env) {
@@ -96,7 +96,10 @@ export default {
       }));
 
       const conversationSummary = cleanText(conversation?.summary, 6000);
-      const nutritionReferences = await lookupNutritionReferences(question);
+      const [nutritionReferences, healthReferences] = await Promise.all([
+        lookupNutritionReferences(question),
+        lookupHealthReferences(question),
+      ]);
       const prompt = buildCoachPrompt({
         systemPrompt,
         healthContext,
@@ -105,9 +108,13 @@ export default {
         recentMessages,
         question,
         nutritionReferences,
+        healthReferences,
       });
 
-      const aiOutput = await callWorkersAI(env, prompt);
+      const aiOutput = await callWorkersAI(env, prompt, question);
+      const nutrition = aiOutput.intent === "food_log"
+        ? await estimateNutritionSafely(env, question, nutritionReferences)
+        : null;
       const answer = cleanText(aiOutput.answer, 16000);
 
       if (!answer) {
@@ -171,7 +178,9 @@ export default {
       return jsonResponse({
         answer,
         conversationId,
-        nutrition: normalizeNutrition(aiOutput.nutrition),
+        intent: normalizeIntent(aiOutput.intent),
+        nutrition,
+        references: healthReferences.items,
       });
     } catch (error) {
       console.error("THOOP Cloud Coach error", error);
@@ -207,9 +216,18 @@ function buildCoachPrompt({
   recentMessages,
   question,
   nutritionReferences,
+  healthReferences,
 }) {
   return [
-    "You are THOOP Cloud Coach.",
+    "You are THOOP Health Coach.",
+    "You are a seasoned, practical coach for health, fitness, recovery, sleep, activity, stress, and nutrition.",
+    "Use the judgment of a deeply experienced coach, but never claim a medical license or diagnose disease.",
+    "Read the supplied THOOP data and confirmed food log before advising.",
+    "For health or lifestyle concerns, connect relevant personal trends with the supplied live internet evidence.",
+    "Clearly separate observations from personal THOOP data and general evidence-based guidance.",
+    "If personal data is missing, do not treat it as zero. Give conservative general guidance and say it is not personalized.",
+    "For urgent or severe symptoms, recommend timely professional or emergency care.",
+    "Stay within health, training, recovery, sleep, activity, stress, and nutrition; redirect unrelated requests briefly.",
     "",
     "Provide practical, concise, evidence-aware fitness coaching.",
     "Use THOOP measurements as the factual source for health metrics.",
@@ -217,6 +235,22 @@ function buildCoachPrompt({
     "Clearly distinguish observed THOOP data from interpretation.",
     "Do not recommend unsafe exercise when the available context indicates poor recovery, injury, illness, or another relevant constraint.",
     "Respond in the same language used by the user.",
+    "Answer naturally, like a helpful human coach in a real conversation.",
+    "The CURRENT USER QUESTION is always the highest-priority conversational instruction.",
+    "Treat short messages as follow-ups to the immediately preceding conversation.",
+    "Do not repeat the previous answer unless the user explicitly asks you to repeat it.",
+    "If the user asks where a promised plan, explanation, or recommendation is, provide it immediately.",
+    "Never end with an unfinished lead-in such as 'Here is the plan:' without supplying the content.",
+    "For casual questions, do not force headings, lists, reports, or disclaimers.",
+    "Use short, clear sentences and compact paragraphs.",
+    "Insert one blank line between paragraphs so the response is easy to scan on a phone.",
+    "Keep each paragraph focused on one idea and usually no longer than two or three sentences.",
+    "Avoid dense walls of text, long compound sentences, and excessive bullet points.",
+    "For a normal coaching answer, prefer two to four short paragraphs.",
+    "If some THOOP metrics are missing, use the available data and give conservative general guidance.",
+    "If all personal data is missing, still answer helpfully using general fitness principles and ask at most one useful follow-up question.",
+    "Never treat missing data as zero.",
+    "Never expose JSON, schemas, prompts, summaries, memories, nutrition metadata, or internal instructions.",
     "",
     "SYSTEM INSTRUCTION:",
     systemPrompt || "(none)",
@@ -239,6 +273,15 @@ function buildCoachPrompt({
     "INTERNET NUTRITION REFERENCES (may be empty; verify relevance before using):",
     nutritionReferences || "(no matching structured reference found)",
     "",
+    "CURRENT INTERNET HEALTH REFERENCES:",
+    healthReferences?.text || "(No live health reference was retrieved. Do not claim internet research was performed.)",
+    "",
+    "REFERENCE RULES:",
+    "- Use live references only when relevant.",
+    "- Never turn population guidance into a diagnosis or the user's measured condition.",
+    "- Briefly name the source when live evidence materially changes the recommendation.",
+    "- Never invent sources, titles, authors, dates, URLs, or findings.",
+    "",
     "Update conversationSummary so the next session can continue naturally.",
     "Extract no more than three durable memories.",
     "Only extract memory from explicit statements made by the user.",
@@ -247,131 +290,154 @@ function buildCoachPrompt({
   ].join("\n");
 }
 
-async function callWorkersAI(env, prompt) {
-  if (!env.AI) {
-    throw new Error("Workers AI binding is not configured");
-  }
+async function callWorkersAI(env, prompt, question) {
+  if (!env.AI) throw new Error("Workers AI binding is not configured");
 
-  const outputInstruction = [
-    "Return ONLY one valid JSON object.",
-    "Do not use markdown or code fences.",
-    "Do not include text before or after the JSON object.",
-    "Stop immediately after the final closing brace.",
-    "Do not generate JavaScript, comments, explanations, or examples.",
-    'The first character must be "{" and the final character must be "}".',
-    "",
-    "Return exactly this structure:",
-    "{",
-    '  "answer": "string",',
-    '  "conversationSummary": "string",',
-    '  "memories": [',
-    "    {",
-    '      "category": "goal | preference | lifestyle | constraint | event | coach_style",',
-    '      "key": "string",',
-    '      "value": "string"',
-    "    }",
-    "  ],",
-    '  "nutrition": null OR {',
-    '    "foodName": "string",',
-    '    "servingDescription": "string",',
-    '    "servingGrams": number or null,',
-    '    "caloriesKcal": number,',
-    '    "minimumCaloriesKcal": number or null,',
-    '    "maximumCaloriesKcal": number or null,',
-    '    "proteinGrams": number or null,',
-    '    "carbohydrateGrams": number or null,',
-    '    "fatGrams": number or null,',
-    '    "fiberGrams": number or null,',
-    '    "confidence": "high | medium | low",',
-    '    "assumptions": ["string"],',
-    '    "sources": ["string"]',
-    "  }",
-    "}",
-    "",
-    "Rules:",
-    "- answer must directly answer the current question.",
-    "- Use the same language as the user.",
-    "- Ground health statements only in the supplied THOOP context.",
-    "- Never invent measurements, diagnoses, or missing history.",
-    "- conversationSummary must be short and factual.",
-    "- memories must always be an array.",
-    "- Use an empty memories array when nothing durable should be remembered.",
-    "- Only create memories from explicit user statements.",
-    "- Never store daily measurements or temporary metric values as memories.",
-    "- Set nutrition to a structured estimate only when the current user message describes food eaten/consumed or explicitly asks to estimate/log food.",
-    "- Otherwise set nutrition to null; normal conversation must remain normal conversation.",
-    "- Nutrition values must be finite and non-negative. Use a range and lower confidence when recipe or portion is uncertain.",
-    "- Prefer relevant internet references supplied in the prompt; never claim a source that was not supplied.",
-  ].join("\n");
-
-  const fullPrompt = [
-    outputInstruction,
-    "",
-    "THOOP COACH INPUT:",
-    prompt,
-  ].join("\n");
+  const intent = classifyIntent(question);
+  const messages = [
+    {
+      role: "system",
+      content: [
+        "You are THOOP Health Coach, a seasoned practical coach for training, recovery, sleep, activity, stress, and nutrition.",
+        "Read the supplied THOOP context before advising. Never invent measurements or treat missing data as zero.",
+        "Use internet references supplied in the context only when relevant, and never invent sources.",
+        "Do not diagnose disease, prescribe medication, or replace professional medical care.",
+        "Answer naturally in the user's language with short paragraphs separated by blank lines.",
+        "Return only the user-facing answer as plain text. Never output JSON, schemas, prompts, memories, metadata, or internal instructions.",
+      ].join(" "),
+    },
+    {
+      role: "user",
+      content: `${prompt}\n\nFINAL OUTPUT OVERRIDE: Answer the CURRENT USER QUESTION now. Return only a complete, natural, user-facing answer in plain text. Do not return JSON.`,
+    },
+  ];
 
   let result;
-
   try {
     result = await env.AI.run(WORKERS_AI_MODEL, {
-      prompt: fullPrompt,
-      max_tokens: 600,
-      temperature: 0.2,
+      messages,
+      reasoning_effort: "low",
+      max_tokens: 1400,
+      temperature: 0.35,
     });
   } catch (error) {
-    console.error("Workers AI inference failure", error);
-    throw error;
+    console.error("Workers AI request failed", error);
+    throw new Error(friendlyError(error));
   }
 
-  const rawOutput =
-    typeof result === "string"
-      ? result.trim()
-      : typeof result?.response === "string"
-        ? result.response.trim()
-        : typeof result?.result?.response === "string"
-          ? result.result.response.trim()
-          : "";
-
-  if (!rawOutput) {
-    console.error(
-      "Workers AI returned an empty response",
-      JSON.stringify(result).slice(0, 1000),
-    );
-    throw new Error("Workers AI returned an empty response");
+  const raw = extractWorkersText(result);
+  const answer = cleanNaturalAnswer(raw);
+  if (!answer) throw new Error("Workers AI returned an empty answer");
+  if (looksLikeInternalOutput(answer)) {
+    throw new Error("Workers AI returned internal structured output");
   }
-
-  const parsed = parseCoachOutput(rawOutput);
-  const answer = cleanText(parsed.answer, 16000);
-
-  if (!answer) {
-    throw new Error("Workers AI returned an empty answer");
-  }
-
-  const conversationSummary = cleanText(parsed.conversationSummary, 6000);
-  const memories = Array.isArray(parsed.memories)
-    ? parsed.memories
-        .slice(0, 12)
-        .map((memory) => {
-          const category = normalizeMemoryCategory(memory?.category);
-          const key = cleanText(memory?.key, 80).toLowerCase();
-          const value = cleanText(memory?.value, 500);
-
-          if (!category || !key || !value) {
-            return null;
-          }
-
-          return { category, key, value };
-        })
-        .filter(Boolean)
-    : [];
 
   return {
+    intent,
     answer,
-    conversationSummary,
-    memories,
-    nutrition: parsed?.nutrition ?? null,
+    conversationSummary: cleanText(answer, 1200),
+    memories: [],
+    nutrition: null,
   };
+}
+
+async function estimateNutritionSafely(env, question, references) {
+  try {
+    const prompt = [
+      "Estimate nutrition for the food the user explicitly said they consumed.",
+      "Return ONLY one JSON object with no markdown and no extra text.",
+      "Use null when a nutrient cannot be reasonably estimated.",
+      "Use a calorie range and lower confidence for mixed dishes or uncertain portions.",
+      "Never claim a source that is not present in the supplied references.",
+      "Required keys: foodName, servingDescription, servingGrams, caloriesKcal, minimumCaloriesKcal, maximumCaloriesKcal, proteinGrams, carbohydrateGrams, fatGrams, fiberGrams, confidence, assumptions, sources.",
+      `USER FOOD STATEMENT: ${cleanText(question, 1000)}`,
+      `STRUCTURED REFERENCES:\n${references || "(none)"}`,
+    ].join("\n\n");
+
+    const result = await env.AI.run(WORKERS_AI_MODEL, {
+      messages: [
+        {
+          role: "system",
+          content: "You are a conservative nutrition estimator. Output only valid JSON for review; never save anything.",
+        },
+        { role: "user", content: prompt },
+      ],
+      reasoning_effort: "low",
+      max_tokens: 900,
+      temperature: 0.15,
+    });
+    const raw = extractWorkersText(result);
+    const parsed = extractFirstJsonObject(raw);
+    return normalizeNutrition(parsed);
+  } catch (error) {
+    console.warn("Nutrition estimate unavailable", String(error));
+    return null;
+  }
+}
+
+function extractFirstJsonObject(raw) {
+  const text = String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try { return JSON.parse(text); } catch (_) {}
+
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (start < 0) {
+      if (character === "{") { start = index; depth = 1; }
+      continue;
+    }
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') { inString = true; continue; }
+    if (character === "{") depth += 1;
+    else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return JSON.parse(text.slice(start, index + 1));
+    }
+  }
+  return null;
+}
+
+function classifyIntent(question) {
+  const text = String(question || "").trim().toLowerCase();
+  if (!text) return "chat";
+
+  const summary = /(makanan|food|nutrisi|nutrition|kalori|calorie|protein|karbo|carb|lemak|fat|serat|fiber).*(hari ini|today|sudah|udah|tercatat|logged)|(?:hari ini|today).*(makanan|food|nutrisi|nutrition|kalori|calorie|protein|karbo|carb|lemak|fat|serat|fiber)/i;
+  if (summary.test(text) || /(makanan saya hari ini gimana|saya sudah makan apa|what did i eat today)/i.test(text)) {
+    return "nutrition_summary";
+  }
+
+  const preview = /(kalau|if|mau|ingin|rencana|plan|boleh|cocok).*(makan|eat|drink|minum)|(?:makan|eat|drink|minum).*(gimana|bagaimana|what if|boleh|cocok)/i;
+  if (preview.test(text)) return "food_preview";
+
+  const log = /(saya|aku|i)\s+(tadi\s+)?(makan|memakan|minum|ate|had|drank)|(?:catat|log|tambahkan|add).*(makan|food|meal|drink)/i;
+  if (log.test(text)) return "food_log";
+
+  return "chat";
+}
+
+function extractWorkersText(result) {
+  if (typeof result === "string") return result;
+  if (typeof result?.response === "string") return result.response;
+  if (typeof result?.result?.response === "string") return result.result.response;
+  if (typeof result?.output_text === "string") return result.output_text;
+  if (Array.isArray(result?.choices)) {
+    const content = result.choices[0]?.message?.content;
+    if (typeof content === "string") return content;
+  }
+  console.error("Unexpected Workers AI response shape", JSON.stringify(result).slice(0, 1200));
+  return "";
+}
+
+function looksLikeInternalOutput(text) {
+  return /conversationSummary|\"memories\"\s*:|\"nutrition\"\s*:|\{\s*\"answer\"|CURRENT USER QUESTION|FINAL OUTPUT OVERRIDE/i.test(text);
 }
 
 function parseCoachOutput(rawOutput) {
@@ -442,15 +508,150 @@ function parseCoachOutput(rawOutput) {
     }
   }
 
-  console.warn(
-    "Workers AI returned non-JSON output; using plain text as answer",
-    text.slice(0, 1000),
-  );
+  const salvaged = salvageAnswer(text);
+  if (salvaged) {
+    console.warn("Workers AI output was malformed; salvaged answer only");
+    return {
+      intent: "chat",
+      answer: salvaged,
+      conversationSummary: "",
+      memories: [],
+      nutrition: null,
+    };
+  }
+  console.error("Workers AI returned invalid structured output", text.slice(0, 1000));
+  throw new Error("Workers AI returned invalid JSON");
+}
 
+function cleanNaturalAnswer(value) {
+  let text = cleanText(value, 16000);
+  if (!text) return "";
+
+  // Some instruct models repeat the outer JSON object inside answer. If answer itself is JSON,
+  // unwrap only its answer field and never expose metadata.
+  if (text.startsWith("{")) {
+    try {
+      const nested = JSON.parse(text);
+      if (typeof nested?.answer === "string") text = nested.answer.trim();
+    } catch (_) {
+      // Continue with boundary sanitization below.
+    }
+  }
+
+  const boundaries = [
+    '\n{"answer"',
+    '\n{\"answer\"',
+    '\n"conversationSummary"',
+    '\n\"conversationSummary\"',
+    '\n"memories"',
+    '\n\"memories\"',
+    '\n"nutrition"',
+    '\n\"nutrition\"',
+  ];
+  for (const boundary of boundaries) {
+    const index = text.indexOf(boundary);
+    if (index > 0) text = text.slice(0, index);
+  }
+
+  text = text
+    .replace(/[,;]?\s*"conversationSummary"\s*:[\s\S]*$/i, "")
+    .replace(/[,;]?\s*"memories"\s*:[\s\S]*$/i, "")
+    .replace(/[,;]?\s*"nutrition"\s*:[\s\S]*$/i, "")
+    .trim();
+
+  if (/conversationSummary|"memories"\s*:|"nutrition"\s*:|\{"answer"/i.test(text)) {
+    throw new Error("Workers AI leaked internal structured fields");
+  }
+  return text;
+}
+
+function salvageAnswer(text) {
+  const source = String(text || "").trim();
+  if (!source) return "";
+
+  const marker = '"answer"';
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) return "";
+  const colonIndex = source.indexOf(":", markerIndex + marker.length);
+  if (colonIndex < 0) return "";
+  const quoteIndex = source.indexOf('"', colonIndex + 1);
+  if (quoteIndex < 0) return "";
+
+  let escaped = false;
+  let value = "";
+  for (let index = quoteIndex + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (escaped) {
+      value += character === "n" ? "\n" : character === "t" ? "\t" : character;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === '"') break;
+    value += character;
+  }
+  return value.trim();
+}
+
+function shouldLookupHealthReferences(question) {
+  const text = String(question || "").toLowerCase();
+  if (!text || text.length < 8) return false;
+  return /(health|healthy|kesehatan|pola hidup|lifestyle|training|latihan|workout|recovery|pemulihan|sleep|tidur|stress|stres|hrv|readiness|charge|fatigue|lelah|capek|nutrition|nutrisi|diet|protein|fiber|serat|calorie|kalori|pain|nyeri|dizzy|pusing|heart|jantung|blood pressure|tekanan darah)/i.test(text);
+}
+
+async function lookupHealthReferences(question) {
+  if (!shouldLookupHealthReferences(question)) return { text: "", items: [] };
+  const query = cleanText(question, 500);
+  const items = [];
+  const lower = query.toLowerCase();
+
+  if (/(training|latihan|workout|activity|aktivitas|sedentary|duduk)/i.test(lower)) {
+    items.push({ source: "World Health Organization", title: "WHO guidelines on physical activity and sedentary behaviour", url: "https://www.who.int/publications/i/item/9789240015128", summary: "Evidence-based public-health guidance on activity frequency, intensity, duration, and sedentary behaviour." });
+  }
+  if (/(nutrition|nutrisi|diet|food|makan|protein|fiber|serat|calorie|kalori)/i.test(lower)) {
+    items.push({ source: "World Health Organization", title: "Healthy diet", url: "https://www.who.int/news-room/fact-sheets/detail/healthy-diet", summary: "Healthy diets are based on adequacy, balance, moderation, diversity, and food safety." });
+  }
+
+  try {
+    const url = new URL("https://www.ebi.ac.uk/europepmc/webservices/rest/search");
+    url.searchParams.set("query", query);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("pageSize", "4");
+    url.searchParams.set("resultType", "core");
+    const response = await fetch(url.toString(), { headers: { "User-Agent": "THOOP-Health-Coach/1.0" }, cf: { cacheTtl: 21600, cacheEverything: true } });
+    if (response.ok) {
+      const payload = await response.json();
+      for (const result of (payload?.resultList?.result || []).slice(0, 4)) {
+        const title = cleanText(result.title, 300);
+        if (!title) continue;
+        const id = cleanText(result.pmid || result.pmcid || result.id, 80);
+        items.push({
+          source: "Europe PMC",
+          title,
+          url: id ? `https://europepmc.org/article/MED/${encodeURIComponent(id)}` : "https://europepmc.org/",
+          summary: cleanText([result.authorString, result.journalTitle, result.pubYear].filter(Boolean).join("; "), 400),
+        });
+      }
+    }
+  } catch (error) {
+    console.warn("Health reference lookup failed", String(error));
+  }
+
+  const selected = [];
+  const seen = new Set();
+  for (const item of items) {
+    const key = `${item.source}|${item.title}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    selected.push(item);
+    if (selected.length >= 6) break;
+  }
   return {
-    answer: text.slice(0, 16000),
-    conversationSummary: "",
-    memories: [],
+    items: selected,
+    text: selected.map((item, index) => `[${index + 1}] ${item.source}: ${item.title}\n${item.summary}\n${item.url}`).join("\n\n"),
   };
 }
 
@@ -496,6 +697,12 @@ async function lookupNutritionReferences(question) {
 function finiteOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function normalizeIntent(value) {
+  return ["chat", "food_log", "food_preview", "nutrition_summary"].includes(value)
+    ? value
+    : "chat";
 }
 
 function normalizeNutrition(value) {
