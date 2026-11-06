@@ -2346,7 +2346,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
                 allEntries = allFood,
                 totalBurnedKcal = totalBurned,
                 onSave = { entry -> foodScope.launch { foodRepo.save(entry); foodRevision++ } },
-                onDelete = { entry -> foodScope.launch { foodRepo.delete(entry.id); foodRevision++ } },
+                onDelete = { entry -> foodScope.launch { foodRepo.delete(entry.id, entry.localDay); foodRevision++ } },
             )
         }
 

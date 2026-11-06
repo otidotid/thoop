@@ -550,6 +550,7 @@ class CoachViewModel(app: Application) : AndroidViewModel(app) {
                     localDay = day,
                     consumedAt = now / 1000L,
                     foodName = estimate.foodName,
+                    mealType = estimate.mealType,
                     servingDescription = estimate.servingDescription.takeIf { it.isNotBlank() },
                     servingGrams = estimate.servingGrams,
                     caloriesKcal = estimate.caloriesKcal,

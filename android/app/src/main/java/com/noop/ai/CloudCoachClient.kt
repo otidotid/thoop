@@ -24,6 +24,7 @@ class CloudCoachClient(
     private val baseUrl: String = BuildConfig.CLOUD_COACH_BASE_URL.trim().trimEnd('/'),
 ) {
     data class NutritionEstimate(
+        val mealType: String,
         val foodName: String,
         val servingDescription: String,
         val servingGrams: Double?,
@@ -65,6 +66,7 @@ class CloudCoachClient(
             .put("userId", CloudCoachIdentity.id(context))
             .put("conversationId", id)
             .put("question", question)
+            .put("localHour", java.time.LocalTime.now().hour)
             .put("healthContext", healthContext)
             .put("systemPrompt", systemPrompt)
             .put("recentMessages", JSONArray().apply {
@@ -90,6 +92,9 @@ class CloudCoachClient(
             check(answer.isNotEmpty()) { "Cloud Coach mengembalikan jawaban kosong." }
             val nutrition = json.optJSONObject("nutrition")?.let { item ->
                 NutritionEstimate(
+                    mealType = normalizeMealType(
+                        item.optString("mealType", json.optString("mealType", "other")),
+                    ),
                     foodName = item.optString("foodName").trim(),
                     servingDescription = item.optString("servingDescription").trim(),
                     servingGrams = item.optDoubleOrNull("servingGrams"),
@@ -119,6 +124,11 @@ class CloudCoachClient(
         }
     }
 
+    private fun normalizeMealType(value: String): String {
+        val normalized = value.trim().lowercase().replace('-', '_').replace(' ', '_')
+        return normalized.takeIf { it in SUPPORTED_MEAL_TYPES } ?: "other"
+    }
+
     private fun JSONObject.optDoubleOrNull(key: String): Double? =
         if (has(key) && !isNull(key)) optDouble(key).takeIf { it.isFinite() } else null
 
@@ -139,6 +149,10 @@ class CloudCoachClient(
 
     private companion object {
         val SUPPORTED_INTENTS = setOf("chat", "food_log", "food_preview", "nutrition_summary")
+        val SUPPORTED_MEAL_TYPES = setOf(
+            "breakfast", "brunch", "lunch", "snack", "afternoon_snack",
+            "dinner", "evening_snack", "late_night_snack", "other",
+        )
         val JSON = "application/json; charset=utf-8".toMediaType()
     }
 }

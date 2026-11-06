@@ -11,6 +11,9 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import java.time.LocalDate
 import java.util.UUID
 
 /** Confirmed nutrition only. Coach drafts remain outside this store until the user saves them. */
@@ -23,6 +26,7 @@ data class FoodIntakeEntry(
     val localDay: String,
     val consumedAt: Long,
     val foodName: String,
+    val mealType: String = "other",
     val servingDescription: String?,
     val servingGrams: Double?,
     val caloriesKcal: Double,
@@ -52,28 +56,44 @@ internal interface FoodIntakeDao {
     suspend fun delete(id: String)
 }
 
-@Database(entities = [FoodIntakeEntry::class], version = 1, exportSchema = false)
+@Database(entities = [FoodIntakeEntry::class], version = 2, exportSchema = false)
 internal abstract class FoodIntakeDatabase : RoomDatabase() {
     abstract fun dao(): FoodIntakeDao
 
     companion object {
         @Volatile private var instance: FoodIntakeDatabase? = null
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE foodIntake ADD COLUMN mealType TEXT NOT NULL DEFAULT 'other'")
+            }
+        }
         fun get(context: Context): FoodIntakeDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     FoodIntakeDatabase::class.java,
                     "thoop_food_intake.db",
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
             }
     }
 }
 
 class FoodIntakeRepository private constructor(private val dao: FoodIntakeDao) {
-    suspend fun save(entry: FoodIntakeEntry) = dao.upsert(entry)
+    suspend fun save(entry: FoodIntakeEntry) {
+        require(FoodLogEditWindow.isEditable(entry.localDay)) { FoodLogEditWindow.LOCKED_MESSAGE }
+        dao.upsert(entry.copy(mealType = normalizeMealType(entry.mealType)))
+    }
     suspend fun entriesForDay(day: String) = dao.entriesForDay(day)
     suspend fun allEntries() = dao.allEntries()
-    suspend fun delete(id: String) = dao.delete(id)
+    suspend fun delete(id: String, localDay: String? = null) {
+        if (localDay != null) require(FoodLogEditWindow.isEditable(localDay)) { FoodLogEditWindow.LOCKED_MESSAGE }
+        dao.delete(id)
+    }
+
+    private fun normalizeMealType(value: String): String {
+        val normalized = value.trim().lowercase().replace('-', '_').replace(' ', '_')
+        return normalized.takeIf { it in MEAL_TYPES } ?: "other"
+    }
 
     companion object {
         @Volatile private var instance: FoodIntakeRepository? = null
@@ -84,6 +104,20 @@ class FoodIntakeRepository private constructor(private val dao: FoodIntakeDao) {
             }
     }
 }
+
+object FoodLogEditWindow {
+    const val LOCKED_MESSAGE = "Food Log can only be changed for today and the previous 6 days."
+
+    fun isEditable(day: String, today: LocalDate = LocalDate.now()): Boolean {
+        val date = runCatching { LocalDate.parse(day) }.getOrNull() ?: return false
+        return !date.isBefore(today.minusDays(6)) && !date.isAfter(today)
+    }
+}
+
+private val MEAL_TYPES = setOf(
+    "breakfast", "brunch", "lunch", "snack", "afternoon_snack",
+    "dinner", "evening_snack", "late_night_snack", "other",
+)
 
 data class NutritionTotals(
     val caloriesKcal: Double = 0.0,

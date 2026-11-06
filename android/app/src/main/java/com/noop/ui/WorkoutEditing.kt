@@ -447,6 +447,10 @@ object WorkoutEditing {
         energyKcal: Double?,
         nowSeconds: Long = System.currentTimeMillis() / 1000L,
         distanceM: Double? = null,
+        title: String? = null,
+        restingHr: Int = 60,
+        maxHr: Int = 190,
+        weightKg: Double = 70.0,
     ): WorkoutRow? {
         val trimmed = sport.trim()
         if (trimmed.isEmpty() || startSeconds <= 0 || startSeconds > nowSeconds) return null
@@ -460,6 +464,13 @@ object WorkoutEditing {
         // Distance 0-1000 km (#1195): rejects a negative or absurd manual entry. 1000 km comfortably
         // covers any single session (an Ironman bike is 180 km, an ultra 160 km).
         if (distanceM != null && (distanceM < 0 || distanceM > 1_000_000)) return null
+        val resolvedHr = avgHr ?: WorkoutMetricResolver.estimateAverageHr(
+            sport = trimmed, restingHr = restingHr, maxHr = maxHr,
+        )
+        val resolvedCalories = energyKcal ?: WorkoutMetricResolver.estimateCalories(
+            sport = trimmed, durationSeconds = spanSeconds, weightKg = weightKg,
+        )
+        val cleanTitle = title?.trim()?.take(120).orEmpty()
         return WorkoutRow(
             deviceId = deviceId,
             startTs = startSeconds,
@@ -467,13 +478,17 @@ object WorkoutEditing {
             sport = trimmed,
             source = "manual",
             durationS = spanSeconds.toDouble(),
-            energyKcal = energyKcal,
-            avgHr = avgHr,
+            energyKcal = resolvedCalories,
+            avgHr = resolvedHr,
             maxHr = null,
+            notes = listOfNotNull(
+                cleanTitle.takeIf { it.isNotEmpty() }?.let { "title=$it" },
+                if (avgHr == null) "avgHrSource=estimated" else "avgHrSource=manual",
+                if (energyKcal == null) "caloriesSource=estimated" else "caloriesSource=manual",
+            ).joinToString(";").takeIf { it.isNotEmpty() },
             strain = null,
             distanceM = distanceM,
             zonesJSON = null,
-            notes = null,
             routePolyline = null,
         )
     }
@@ -661,3 +676,40 @@ object WorkoutMerge {
         )
     }
 }
+
+
+/** Deterministic fallback used only when a workout has no source/manual metric. */
+internal object WorkoutMetricResolver {
+    fun estimateAverageHr(sport: String, restingHr: Int, maxHr: Int): Int {
+        val factor = when {
+            sport.contains("stretch", true) || sport.contains("mobility", true) -> 0.25
+            sport.contains("walk", true) -> 0.38
+            sport.contains("strength", true) || sport.contains("weight", true) -> 0.50
+            sport.contains("run", true) || sport.contains("treadmill", true) -> 0.65
+            sport.contains("interval", true) || sport.contains("hiit", true) -> 0.78
+            else -> 0.45
+        }
+        return (restingHr + factor * (maxHr.coerceAtLeast(restingHr + 20) - restingHr)).toInt().coerceIn(30, 240)
+    }
+
+    fun estimateCalories(sport: String, durationSeconds: Long, weightKg: Double): Double {
+        val met = when {
+            sport.contains("stretch", true) || sport.contains("mobility", true) -> 2.5
+            sport.contains("walk", true) -> 3.8
+            sport.contains("strength", true) || sport.contains("weight", true) -> 5.0
+            sport.contains("run", true) || sport.contains("treadmill", true) -> 8.3
+            sport.contains("interval", true) || sport.contains("hiit", true) -> 9.0
+            sport.contains("cycle", true) || sport.contains("bike", true) -> 7.0
+            else -> 4.5
+        }
+        val minutes = durationSeconds.coerceAtLeast(60) / 60.0
+        return (met * 3.5 * weightKg.coerceIn(35.0, 250.0) / 200.0 * minutes).coerceIn(1.0, 20_000.0)
+    }
+}
+
+internal fun WorkoutRow.manualTitle(): String? = notes
+    ?.split(';')
+    ?.firstOrNull { it.startsWith("title=") }
+    ?.removePrefix("title=")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
