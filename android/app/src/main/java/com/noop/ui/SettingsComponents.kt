@@ -23,6 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,27 +103,65 @@ internal fun SettingsDisclosureGroup(
  * A grouped settings card: a "Settings" overline + icon + title header, an explanatory blurb, then
  * content. A faint brand-green wash anchors the card to NOOP's neutral chrome (mirrors macOS).
  */
+private object SettingsAccordionState {
+    var expandedTitle by mutableStateOf<String?>(null)
+}
+
 @Composable
 internal fun SettingsCard(
     icon: ImageVector,
     title: String,
     blurb: String,
+    collapsible: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val expanded = !collapsible || SettingsAccordionState.expandedTitle == title
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 0f else -90f,
+        label = "settings-card-chevron",
+    )
+    val interaction = remember { MutableInteractionSource() }
     NoopCard(padding = 20.dp, tint = Palette.accent) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (expanded) 16.dp else 0.dp)) {
+            Column(
+                modifier = if (collapsible) {
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null,
+                        ) {
+                            SettingsAccordionState.expandedTitle = if (expanded) null else title
+                        }
+                        .semantics {
+                            stateDescription = if (expanded) "Expanded" else "Collapsed"
+                            contentDescription = "$title settings, ${if (expanded) "expanded" else "collapsed"}"
+                        }
+                        .padding(vertical = 2.dp)
+                } else Modifier,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Overline("Settings")
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Icon(icon, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(18.dp))
-                    Text(title, style = NoopType.title2, color = Palette.textPrimary)
+                    Text(title, style = NoopType.title2, color = Palette.textPrimary, modifier = Modifier.weight(1f))
+                    if (collapsible) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Palette.textTertiary,
+                            modifier = Modifier.size(22.dp).rotate(chevronRotation),
+                        )
+                    }
                 }
+                Text(blurb, style = NoopType.subhead, color = Palette.textSecondary)
             }
-            Text(blurb, style = NoopType.subhead, color = Palette.textSecondary)
-            content()
+            if (expanded) content()
         }
     }
 }

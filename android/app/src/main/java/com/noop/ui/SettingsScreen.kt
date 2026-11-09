@@ -1001,6 +1001,7 @@ fun SettingsScreen(
         }
 
         SettingsCard(
+            collapsible = true,
             icon = Icons.Outlined.AccountCircle,
             title = uiString(R.string.l10n_settings_screen_profile_photo_33f385bb),
             blurb = "Optional. Add a photo for the avatar in the top-left. Stored only on this phone. NOOP is offline, so it's never uploaded.",
@@ -1046,6 +1047,7 @@ fun SettingsScreen(
 
         // --- Profile ---
         SettingsCard(
+            collapsible = true,
             icon = Icons.Outlined.Person,
             title = uiString(R.string.l10n_settings_screen_profile_ff4fc027),
             blurb = "These power your heart-rate zones, calorie estimates and recovery baselines. Keep them accurate.",
@@ -1428,6 +1430,7 @@ fun SettingsScreen(
 
         // --- Daily cycle ---
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Autorenew,
             title = uiString(R.string.settings_day_cycle_title),
             blurb = uiString(R.string.settings_day_cycle_description),
@@ -1462,6 +1465,7 @@ fun SettingsScreen(
         // --- Units ---
         // Independent body and exercise-distance choices plus temperature/effort overrides. Display-only.
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Straighten,
             title = uiString(R.string.l10n_settings_screen_units_12748281),
             blurb = uiString(R.string.units_settings_blurb),
@@ -1602,6 +1606,7 @@ fun SettingsScreen(
 
         // --- Appearance (Theme) ---
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Brightness6,
             title = uiString(R.string.l10n_settings_screen_appearance_41def7a0),
             blurb = uiString(R.string.settings_appearance_detail),
@@ -2022,6 +2027,7 @@ fun SettingsScreen(
         // other two had nowhere to go. Grouped, the size and transparency read as what they are: choices
         // about the same bar the toggles above them move and hide.
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.ViewAgenda,
             title = uiString(R.string.l10n_settings_screen_bottom_bar_f84098a9),
             blurb = uiString(R.string.l10n_settings_screen_how_the_navigation_bar_looks_f186b099),
@@ -2198,6 +2204,7 @@ fun SettingsScreen(
         // out of the .noopbak backup like the avatar. Reads BackgroundImageStore snapshot state, so the
         // controls + the live backdrop update the instant an image is set, removed, or re-scaled.
         SettingsCard(
+            collapsible = true,
             icon = Icons.Outlined.Image,
             title = "Background image",
             blurb = "Optional. Use your own photo behind every tab, in place of the day-cycle sky. " +
@@ -2305,6 +2312,7 @@ fun SettingsScreen(
         // swap is done by enabling exactly one <activity-alias> (.IconDefault / .IconNavy) at runtime;
         // the launcher may take a beat (or briefly disappear/redraw) while it re-reads the icon.
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Palette,
             title = uiString(R.string.l10n_settings_screen_app_icon_abde7a74),
             blurb = "Choose how NOOP looks on your home screen. The launcher may take a moment to refresh the icon after you change it.",
@@ -2324,6 +2332,7 @@ fun SettingsScreen(
 
         // --- Strap ---
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Sensors,
             title = uiString(R.string.l10n_settings_screen_strap_02b88eeb),
             blurb = "NOOP pairs directly with your WHOOP over Bluetooth: no WHOOP app, no cloud.",
@@ -2982,6 +2991,7 @@ fun SettingsScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(Metrics.screenRowSpacing)) {
                 SettingsCard(
+                    collapsible = true,
                     icon = Icons.Filled.CloudSync,
                     title = uiString(R.string.nav_self_hosted_push),
                     blurb = uiString(R.string.push_settings_row_detail),
@@ -2999,6 +3009,7 @@ fun SettingsScreen(
                 // the compatibility transition, but never render a second copy in everyday Settings.
                 if (false && showFiveMGControls) {
                     SettingsCard(
+                        collapsible = true,
                         icon = Icons.Filled.Science,
                         title = uiString(R.string.l10n_settings_screen_experimental_whoop_5_mg_41ef7041),
                         blurb = "Normal WHOOP 5/MG recording and history sync are supported. These remaining controls are developer experiments for unmapped protocol features; they are not required for everyday use.",
@@ -3410,6 +3421,7 @@ fun SettingsScreen(
                 // --- Diagnostics (every model) --- the raw-sensor CSV export is split out of the 5/MG card so it
                 // stays available on a WHOOP 4.0 too (#22): a 4.0 owner still needs it to share decoded streams.
                 SettingsCard(
+                    collapsible = true,
                     icon = Icons.Filled.Science,
                     title = uiString(R.string.l10n_settings_screen_diagnostics_3af2279f),
                     blurb = "A read-only export of the decoded sensor streams NOOP already stores. Works on any strap. Nothing is written to your device, and nothing is uploaded.",
@@ -3647,6 +3659,7 @@ fun SettingsScreen(
 
         // --- Health & wellness (v5 opt-in toggles) ---
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Science,
             title = uiString(R.string.l10n_settings_screen_health_wellness_93475778),
             blurb = "Optional, on-device wellness signals. Each is off by default, computed only on this phone from data you already have, and never a medical diagnosis.",
@@ -3810,6 +3823,7 @@ fun SettingsScreen(
         // section 7). The strap log, recalibrate, scheduled export and experimental toggles also live there
         // on the same bindings, so this is a faster door to the full set without growing this screen.
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.BugReport,
             title = uiString(R.string.l10n_settings_screen_test_centre_37b36828),
             blurb = "Turn on a test for the thing that's wrong, wear the strap, then tap Report. Your strap log, recalibrate, scheduled export and experimental probes all live here too.",
@@ -3831,6 +3845,7 @@ fun SettingsScreen(
         // and noop.recoveryBaselineEpoch (so HRV plus resting HR / respiration / skin temp re-anchor);
         // foldHistory drops every night before that epoch and re-seeds. Mirrors the iOS/Mac button.
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Favorite,
             title = uiString(R.string.l10n_settings_screen_charge_d4e1aee4),
             blurb = "Charge is NOOP's daily readiness score, learned from your own HRV, resting heart rate and more over time. Your history stays.",
@@ -4021,6 +4036,7 @@ fun SettingsScreen(
 
         // --- Unified Backup & History ---
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.CloudSync,
             title = "Backup & History",
             blurb = "Google Drive and Local Folder now live together. Create complete backups, restore everything, and browse verified history read-only.",
@@ -4036,6 +4052,7 @@ fun SettingsScreen(
 
         // --- About ---
         SettingsCard(
+            collapsible = true,
             icon = Icons.Filled.Info,
             title = uiString(R.string.l10n_settings_screen_about_6b21fb79),
             blurb = "NOOP: all your data, none of the cloud.",
