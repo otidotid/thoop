@@ -4019,99 +4019,14 @@ fun SettingsScreen(
             )
         }
 
-        SettingsCard(
-            icon = Icons.Filled.Storage,
-            title = uiString(R.string.l10n_settings_screen_backup_restore_a1616284),
-            blurb = "Move all your NOOP data to another phone. Export saves everything (history, sleeps, workouts, settings) to a single file you can copy across; import replaces this phone's data with a backup.",
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Three equal-width buttons share the row (each takes a third via weight) — mirrors the
-                // iOS Backup card's three fullWidth NoopButtonStyle buttons. The busy spinner sits BELOW
-                // the row (not inside it) so it never steals a button's share of the width.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    NoopButton(
-                        text = uiString(R.string.l10n_settings_screen_export_0a116345),
-                        kind = NoopButtonKind.Primary,
-                        enabled = !backupBusy,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            backupBusy = true
-                            exportLauncher.launch("noop-backup-${java.time.LocalDate.now()}.noopbak")
-                        },
-                    )
-
-                    NoopButton(
-                        text = uiString(R.string.l10n_settings_screen_import_4834caf8),
-                        kind = NoopButtonKind.Secondary,
-                        enabled = !backupBusy,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            backupBusy = true
-                            importLauncher.launch(arrayOf("*/*"))
-                        },
-                    )
-
-                    NoopButton(
-                        text = uiString(R.string.l10n_settings_screen_export_csv_6bce63a3),
-                        kind = NoopButtonKind.Secondary,
-                        enabled = !backupBusy,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            backupBusy = true
-                            csvExportLauncher.launch("noop-export-${java.time.LocalDate.now()}.zip")
-                        },
-                    )
-                }
-
-                if (backupBusy) {
-                    NoopBusyRow()
-                }
-
-                SettingsNoteRow(
-                    icon = Icons.Filled.Info,
-                    iconTint = Palette.textTertiary,
-                    text = uiString(R.string.l10n_settings_screen_importing_overwrites_everything_currently_on_this_297b76ae),
-                )
-
-                // #644: .noopbak is a plain ZIP, not an encrypted container — anyone who gets the file
-                // can open it in any archive tool. Surface that plainly, right next to the Export
-                // button, rather than let people assume the file itself is protected once it leaves
-                // the device (e.g. dropped into a cloud-synced folder).
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics(mergeDescendants = true) {},
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.Warning,
-                        contentDescription = null,
-                        tint = Palette.statusWarning,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        uiString(R.string.l10n_settings_screen_this_is_a_plain_unencrypted_archive_b0dfe63d),
-                        style = NoopType.caption,
-                        color = Palette.statusWarning,
-                    )
-                }
-            }
-        }
-
-        // --- Automatic backups ---
-        // Discoverability signpost: the daily-backup toggle, folder picker and keep-count live on the
-        // separate Backup & Sync screen; surface an entry here, right under the one-off Backup & restore,
-        // since that's where a user looks for "turn on automatic backups".
+        // --- Unified Backup & History ---
         SettingsCard(
             icon = Icons.Filled.CloudSync,
-            title = uiString(R.string.l10n_settings_screen_automatic_backups_8a772f3c),
-            blurb = "Have NOOP save a dated backup to a folder every day (around 1am) and keep the last several - so if data ever corrupts, restore the newest. Point the folder at Drive/Dropbox for off-device copies. Off until you switch it on.",
+            title = "Backup & History",
+            blurb = "Google Drive and Local Folder now live together. Create complete backups, restore everything, and browse verified history read-only.",
         ) {
             NoopButton(
-                text = uiString(R.string.l10n_settings_screen_set_up_automatic_backups_00b4780c),
+                text = "Open Backup & History",
                 leadingIcon = Icons.Filled.CloudSync,
                 kind = NoopButtonKind.Primary,
                 fullWidth = true,

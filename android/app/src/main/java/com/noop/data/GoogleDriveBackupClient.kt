@@ -71,6 +71,18 @@ internal class GoogleDriveBackupClient(
             uploaded
         }
 
+    suspend fun uploadArchive(
+        accessToken: String,
+        archive: File,
+        ownerId: String,
+        month: String,
+        recordCount: Long,
+        schemaVersion: Int,
+    ): RemoteBackup = uploadObject(
+        accessToken, archive, ownerId, "thoop-archive-$month.nooparc", ARCHIVE_KIND,
+        mapOf("month" to month, "recordCount" to recordCount.toString(), "schemaVersion" to schemaVersion.toString()),
+    )
+
     suspend fun list(accessToken: String, ownerId: String): List<RemoteBackup> =
         withContext(Dispatchers.IO) {
             val query = "'$APP_DATA_FOLDER' in parents and trashed = false " +
@@ -104,6 +116,36 @@ internal class GoogleDriveBackupClient(
                 destination.outputStream().use { output -> body.byteStream().copyTo(output) }
             }
         }
+
+    private suspend fun uploadObject(
+        accessToken: String,
+        file: File,
+        ownerId: String,
+        name: String,
+        kind: String,
+        extra: Map<String, String>,
+    ): RemoteBackup = withContext(Dispatchers.IO) {
+        val checksum = sha256(file)
+        val properties = JSONObject().put("kind", kind).put("ownerId", ownerId)
+            .put("createdAtMs", System.currentTimeMillis().toString()).put("sha256", checksum)
+        extra.forEach(properties::put)
+        val metadata = JSONObject().put("name", name).put("parents", JSONArray().put(APP_DATA_FOLDER))
+            .put("appProperties", properties)
+        val start = Request.Builder().url(UPLOAD_ENDPOINT).header("Authorization", "Bearer $accessToken")
+            .header("X-Upload-Content-Type", BACKUP_MIME).header("X-Upload-Content-Length", file.length().toString())
+            .post(metadata.toString().toRequestBody(JSON_MEDIA)).build()
+        val location = http.newCall(start).execute().use { response ->
+            if (!response.isSuccessful) throw driveError("start archive upload", response.code, response.body?.string())
+            response.header("Location") ?: throw IOException("Google Drive did not return an archive upload location.")
+        }
+        val request = Request.Builder().url(location).header("Authorization", "Bearer $accessToken")
+            .put(file.asRequestBody(BACKUP_MEDIA)).build()
+        http.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw driveError("upload archive", response.code, body)
+            parseBackup(JSONObject(body))
+        }
+    }
 
     private suspend fun prune(accessToken: String, ownerId: String) {
         list(accessToken, ownerId).drop(MAX_BACKUPS).forEach { old ->
@@ -139,6 +181,7 @@ internal class GoogleDriveBackupClient(
     companion object {
         private const val APP_DATA_FOLDER = "appDataFolder"
         private const val BACKUP_KIND = "thoop_full_backup_v1"
+        private const val ARCHIVE_KIND = "thoop_monthly_archive_v1"
         private const val BACKUP_MIME = "application/vnd.otidotid.thoop-backup"
         private const val MAX_BACKUPS = 3
         private const val UPLOAD_ENDPOINT =

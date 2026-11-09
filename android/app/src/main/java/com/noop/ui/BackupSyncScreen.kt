@@ -162,17 +162,19 @@ fun BackupSyncScreen() {
     }
 
     LazyScreenScaffold(
-        title = uiString(R.string.l10n_backup_sync_screen_backup_sync_81758ffa),
-        subtitle = "Save a full backup to a folder you choose - point it at Google Drive / Dropbox for off-device sync.",
+        title = "Backup & History",
+        subtitle = "Choose Google Drive or a local folder. Both create a complete backup of THOOP data and settings.",
     ) {
-        // 1 · Destination folder
+        item { GoogleAccountCard() }
+
+        // Local Folder: full backup and restore through Android's folder picker.
         item {
             NoopCard(padding = 20.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(uiString(R.string.l10n_backup_sync_screen_backup_folder_2a33df93), style = NoopType.headline, color = Palette.textPrimary)
+                    Text("Local Folder", style = NoopType.headline, color = Palette.textPrimary)
                     Text(
                         treeUri?.let { "Saving to: ${folderLabel(it)}" }
-                            ?: "No folder chosen yet. Pick one your cloud app already syncs, or any local folder.",
+                            ?: "No folder chosen. Pick any folder on this phone or removable storage.",
                         style = NoopType.footnote, color = Palette.textTertiary,
                     )
                     Text(

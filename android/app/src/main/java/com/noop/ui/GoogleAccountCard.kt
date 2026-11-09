@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.noop.data.GoogleDriveBackupClient
 import com.noop.data.GoogleDriveBackupCoordinator
+import com.noop.data.GoogleDriveArchiveManager
 import com.noop.data.DataBackup
 import com.noop.data.CloudBackupCadence
 import com.noop.data.CloudBackupSchedule
@@ -28,6 +29,7 @@ import com.noop.data.GoogleCloudBackupScheduler
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import java.time.YearMonth
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,6 +47,9 @@ internal fun GoogleAccountCard() {
 
     val backupCoordinator = remember(context) {
         GoogleDriveBackupCoordinator(context.applicationContext)
+    }
+    val archiveManager = remember(context) {
+        GoogleDriveArchiveManager(context.applicationContext)
     }
 
     val scope = rememberCoroutineScope()
@@ -101,6 +106,9 @@ internal fun GoogleAccountCard() {
     var showPostLoginRestorePrompt by remember {
         mutableStateOf(false)
     }
+    var archiveRecords by remember { mutableStateOf(archiveManager.archives()) }
+    var archivePreview by remember { mutableStateOf<GoogleDriveArchiveManager.ArchivePreview?>(null) }
+    var showArchiveBrowser by remember { mutableStateOf(false) }
 
     val cloudSchedulePreferences = remember(context) {
         GoogleCloudBackupPreferences(context.applicationContext)
@@ -216,6 +224,25 @@ internal fun GoogleAccountCard() {
         )
     }
 
+    archivePreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = { archivePreview = null },
+            title = { Text("Archived History · ${preview.record.month}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    Text("Read-only preview", style = NoopType.subhead, color = Palette.accent)
+                    Text("Total records: ${preview.totalRecords}", style = NoopType.body, color = Palette.textPrimary)
+                    Text("Schema: ${preview.record.schemaVersion} · SHA-256 verified", style = NoopType.footnote, color = Palette.textSecondary)
+                    preview.tableCounts.entries.filter { it.value > 0 }.take(12).forEach { row ->
+                        Text("${row.key}: ${row.value}", style = NoopType.footnote, color = Palette.textSecondary)
+                    }
+                    Text("The temporary archive cache is removed when this preview closes.", style = NoopType.caption, color = Palette.textTertiary)
+                }
+            },
+            confirmButton = { TextButton(onClick = { archivePreview = null }) { Text("Close") } },
+        )
+    }
+
     pendingRestore?.let { backup ->
         AlertDialog(
             onDismissRequest = { if (!driveBusy) pendingRestore = null },
@@ -264,9 +291,8 @@ internal fun GoogleAccountCard() {
 
     SettingsCard(
         icon = Icons.Filled.AccountCircle,
-        title = "Google Account",
-        blurb = "Sign in to identify your THOOP account. " +
-                "Health data remains on this device.",
+        title = "Google Drive",
+        blurb = "Sign in for verified full backup, full restore on a new phone, and read-only archived history.",
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(Metrics.space12),
@@ -344,6 +370,81 @@ internal fun GoogleAccountCard() {
                 )
             }
 
+            if (driveAuthorized && currentAccount != null) {
+                NoopButton(
+                    text = if (driveBusy) "Working with Google Drive..." else "Create & Verify Archives",
+                    fullWidth = true,
+                    enabled = !driveBusy && !busy,
+                    onClick = {
+                        val token = driveAccessToken
+                        if (token == null) {
+                            errorMessage = "Google Drive authorization expired. Connect Google Drive again."
+                        } else {
+                            driveBusy = true
+                            errorMessage = null
+                            scope.launch {
+                                runCatching { archiveManager.createAndVerifyArchives(token, currentAccount.accountId) }
+                                    .onSuccess { created ->
+                                        archiveRecords = archiveManager.archives()
+                                        backupStatus = if (created.isEmpty()) {
+                                            "All eligible monthly archives are already verified. Local data was kept."
+                                        } else {
+                                            "Created and verified ${created.size} monthly archive(s). Local data was kept."
+                                        }
+                                    }
+                                    .onFailure { failure ->
+                                        errorMessage = "Archive verification could not finish. Local data was kept. " +
+                                            (failure.message?.substringBefore("/data/")?.trim()?.take(160)
+                                                ?: "Try again after restarting THOOP.")
+                                    }
+                                driveBusy = false
+                            }
+                        }
+                    },
+                )
+                NoopButton(
+                    text = "Browse Archived History",
+                    kind = NoopButtonKind.Secondary,
+                    fullWidth = true,
+                    enabled = !driveBusy,
+                    onClick = { archiveRecords = archiveManager.archives(); showArchiveBrowser = !showArchiveBrowser },
+                )
+                if (showArchiveBrowser) {
+                    if (archiveRecords.isEmpty()) {
+                        Text("No verified monthly archives yet.", style = NoopType.footnote, color = Palette.textSecondary)
+                    } else {
+                        archiveRecords.sortedByDescending { it.month }.forEach { archive ->
+                            NoopButton(
+                                text = "${archive.month} · ${archive.recordCount} records · Verified",
+                                kind = NoopButtonKind.Tertiary,
+                                fullWidth = true,
+                                enabled = !driveBusy,
+                                onClick = {
+                                    val token = driveAccessToken
+                                    if (token == null) {
+                                        errorMessage = "Internet connection and Google Drive authorization are required."
+                                    } else {
+                                        driveBusy = true
+                                        scope.launch {
+                                            runCatching { archiveManager.previewMonthOnline(token, YearMonth.parse(archive.month)) }
+                                                .onSuccess { archivePreview = it }
+                                                .onFailure { failure ->
+                                                    errorMessage = "Archived history could not be opened. Check the internet connection and try again."
+                                                }
+                                            driveBusy = false
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "The latest 90 days stay offline. Create & Verify never deletes local data. Older archives open read-only from private Google Drive app data.",
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
+                )
+            }
             errorMessage?.let { message ->
                 Text(
                     text = message,
