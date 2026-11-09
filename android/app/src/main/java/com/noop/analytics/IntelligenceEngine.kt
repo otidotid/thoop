@@ -43,16 +43,19 @@ import kotlinx.coroutines.withContext
  */
 object IntelligenceEngine {
 
+    /** Normal morning analysis window. Full-history repair remains explicit at 4,000 days. */
+    const val NORMAL_ANALYSIS_DAYS: Int = 7
+
     /**
      * Serialises [analyzeRecent] against itself. The pass is launched from four independent coroutines: the
      * 15-min backstop loop and rescoreAfterEdit (both AppViewModel), the post-offload analyze
      * (WhoopBleClient), plus the shared one-shot Effort/sleep-history repair. These can overlap:
-     * two parallel 21-night passes double the CPU/battery AND race the #899 self-heal, whose concurrent
+     * two parallel 7-night passes double the CPU/battery AND race the #899 self-heal, whose concurrent
      * overlapping-session deletes can pick different survivors. This mirrors the intent of the Swift
      * `computing` guard, but SERIALISES rather than coalesces on purpose: Android's callers pass
-     * heterogeneous windows , the history repair uses maxDays=4000, not 21, and can overlap the *independent*
+     * heterogeneous windows , the history repair uses maxDays=4000, not 7, and can overlap the *independent*
      * BLE-offload analyze. A drop-guard would skip that full-history rescore while its unconditional flagSet
-     * marks it permanently done, and would re-run the holder's 21-day window in its place. withLock lets
+     * marks it permanently done, and would re-run the holder's 7-day window in its place. withLock lets
      * every caller run its OWN pass, queued and never parallel, so nothing is dropped and no window is
      * silently lost. Suspending (not thread-blocking) and cancellation-cooperative, matching the callers'
      * #125 CancellationException handling. No re-entrancy: nothing analyzeRecent calls re-enters it
@@ -386,7 +389,7 @@ object IntelligenceEngine {
      * @param repo the local store.
      * @param profile body profile (age/sex/weight/height + HRmax override) for HRmax,
      *   zones, calories. Defaults to a neutral [UserProfile] when the caller has none.
-     * @param maxDays number of trailing days to consider (default 21).
+     * @param maxDays number of trailing days to consider (default 7).
      * @param importedDeviceId the source id the raw strap data is stored under
      *   ("my-whoop"). Computed scores are written under "<importedDeviceId>-noop".
      * @param maxHROverride explicit HRmax (bpm); null → Tanaka from profile.age.
@@ -396,14 +399,14 @@ object IntelligenceEngine {
     /**
      * Public entry: hop OFF the caller's thread before the CPU-heavy scoring. The AppViewModel 15-min
      * loop launches from viewModelScope (Dispatchers.Main), so without this hop the whole pass —
-     * SleepStager / StrainScorer over up to 21 nights of 1 Hz data , ran on the MAIN THREAD and
+     * SleepStager / StrainScorer over up to 7 nights of 1 Hz data , ran on the MAIN THREAD and
      * ANR-killed the app once a few nights had accumulated. Dispatchers.Default is the CPU pool; Room's
      * suspend DAO calls are main-safe under any dispatcher. (#125)
      */
     suspend fun analyzeRecent(
         repo: WhoopRepository,
         profile: UserProfile = UserProfile(),
-        maxDays: Int = 21,
+        maxDays: Int = NORMAL_ANALYSIS_DAYS,
         importedDeviceId: String = "my-whoop",
         maxHROverride: Double? = null,
         nowSeconds: Long = System.currentTimeMillis() / 1000L,
@@ -622,7 +625,7 @@ object IntelligenceEngine {
     private suspend fun analyzeRecentOnCpu(
         repo: WhoopRepository,
         profile: UserProfile = UserProfile(),
-        maxDays: Int = 21,
+        maxDays: Int = NORMAL_ANALYSIS_DAYS,
         importedDeviceId: String = "my-whoop",
         maxHROverride: Double? = null,
         nowSeconds: Long = System.currentTimeMillis() / 1000L,
@@ -1007,7 +1010,7 @@ object IntelligenceEngine {
             // few rows is never scored, so it emits no line, byte-identical to the iOS behaviour.
             // #1575: the same per-day collection shape for the three PER-DAY trace channels. Until now an
             // active sleep/HRV/steps trace disabled the reuse cache outright, because a reused night would
-            // not re-emit those lines — so turning on a diagnostic cost a full 21-day re-read + re-score on
+            // not re-emit those lines — so turning on a diagnostic cost a full 7-day re-read + re-score on
             // every pass. Recording them per day makes a reused night replay its trace exactly like it
             // already replays [dayDiagLines], and the diagnostic stops costing what it was measuring.
             // Allocated AFTER the cache-hit `continue` above: a reused day replays from its cached
