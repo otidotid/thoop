@@ -12,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /** Drive REST operations limited to THOOP's private appDataFolder. Access tokens are never stored. */
@@ -22,7 +23,13 @@ internal class GoogleDriveBackupClient(
         .writeTimeout(120, TimeUnit.SECONDS)
         .build(),
 ) {
-    data class RemoteBackup(val id: String, val name: String, val createdTime: String, val sizeBytes: Long)
+    data class RemoteBackup(
+        val id: String,
+        val name: String,
+        val createdTime: String,
+        val sizeBytes: Long,
+        val sha256: String? = null,
+    )
 
     suspend fun upload(accessToken: String, backup: File, ownerId: String): RemoteBackup =
         withContext(Dispatchers.IO) {
@@ -31,13 +38,15 @@ internal class GoogleDriveBackupClient(
             require(backup.isFile && backup.length() > 0L) { "THOOP backup file is empty." }
 
             val createdAt = System.currentTimeMillis()
+            val sha256 = sha256(backup)
             val metadata = JSONObject()
                 .put("name", "thoop-backup-$createdAt.noopbak")
                 .put("parents", JSONArray().put(APP_DATA_FOLDER))
                 .put("appProperties", JSONObject()
                     .put("kind", BACKUP_KIND)
                     .put("ownerId", ownerId)
-                    .put("createdAtMs", createdAt.toString()))
+                    .put("createdAtMs", createdAt.toString())
+                    .put("sha256", sha256))
 
             val start = Request.Builder()
                 .url(UPLOAD_ENDPOINT)
@@ -73,7 +82,7 @@ internal class GoogleDriveBackupClient(
                 .addQueryParameter("q", query)
                 .addQueryParameter("orderBy", "createdTime desc")
                 .addQueryParameter("pageSize", "10")
-                .addQueryParameter("fields", "files(id,name,createdTime,size)").build()
+                .addQueryParameter("fields", "files(id,name,createdTime,size,appProperties)").build()
             val request = Request.Builder().url(url).header("Authorization", "Bearer $accessToken").get().build()
             http.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
@@ -109,7 +118,20 @@ internal class GoogleDriveBackupClient(
     private fun parseBackup(json: JSONObject) = RemoteBackup(
         json.getString("id"), json.optString("name", "THOOP backup"),
         json.optString("createdTime"), json.optString("size").toLongOrNull() ?: 0L,
+        json.optJSONObject("appProperties")?.optString("sha256")?.takeIf(String::isNotBlank),
     )
+    internal fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
 
     private fun driveError(action: String, code: Int, body: String?) =
         IOException("Google Drive could not $action (HTTP $code). ${body.orEmpty().take(240)}".trim())
@@ -120,7 +142,7 @@ internal class GoogleDriveBackupClient(
         private const val BACKUP_MIME = "application/vnd.otidotid.thoop-backup"
         private const val MAX_BACKUPS = 3
         private const val UPLOAD_ENDPOINT =
-            "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,createdTime,size"
+            "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,createdTime,size,appProperties"
         private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
         private val BACKUP_MEDIA = BACKUP_MIME.toMediaType()
     }

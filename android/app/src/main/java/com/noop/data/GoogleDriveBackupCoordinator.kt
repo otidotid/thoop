@@ -35,7 +35,27 @@ internal class GoogleDriveBackupCoordinator(
             check(backupFile.isFile && backupFile.length() > 0L) {
                 "THOOP created an empty local backup."
             }
-            driveClient.upload(accessToken, backupFile, ownerId)
+            val uploaded = driveClient.upload(accessToken, backupFile, ownerId)
+            val expectedSha256 = driveClient.sha256(backupFile)
+            check(uploaded.sha256 == expectedSha256) {
+                "Google Drive did not preserve the THOOP backup checksum metadata."
+            }
+            val verificationFile = File(directory, "thoop-verify-${uploaded.id}.noopbak")
+            try {
+                driveClient.download(accessToken, uploaded.id, verificationFile)
+                check(verificationFile.length() == backupFile.length()) {
+                    "Google Drive backup verification failed: size mismatch."
+                }
+                check(driveClient.sha256(verificationFile) == expectedSha256) {
+                    "Google Drive backup verification failed: SHA-256 mismatch."
+                }
+                check(FileInputStream(verificationFile).use(DataBackup::backupStreamIsIntact)) {
+                    "Google Drive backup verification failed: the uploaded archive is not intact."
+                }
+            } finally {
+                verificationFile.delete()
+            }
+            uploaded
         } finally {
             backupFile.delete()
         }
