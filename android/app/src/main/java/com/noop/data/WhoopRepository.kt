@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlin.math.roundToInt
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Decoded streams to persist in one transaction. Android mirror of the Swift `Streams`
@@ -21,6 +23,29 @@ import kotlin.math.roundToInt
  * The protocol/decoder layer builds one of these (deviceId stamped at insert time, not
  * stored on the per-row sample models , it is supplied to [WhoopRepository.insert]).
  */
+/**
+ * Hybrid online-first working set. Normal repository reads never scan beyond the newest 90 local
+ * calendar days. Older rows remain untouched on disk as a safety copy and are opened read-only through
+ * GoogleDriveArchiveManager instead of the live Room query path.
+ */
+internal object OnlineFirstWindow {
+    const val LOCAL_DAYS = 90
+
+    fun firstLocalDay(today: LocalDate = LocalDate.now()): String =
+        today.minusDays((LOCAL_DAYS - 1).toLong()).toString()
+
+    fun firstLocalSecond(
+        today: LocalDate = LocalDate.now(),
+        zoneId: ZoneId = ZoneId.systemDefault(),
+    ): Long = today.minusDays((LOCAL_DAYS - 1).toLong()).atStartOfDay(zoneId).toEpochSecond()
+
+    fun clampDay(from: String, today: LocalDate = LocalDate.now()): String =
+        maxOf(from, firstLocalDay(today))
+
+    fun clampSecond(from: Long, today: LocalDate = LocalDate.now()): Long =
+        maxOf(from, firstLocalSecond(today))
+}
+
 data class StreamBatch(
     val hr: List<HrRow> = emptyList(),
     val rr: List<RrRow> = emptyList(),
@@ -1815,7 +1840,7 @@ class WhoopRepository(
         )
 
     suspend fun sleepSessionsForDevice(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT) =
-        dao.sleepSessions(deviceId, from, to, limit)
+        dao.sleepSessions(deviceId, OnlineFirstWindow.clampSecond(from), to, limit)
 
     /**
      * The user's learned habitual midsleep (local time-of-day seconds) for [deviceId], or null under
@@ -1859,7 +1884,7 @@ class WhoopRepository(
     }
 
     suspend fun metricSeries(deviceId: String, key: String, from: String, to: String) =
-        dao.metricSeries(deviceId, key, from, to)
+        dao.metricSeries(deviceId, key, OnlineFirstWindow.clampDay(from), to)
 
     /**
      * Computed ("-noop") [key] series across the active-strap UNION (the active strap's own computed
@@ -1902,7 +1927,7 @@ class WhoopRepository(
 
     /** Workouts whose startTs falls in [from, to] (unix seconds), oldest first, row-limited. */
     suspend fun workouts(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT): List<WorkoutRow> =
-        dao.workouts(deviceId, from, to, limit)
+        dao.workouts(deviceId, OnlineFirstWindow.clampSecond(from), to, limit)
 
     /** Scalar COUNT twin of [workouts] (exact total, no row limit) for count badges. */
     suspend fun workoutsCount(deviceId: String, from: Long, to: Long): Int =
@@ -1929,11 +1954,11 @@ class WhoopRepository(
 
     /** Apple-Health daily aggregates for the inclusive day range [from, to] (YYYY-MM-DD), oldest first. */
     suspend fun appleDaily(deviceId: String, from: String, to: String): List<AppleDaily> =
-        dao.appleDaily(deviceId, from, to)
+        dao.appleDaily(deviceId, OnlineFirstWindow.clampDay(from), to)
 
     /** Scalar COUNT twin of [appleDaily] for count badges. */
     suspend fun appleDailyCount(deviceId: String, from: String, to: String): Int =
-        dao.appleDailyCount(deviceId, from, to)
+        dao.appleDailyCount(deviceId, OnlineFirstWindow.clampDay(from), to)
 
     /** All cached daily metrics for a device, oldest first. Feeds com.noop.analytics.IllnessWatch. */
     suspend fun days(deviceId: String): List<DailyMetric> = dao.days(deviceId)
@@ -2191,8 +2216,12 @@ class WhoopRepository(
         to: Long,
         limit: Int = DEFAULT_LIMIT,
     ): List<SleepSession> = mergeSleep(
-        imported = importedSourceIds(deviceId).reversed().flatMap { dao.sleepSessions(it, from, to, limit) },
-        computed = computedSourceIds(deviceId).reversed().flatMap { dao.sleepSessions(it, from, to, limit) },
+        imported = importedSourceIds(deviceId).reversed().flatMap {
+            dao.sleepSessions(it, OnlineFirstWindow.clampSecond(from), to, limit)
+        },
+        computed = computedSourceIds(deviceId).reversed().flatMap {
+            dao.sleepSessions(it, OnlineFirstWindow.clampSecond(from), to, limit)
+        },
     )
 
     /** ALL imported sleep BLOCKS across every registered WHOOP (active first, archived included,
@@ -2204,7 +2233,9 @@ class WhoopRepository(
      *  caller's, exactly as before). Mirrors Swift Repository.unionSleepSessions. */
     suspend fun sleepSessionsUnion(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT):
         List<SleepSession> =
-        dedupSleepBlocks(rawWhoopSourceIds(deviceId).flatMap { dao.sleepSessions(it, from, to, limit) })
+        dedupSleepBlocks(rawWhoopSourceIds(deviceId).flatMap {
+            dao.sleepSessions(it, OnlineFirstWindow.clampSecond(from), to, limit)
+        })
 
     /** The COMPUTED ("-noop") twin of [sleepSessionsUnion]: all computed sleep blocks across the computed
      *  union ids, near-identical nights collapsed (active's computed sibling first). Mirrors Swift
@@ -2212,7 +2243,9 @@ class WhoopRepository(
     suspend fun computedSleepSessionsUnion(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT):
         List<SleepSession> {
         val ids = rawWhoopSourceIds(deviceId).map { "$it-noop" }
-        return dedupSleepBlocks(ids.flatMap { dao.sleepSessions(it, from, to, limit) })
+        return dedupSleepBlocks(ids.flatMap {
+            dao.sleepSessions(it, OnlineFirstWindow.clampSecond(from), to, limit)
+        })
     }
 
     /**
@@ -2576,7 +2609,7 @@ class WhoopRepository(
          *  many most-recent days per source, so a years-deep import stops re-merging the whole history on
          *  every DB change. ~2 years comfortably covers the deepest Trends range + the rolling 7-day
          *  Fitness Age / Vitality windows, so no current surface loses data. */
-        const val RECENT_DAYS_CAP = 800
+        const val RECENT_DAYS_CAP = OnlineFirstWindow.LOCAL_DAYS
 
         /** Canonical source ids the resolver cross-references. The strap's real id is passed in. */
         const val WHOOP_SOURCE = "my-whoop"
