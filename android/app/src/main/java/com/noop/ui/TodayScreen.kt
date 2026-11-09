@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -93,6 +94,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -6788,6 +6790,12 @@ private fun HeartRateTrendCard(
             // Chart with a max/avg/min Y-axis label column on the left and an HH:mm X-axis row below.
             // The line spaces points by index, but the X labels read each bucket's REAL timestamp in
             // local time (see below) so the axis reads true wall-clock even when the day has gaps (#544).
+            HrEventTimelineStrip(
+                sleep = sleepToday,
+                workouts = workoutsToday,
+                windowStart = visBuckets.first().bucket,
+                windowEnd = visBuckets.last().bucket,
+            )
             Row(
                 modifier = Modifier.height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -6818,9 +6826,6 @@ private fun HeartRateTrendCard(
                         bpm = visBpm,
                         sleep = sleepToday,
                         workouts = workoutsToday,
-                        recovery = displayMetric?.recovery,
-                        strain = effortForDay ?: displayMetric?.strain,   // #1001
-                        effortScale = effortScale,
                         timeTicks = timeTicks,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -6851,17 +6856,14 @@ private fun HeartRateTrendCard(
                     .height(Metrics.divider)
                     .background(Palette.hairline),
             )
-            Row(modifier = Modifier.fillMaxWidth()) {
-                listOf(
-                    uiString(R.string.today_hr_min) to min,
-                    uiString(R.string.today_hr_avg) to avg,
-                    uiString(R.string.today_hr_max) to max,
-                ).forEach { (label, value) ->
-                    Column(modifier = Modifier.weight(1f)) {
-                        Overline(label, color = Palette.textTertiary)
-                        Text(uiString(R.string.l10n_today_screen_value_bpm_8f3a90c3, value), style = NoopType.bodyNumber, color = Palette.textPrimary)
-                    }
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                HrStatTile(uiString(R.string.today_hr_min), min, Icons.Filled.Favorite, Palette.metricRose, Modifier.weight(1f))
+                HrStatTile(uiString(R.string.today_hr_avg), avg, Icons.Filled.MonitorHeart, Palette.accent, Modifier.weight(1f))
+                HrStatTile(uiString(R.string.today_hr_max), max, Icons.Filled.Timeline, Palette.strain100, Modifier.weight(1f))
+                HrStatTile("Resting", displayMetric?.restingHr, Icons.Filled.Bedtime, Palette.sleepLight, Modifier.weight(1f))
             }
             // #829 - the pinch/drag affordance + Reset, mirroring the iOS hrZoomHint row: teaches the
             // gesture, and once zoomed shows a Reset link that mirrors the chart's own double-tap reset.
@@ -7045,15 +7047,32 @@ private suspend fun PointerInputScope.hrChartTransformGestures(
 // self-hides when its data is absent (no sleep, calibrating Charge, no workouts). Mirrors the macOS
 // OverviewHRChart (Packages/StrandDesign) in NOOP's own colour language. (PR #285)
 
+/**
+ * One conservative 1-2-1 smoothing pass for chart presentation only. Segments are respected so a
+ * missing-data gap is never bridged. Endpoints and isolated/two-point segments remain byte-identical.
+ */
+internal fun lightlySmoothHeartRate(
+    values: List<Double>,
+    segmentIds: List<String>,
+): List<Double> {
+    if (values.size < 3 || segmentIds.size != values.size) return values
+    return values.mapIndexed { index, current ->
+        if (index == 0 || index == values.lastIndex ||
+            segmentIds[index - 1] != segmentIds[index] || segmentIds[index + 1] != segmentIds[index]
+        ) {
+            current
+        } else {
+            (values[index - 1] + current * 2.0 + values[index + 1]) / 4.0
+        }
+    }
+}
+
 @Composable
 private fun OverviewHRChart(
     buckets: List<HrBucket>,
     bpm: List<Double>,
     sleep: SleepSession?,
     workouts: List<WorkoutRow>,
-    recovery: Double?,
-    strain: Double?,
-    effortScale: EffortScale,
     modifier: Modifier,
     // Round wall-clock (epochSec, "HH:mm") ticks, each drawn as a dotted gridline under the curve.
     // The matching labels render OUTSIDE this plot-height composable (HrTimeAxisLabels), sharing
@@ -7065,8 +7084,11 @@ private fun OverviewHRChart(
     val gapSegments = remember(bucketTimestamps) {
         hrGapSegmentIds(bucketTimestamps, HR_CARD_BUCKET_SECONDS)
     }
-    val minV = bpm.min()
-    val maxV = bpm.max()
+    // Display-only smoothing: one light weighted pass removes 5-minute bucket jitter while preserving
+    // peaks, endpoints, gaps, stored samples, Min/Avg/Max, and every analytics input.
+    val displayBpm = remember(bpm, gapSegments) { lightlySmoothHeartRate(bpm, gapSegments) }
+    val minV = displayBpm.min()
+    val maxV = displayBpm.max()
     val span = (maxV - minV).takeIf { it > 0.0 } ?: 1.0
     val n = bpm.size
 
@@ -7121,10 +7143,6 @@ private fun OverviewHRChart(
     // EFFECTIVE onset so a hand-edited bedtime moves the band. (PR #395)
     val sleepStartX = sleep?.let { xFor(it.effectiveStartTs) }
     val sleepEndX = sleep?.let { xFor(it.endTs) }
-    // Charge marker sits at wake (sleep end), else the window start; hidden while recovery is null.
-    val chargeX = recovery?.let { sleep?.let { s -> xForStrict(s.endTs) } }
-    // Effort marker pinned to the latest sample (right edge) when a strain exists.
-    val effortX = strain?.let { if (n > 1) plotW else null }
 
     // One combined TalkBack description for the overlay layers, so the markers (which are otherwise
     // small decorative pills) are announced. Only mentions the layers actually present.
@@ -7132,8 +7150,6 @@ private fun OverviewHRChart(
         buildList {
             add(uiString(R.string.today_hr_a11y_24_hour))
             if (sleep != null) add(uiString(R.string.today_hr_a11y_sleep_band, hrHoursMinutes((sleep.endTs - sleep.effectiveStartTs).toInt())))
-            if (recovery != null) add(uiString(R.string.today_hr_a11y_charge_at_wake, recovery.roundToInt()))
-            if (strain != null) add(uiString(R.string.today_hr_a11y_effort_now, UnitFormatter.effortDisplay(strain, effortScale)))
             if (workouts.isNotEmpty()) add(uiPlural(R.plurals.today_hr_a11y_workouts_marked, workouts.size, workouts.size))
         }.joinToString(uiString(R.string.today_a11y_separator))
     }
@@ -7152,7 +7168,7 @@ private fun OverviewHRChart(
                     val right = xFor(workout.endTs)?.coerceIn(0f, plotW) ?: return@forEach
                     if (right > left) {
                         drawRect(
-                            color = Color(0xFFF28C28).copy(alpha = 0.18f),
+                            color = hrEventVisual(workout.sport).color.copy(alpha = 0.16f),
                             topLeft = Offset(left, 0f),
                             size = Size(right - left, plotH),
                         )
@@ -7200,9 +7216,9 @@ private fun OverviewHRChart(
         // 1) The HR line (unchanged shared component, tap-to-inspect intact). Sits OVER the sleep band
         // (above) and UNDER the dashed rules + glow end-cap + marker pills (below), mirroring iOS.
         LineChart(
-            values = bpm,
+            values = displayBpm,
             modifier = Modifier.fillMaxSize(),
-            color = Palette.metricRose,
+            color = Palette.accent,
             fill = true,
             selectionEnabled = true,
             // Scrub read-out: the timestamps prefix the sample's local clock time and the #463
@@ -7231,68 +7247,23 @@ private fun OverviewHRChart(
                         pathEffect = wakeDash,
                     )
                 }
-                // Charge rule at wake.
-                if (chargeX != null) {
-                    drawLine(
-                        color = Palette.recoveryColor(recovery).copy(alpha = 0.85f),
-                        start = Offset(chargeX.coerceIn(0f, size.width), 0f),
-                        end = Offset(chargeX.coerceIn(0f, size.width), size.height),
-                        strokeWidth = 1.5f,
-                        cap = StrokeCap.Round,
-                        pathEffect = dash,
-                    )
-                }
-                // Effort rule at now.
-                if (effortX != null) {
-                    val x = (size.width - 1f).coerceIn(0f, size.width)
-                    drawLine(
-                        color = Palette.effortTint(strain / StrainScorer.maxStrain).copy(alpha = 0.85f),
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = 1.5f,
-                        cap = StrokeCap.Round,
-                        pathEffect = dash,
-                    )
-                }
+
 
                 // Glowing endpoint at the latest HR sample (right edge), a Bevel chart end-cap:
                 // a soft rose halo + white core sitting on the line's final point.
                 if (n >= 2) {
                     val lastX = size.width
-                    val lastY = yForBpm(bpm.last())
+                    val lastY = yForBpm(displayBpm.last())
                     val end = Offset(lastX.coerceIn(0f, size.width), lastY)
-                    drawCircle(color = Palette.metricRose.copy(alpha = 0.30f), radius = 9f, center = end)
-                    drawCircle(color = Palette.metricRose.copy(alpha = 0.65f), radius = 5.5f, center = end)
+                    drawCircle(color = Palette.accent.copy(alpha = 0.28f), radius = 9f, center = end)
+                    drawCircle(color = Palette.accent.copy(alpha = 0.68f), radius = 5.5f, center = end)
                     drawCircle(color = Palette.tipCore, radius = 2.4f, center = end)
                 }
             }
 
             // 3) Marker labels + sport glyphs, positioned composables (crisp text/icons vs Canvas).
             val topPadDp = 10.dp
-            // Sleep duration pill at the band's leading edge.
-            if (sleepStartX != null && (sleepEndX ?: 0f) > (sleepStartX)) {
-                val durLabel = hrHoursMinutes((sleep.endTs - sleep.effectiveStartTs).toInt())
-                ChartMarkerPill(
-                    text = durLabel,
-                    color = Palette.sleepLight,
-                    leadingIcon = Icons.Filled.Bedtime,
-                    modifier = Modifier.markerOffset(sleepStartX, density, topPadDp),
-                )
-            }
-            if (chargeX != null) {
-                ChartMarkerPill(
-                    text = uiString(R.string.l10n_today_screen_recovery_roundtoint_charge_92fbaa5e, recovery.roundToInt()),
-                    color = Palette.recoveryColor(recovery),
-                    modifier = Modifier.markerOffset(chargeX, density, topPadDp),
-                )
-            }
-            if (effortX != null) {
-                ChartMarkerPill(
-                    text = uiString(R.string.l10n_today_screen_unitformatter_effortdisplay_strain_effortscale_effort_53dbd951, UnitFormatter.effortDisplay(strain, effortScale)),
-                    color = Palette.effortTint(strain / StrainScorer.maxStrain),
-                    modifier = Modifier.markerOffset(plotW, density, topPadDp, alignEnd = true),
-                )
-            }
+            // Event text and icons are rendered in the timeline strip above the plot.
         }
     }
 }
@@ -7337,6 +7308,102 @@ private fun Modifier.glyphOffset(
 )
 
 /** Small caps read-out pill for the Charge / Effort / sleep-duration markers. */
+@Composable
+private fun HrEventTimelineStrip(
+    sleep: SleepSession?,
+    workouts: List<WorkoutRow>,
+    windowStart: Long,
+    windowEnd: Long,
+) {
+    val events = buildList {
+        sleep?.takeIf { it.endTs >= windowStart && it.effectiveStartTs <= windowEnd }?.let {
+            add(HrTimelineEvent("Sleep", Icons.Filled.Bedtime, Palette.sleepLight, it.effectiveStartTs, it.endTs))
+        }
+        workouts.filter { it.endTs >= windowStart && it.startTs <= windowEnd }.forEach { workout ->
+            val visual = hrEventVisual(workout.sport)
+            add(HrTimelineEvent(visual.label, visual.icon, visual.color, workout.startTs, workout.endTs, visual.iconRotationDegrees))
+        }
+    }.sortedBy { it.startTs }
+    if (events.isEmpty()) return
+
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        events.forEach { event -> HrTimelineEventChip(event) }
+    }
+}
+
+private data class HrTimelineEvent(
+    val label: String,
+    val icon: ImageVector,
+    val color: Color,
+    val startTs: Long,
+    val endTs: Long,
+    val iconRotationDegrees: Float = 0f,
+)
+
+@Composable
+private fun HrTimelineEventChip(event: HrTimelineEvent) {
+    val zone = remember { ZoneId.systemDefault() }
+    val formatter = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm") }
+    val start = remember(event.startTs, zone) { java.time.Instant.ofEpochSecond(event.startTs).atZone(zone).format(formatter) }
+    val end = remember(event.endTs, zone) { java.time.Instant.ofEpochSecond(event.endTs).atZone(zone).format(formatter) }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(event.color.copy(alpha = 0.11f))
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(event.color.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                event.icon,
+                contentDescription = null,
+                tint = event.color,
+                modifier = Modifier.size(15.dp).rotate(event.iconRotationDegrees),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(event.label, style = NoopType.footnote, color = Palette.textPrimary, maxLines = 1)
+            Text("$start-$end", style = NoopType.caption, color = Palette.textTertiary, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun HrStatTile(
+    label: String,
+    value: Int?,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Palette.surfaceOverlay.copy(alpha = 0.72f))
+            .padding(horizontal = 9.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
+        Text(
+            value?.let { "$it bpm" } ?: NO_DATA,
+            style = NoopType.bodyNumber,
+            color = Palette.textPrimary,
+            maxLines = 1,
+        )
+        Text(label, style = NoopType.caption, color = Palette.textTertiary, maxLines = 1)
+    }
+}
+
 @Composable
 private fun ChartMarkerPill(
     text: String,
