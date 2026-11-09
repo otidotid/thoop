@@ -1114,13 +1114,14 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
                     title = group.header,
                     expanded = isOpen,
                     onToggle = {
-                        val nextOpen = if (isOpen) null else group.header
-                        drawerGroups.forEach { expanded[it.header] = it.header == nextOpen }
-                        // More is an accordion: persist at most one open category.
-                        MoreSectionPrefs.write(
-                            NoopPrefs.of(context),
-                            nextOpen?.let(::setOf).orEmpty(),
-                        )
+                        expanded[group.header] = !isOpen
+                        // Each category is independently collapsible. Persist every open category so
+                        // users may keep multiple More sections expanded at the same time.
+                        val open = drawerGroups
+                            .map { it.header }
+                            .filter { expanded[it] == true }
+                            .toSet()
+                        MoreSectionPrefs.write(NoopPrefs.of(context), open)
                     },
                 )
                 if (isOpen) {
