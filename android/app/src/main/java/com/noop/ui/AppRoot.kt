@@ -236,22 +236,23 @@ internal data class DrawerGroup(
 // Window, Notifications, Devices) are slotted into the matching iOS group.
 internal val drawerGroups: List<DrawerGroup> = listOf(
     DrawerGroup("Insights", R.string.more_group_insights, listOf(
-        // Coach is a bottom-bar tab now and is deliberately absent here, matching iOS: "K3: Coach
-        // promoted to a top-level tab — no longer listed under More." Leaving it would have put the
-        // same destination in two places at once, which is the duplication the note above says this
-        // list exists to avoid. (#2218)
-        Destination.Coach, Destination.Trends, Destination.InsightsHub, Destination.Intelligence,
-        Destination.Insights, Destination.Explore, Destination.Compare,
-    ), defaultExpanded = true),
-    DrawerGroup("Body", R.string.more_group_body, listOf(
-        Destination.Sleep, Destination.Workouts, Destination.Health, Destination.Live,
-        Destination.LabBook, Destination.Breathe, Destination.Intervals, Destination.Rhythm,
-    ), defaultExpanded = true),
+        Destination.Sleep, Destination.Trends, Destination.InsightsHub,
+        Destination.Intelligence, Destination.Insights, Destination.Explore,
+        Destination.Compare, Destination.Health, Destination.VitalSigns,
+        Destination.LabBook, Destination.Rhythm,
+    ), defaultExpanded = false),
+    DrawerGroup("Activity", R.string.more_group_body, listOf(
+        Destination.Workouts, Destination.Live, Destination.Intervals,
+        Destination.Breathe, Destination.Hydration,
+    ), defaultExpanded = false),
+    DrawerGroup("Nutrition & Coach", R.string.more_group_insights, listOf(
+        Destination.Coach,
+    ), defaultExpanded = false),
     DrawerGroup("Data", R.string.more_group_data, listOf(
         Destination.FusedRecord, Destination.AppleHealth, Destination.DataSources,
         Destination.BackupSync, Destination.Devices, Destination.NoopLimitations,
     ), defaultExpanded = false),
-    DrawerGroup("App", R.string.more_group_app, listOf(
+    DrawerGroup("Settings", R.string.more_group_app, listOf(
         Destination.Automations, Destination.SmartAlarm, Destination.Notifications,
         Destination.TestCentre, Destination.PowerSaving, Destination.Settings,
     ), defaultExpanded = false),
@@ -1098,7 +1099,7 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
     val skyBehindCards = remember { NoopPrefs.skyBehindCards(context) }
     ScreenScaffold(
         title = uiString(R.string.l10n_app_root_more_4bab2d8f),
-        subtitle = "Everything else, one tap away",
+        subtitle = "Insights, activity, data, and settings in one place",
         topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
         // Sky-behind-cards fills the viewport so the transparent cards reveal the sky the whole way down.
         fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
@@ -1110,14 +1111,16 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
             val isOpen = expanded[group.header] ?: group.defaultExpanded
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MoreGroupHeader(
-                    title = stringResource(group.headerRes),
+                    title = group.header,
                     expanded = isOpen,
                     onToggle = {
-                        expanded[group.header] = !isOpen
-                        // Persist the new open set so the choice survives leaving + re-entering the page
-                        // and relaunch (#860 item 2), mirroring the iOS @AppStorage write.
-                        val open = drawerGroups.map { it.header }.filter { expanded[it] == true }.toSet()
-                        MoreSectionPrefs.write(NoopPrefs.of(context), open)
+                        val nextOpen = if (isOpen) null else group.header
+                        drawerGroups.forEach { expanded[it.header] = it.header == nextOpen }
+                        // More is an accordion: persist at most one open category.
+                        MoreSectionPrefs.write(
+                            NoopPrefs.of(context),
+                            nextOpen?.let(::setOf).orEmpty(),
+                        )
                     },
                 )
                 if (isOpen) {
