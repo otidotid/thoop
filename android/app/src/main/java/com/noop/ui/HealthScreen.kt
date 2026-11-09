@@ -2917,18 +2917,34 @@ private fun FitnessAgeDetailExperience(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
                         Text(
-                            if (chronologicalAge > 0) String.format(Locale.US, "%.1f", kotlin.math.abs(delta)) else "--",
-                            style = NoopType.number(27f, FontWeight.Bold),
+                            when {
+                                chronologicalAge <= 0 -> "●"
+                                favorable -> "↓"
+                                unfavorable -> "↑"
+                                else -> "●"
+                            },
+                            style = NoopType.number(22f, FontWeight.Bold),
                             color = accent,
                         )
+                        if (chronologicalAge > 0 && (favorable || unfavorable)) {
+                            Text(
+                                String.format(Locale.US, "%.1f", kotlin.math.abs(delta)),
+                                style = NoopType.number(27f, FontWeight.Bold),
+                                color = accent,
+                            )
+                        }
                         Text(
                             when {
                                 chronologicalAge <= 0 -> "ADD YOUR AGE"
                                 favorable -> "YEARS YOUNGER"
                                 unfavorable -> "YEARS OLDER"
-                                else -> "ABOUT YOUR AGE"
+                                else -> "SAME AGE"
                             },
                             style = NoopType.caption,
                             color = Palette.textSecondary,
@@ -2942,38 +2958,63 @@ private fun FitnessAgeDetailExperience(
                                 scaleX = ageHeroScale
                                 scaleY = ageHeroScale
                                 shadowElevation = 18.dp.toPx() * ageHeroGlow
-                                shape = RoundedCornerShape(58.dp)
+                                shape = androidx.compose.foundation.shape.CircleShape
                                 clip = false
-                            }
-                            .clip(RoundedCornerShape(58.dp))
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(
-                                        accent.copy(alpha = 0.10f + ageHeroGlow * 0.20f),
-                                        accent.copy(alpha = 0.36f + ageHeroGlow * 0.20f),
-                                        accent.copy(alpha = 0.82f),
-                                    ),
-                                ),
-                            )
-                            .border(2.dp, accent.copy(alpha = 0.86f + ageHeroGlow * 0.50f), RoundedCornerShape(58.dp)),
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
+                        val ageProgress = ((latest.value - FitnessAgeEngine.minAge) /
+                            (FitnessAgeEngine.maxAge - FitnessAgeEngine.minAge))
+                            .toFloat().coerceIn(0f, 1f)
                         Canvas(Modifier.matchParentSize()) {
-                            val shiftX = size.width * ageHeroShift
-                            val shiftY = size.height * ageHeroShift * 0.65f
+                            val stroke = 7.dp.toPx()
+                            val radius = (size.minDimension - stroke) / 2f
                             drawCircle(
-                                accent.copy(alpha = 0.16f + ageHeroGlow),
-                                radius = size.minDimension * (0.42f + ageHeroGlow * 0.08f),
-                                center = Offset(size.width * .46f + shiftX, size.height * .47f - shiftY),
+                                color = Color(0xFF082A22),
+                                radius = radius,
+                                center = center,
                             )
                             drawCircle(
-                                Color.White.copy(alpha = 0.06f + ageHeroGlow * 0.18f),
-                                radius = size.minDimension * (0.26f + ageHeroGlow * 0.06f),
-                                center = Offset(size.width * .62f - shiftX, size.height * .34f + shiftY),
+                                color = Color(0xFF0D3B31).copy(alpha = 0.78f),
+                                radius = radius * 0.82f,
+                                center = center,
+                            )
+                            drawArc(
+                                color = Color.White.copy(alpha = 0.14f),
+                                startAngle = -90f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = stroke, cap = StrokeCap.Round),
+                            )
+                            drawArc(
+                                color = Color(0xFF20D99A),
+                                startAngle = -90f,
+                                sweepAngle = 360f * ageProgress,
+                                useCenter = false,
+                                style = Stroke(width = stroke, cap = StrokeCap.Round),
+                            )
+                            val angle = Math.toRadians((-90f + 360f * ageProgress).toDouble())
+                            val marker = Offset(
+                                x = center.x + kotlin.math.cos(angle).toFloat() * radius,
+                                y = center.y + kotlin.math.sin(angle).toFloat() * radius,
+                            )
+                            drawCircle(Color.White, radius = 3.5.dp.toPx(), center = marker)
+                            drawCircle(
+                                Color.White.copy(alpha = 0.10f + ageHeroGlow * 0.12f),
+                                radius = radius * 0.45f,
+                                center = Offset(
+                                    center.x + size.width * ageHeroShift * 0.35f,
+                                    center.y - size.height * ageHeroShift * 0.20f,
+                                ),
                             )
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(fitnessAgeBoundSymbol(latest.value) + format(latest.value), style = NoopType.number(42f, FontWeight.Bold), color = Color.White)
+                            Text(
+                                fitnessAgeBoundSymbol(latest.value) + format(latest.value),
+                                style = NoopType.number(39f, FontWeight.Bold),
+                                color = Color.White,
+                            )
+                            androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
                             Text("THOOP AGE", style = NoopType.caption, color = Color.White.copy(alpha = .78f))
                         }
                     }
