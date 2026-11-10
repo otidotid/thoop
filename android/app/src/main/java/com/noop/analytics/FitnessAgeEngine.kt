@@ -107,15 +107,33 @@ object FitnessAgeEngine {
     /** Full Fitness Age. Returns null only if RHR or age is missing. [vo2max] is filled only when a
      *  waist measurement is supplied; callers gate data-coverage separately. */
     fun compute(age: Double, sex: String, restingHR: Double, paIndex: Double,
-                waistCm: Double? = null, lowerConfidence: Boolean = false): FitnessAgeResult? {
+                waistCm: Double? = null, weightKg: Double? = null, heightCm: Double? = null,
+                bodyFatPct: Double? = null, lowerConfidence: Boolean = false): FitnessAgeResult? {
         if (age <= 0 || restingHR <= 0) return null
-        val fa = fitnessAge(age, sex, restingHR, paIndex)
+        val fitnessDomainAge = fitnessAge(age, sex, restingHR, paIndex)
+        val bmi = if (weightKg != null && weightKg > 0 && heightCm != null && heightCm > 0)
+            weightKg / ((heightCm / 100.0) * (heightCm / 100.0)) else null
+        val whtr = if (waistCm != null && waistCm > 0 && heightCm != null && heightCm > 0)
+            waistCm / heightCm else null
+        val metabolicParts = listOfNotNull(
+            bmi?.let { when { it > 25.0 -> ((it - 25.0) * 0.25).coerceAtMost(4.0); it < 18.5 -> ((18.5 - it) * 0.20).coerceAtMost(3.0); else -> 0.0 } },
+            whtr?.let { if (it > 0.50) ((it - 0.50) * 20.0).coerceAtMost(4.0) else 0.0 },
+            bodyFatPct?.takeIf { it > 0 }?.let {
+                val upper = if (sex.equals("male", ignoreCase = true)) 25.0 else 32.0
+                if (it > upper) ((it - upper) * 0.15).coerceAtMost(4.0) else 0.0
+            },
+        )
+        val metabolicDelta = metabolicParts.takeIf { it.isNotEmpty() }?.average()
+        val weightedAge = if (metabolicDelta == null) fitnessDomainAge
+            else fitnessDomainAge * 0.80 + (age + metabolicDelta) * 0.20
         val vo2 = if (waistCm != null && waistCm > 0)
             estimateVO2max(age, sex, waistCm, restingHR, paIndex) else null
         val nb = sex.lowercase() != "male" && sex.lowercase() != "female"
         return FitnessAgeResult(
-            vo2max = vo2, fitnessAge = fa, chronoAge = age, deltaYears = age - fa,
-            bandYears = displayBandYears, lowerConfidence = lowerConfidence || nb)
+            vo2max = vo2, fitnessAge = weightedAge, chronoAge = age, deltaYears = age - weightedAge,
+            bandYears = displayBandYears, lowerConfidence = lowerConfidence || nb,
+            bmi = bmi, waistToHeightRatio = whtr, bodyFatPct = bodyFatPct,
+            metabolicDeltaYears = metabolicDelta)
     }
 
     // ── Readiness checklist (transparency: which inputs we have, grouped by what each unlocks) ──
@@ -200,4 +218,8 @@ data class FitnessAgeResult(
     val deltaYears: Double,
     val bandYears: Double,
     val lowerConfidence: Boolean,
+    val bmi: Double? = null,
+    val waistToHeightRatio: Double? = null,
+    val bodyFatPct: Double? = null,
+    val metabolicDeltaYears: Double? = null,
 )

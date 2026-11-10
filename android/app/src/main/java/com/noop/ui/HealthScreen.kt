@@ -2300,8 +2300,23 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             )
             return@ScreenScaffold
         }
-
         if (key == "fitness_age") {
+            val factorKeys = remember { listOf(
+                "fitness_factor_bmi", "fitness_factor_whtr",
+                "fitness_factor_body_fat", "fitness_factor_metabolic_delta",
+            ) }
+            val metabolicFactors by produceState<Map<String, Double>>(
+                initialValue = emptyMap(),
+                key1 = vm.activeStrapId,
+                key2 = detail.readings.lastOrNull()?.day,
+            ) {
+                val latestDay = detail.readings.lastOrNull()?.day ?: "9999-12-31"
+                value = factorKeys.mapNotNull { factorKey ->
+                    vm.repo.metricSeriesComputedUnion(
+                        vm.activeStrapId, factorKey, "0000-01-01", latestDay,
+                    ).lastOrNull()?.value?.let { factorKey to it }
+                }.toMap()
+            }
             FitnessAgeDetailExperience(
                 readings = detail.readings,
                 chronologicalAge = profile.age,
@@ -2309,6 +2324,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
                 vo2maxEstimator = fitnessDetailEstimator,
                 restingHr = days.takeLast(7).mapNotNull { it.restingHr?.toDouble() }.average().takeIf { !it.isNaN() },
                 weeklyEffort = days.takeLast(7).mapNotNull { it.strain }.average().takeIf { !it.isNaN() },
+                metabolicFactors = metabolicFactors,
                 color = detail.color,
                 format = detail.format,
             )
@@ -2855,6 +2871,7 @@ private fun FitnessAgeDetailExperience(
     vo2maxEstimator: Vo2MaxEstimator?,
     restingHr: Double?,
     weeklyEffort: Double?,
+    metabolicFactors: Map<String, Double>,
     color: Color,
     format: (Double) -> String,
 ) {
@@ -3071,6 +3088,46 @@ private fun FitnessAgeDetailExperience(
                     left = "Lower", right = "Higher",
                     source = "On-device", method = "Recent activity coverage",
                 )
+                metabolicFactors["fitness_factor_bmi"]?.let { bmi ->
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
+                    FitnessAgeDetailFactor(
+                        label = "BODY MASS INDEX",
+                        value = String.format(Locale.US, "%.1f kg/m2", bmi),
+                        marker = ((bmi - 15.0) / 25.0).toFloat().coerceIn(0f, 1f),
+                        left = "15", right = "40",
+                        source = "Labs", method = "Weight / height^2 · Metabolic domain",
+                    )
+                }
+                metabolicFactors["fitness_factor_whtr"]?.let { whtr ->
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
+                    FitnessAgeDetailFactor(
+                        label = "WAIST-TO-HEIGHT RATIO",
+                        value = String.format(Locale.US, "%.2f", whtr),
+                        marker = (whtr / 0.70).toFloat().coerceIn(0f, 1f),
+                        left = "0.35", right = "0.70",
+                        source = "Labs", method = "Waist / height · Metabolic domain",
+                    )
+                }
+                metabolicFactors["fitness_factor_body_fat"]?.let { bodyFat ->
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
+                    FitnessAgeDetailFactor(
+                        label = "BODY FAT",
+                        value = String.format(Locale.US, "%.1f%%", bodyFat),
+                        marker = (bodyFat / 50.0).toFloat().coerceIn(0f, 1f),
+                        left = "Lower", right = "Higher",
+                        source = "Labs", method = "Manual marker · Metabolic domain",
+                    )
+                }
+                metabolicFactors["fitness_factor_metabolic_delta"]?.let { impact ->
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
+                    FitnessAgeDetailFactor(
+                        label = "METABOLIC IMPACT",
+                        value = String.format(Locale.US, "+%.1f years", impact),
+                        marker = (impact / 4.0).toFloat().coerceIn(0f, 1f),
+                        left = "Neutral", right = "Higher impact",
+                        source = "THOOP Age", method = "Normalized available Labs inputs",
+                    )
+                }
             }
         }
 

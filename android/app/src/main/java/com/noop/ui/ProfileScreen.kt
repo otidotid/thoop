@@ -53,15 +53,6 @@ internal fun ProfileScreen(onOpenSettings: () -> Unit) {
                 ProfileNumberField("Age", profile.age.toString()) { value ->
                     value.toIntOrNull()?.let { profile.setAge(it); revision++ }
                 }
-                ProfileNumberField("Weight (kg)", profile.weightKg.toString()) { value ->
-                    value.toDoubleOrNull()?.let { profile.weightKg = it; revision++ }
-                }
-                ProfileNumberField("Height (cm)", profile.heightCm.toString()) { value ->
-                    value.toDoubleOrNull()?.let { profile.heightCm = it; revision++ }
-                }
-                ProfileNumberField("Waist (cm, optional)", profile.waistCm.toString()) { value ->
-                    value.toDoubleOrNull()?.let { profile.waistCm = it; revision++ }
-                }
             }
         }
 

@@ -2123,7 +2123,7 @@ object IntelligenceEngine {
         for (d in faPriorDaily) faGateByDay[d.day] = d
         for (d in dailies) faGateByDay[d.day] = d
         val faGate7 = faGateByDay.values.sortedBy { it.day }.takeLast(7)
-        val faPts = fitnessAgeRows(faGate7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
+        val faPts = fitnessAgeRows(repo, faGate7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
         // Strap-log proof: the RHR-night count the engine sees for the gate , should equal the "N of last 7
         // nights" the readiness card shows; `computed` says whether the value was (re)written this pass.
         diag("fitnessAge gate day=$newestDay rhrNights=${faGate7.mapNotNull { it.restingHr }.size} activityDays=${faGate7.mapNotNull { it.strain }.size} computed=${faPts.isNotEmpty()}")
@@ -2705,6 +2705,50 @@ object IntelligenceEngine {
             paIndex = FitnessAgeEngine.physicalActivityIndexFromStrain(strains.size, meanStrain),
             waistCm = waist) ?: return emptyList()
         val rows = mutableListOf(MetricSeriesRow(deviceId = computedId, day = satKey, key = "fitness_age", value = res.fitnessAge))
+        // #1391: offer a VOâ‚‚max even without a waist. res.vo2max is the Nes 2011 waist-based estimate (null
+        // when no waist is set). Fall back to the Uth 2004 HR-ratio estimate (15.3Â·HRmax/RHR â€” waist-free,
+        // the SAME formula the calorie path already uses), so any user past the age+RHR fitness-age gate gets
+        // a (rougher) VOâ‚‚max instead of a blank. HRmax via the shared Tanaka estimator (no HR history here â†’
+        // age-predicted); RHR = the same median the Nes value used. Both persist under "vo2max_est"; the card
+        // labels it "Estimated". Mirrors the Swift twin.
+        val vo2: Double? = res.vo2max ?: run {
+            val hrmax: Double = StrainScorer.estimateHRmax(emptyList<Double>(), profile.age).first
+            Calories.vo2maxFor(hrmax, medianOfDoubles(rhrs))
+        }
+        if (vo2 != null) rows.add(MetricSeriesRow(deviceId = computedId, day = satKey, key = "vo2max_est", value = vo2))
+        return rows
+    }
+
+    /** Vitality + Body Age rows for one seven-day window, using the production formula. */
+    suspend fun fitnessAgeRows(repo: WhoopRepository,
+        gateDays: List<DailyMetric>, profile: UserProfile, computedId: String, satKey: String,
+    ): List<MetricSeriesRow> {
+        suspend fun latestLab(key: String): Double? = repo.metricSeries(
+            com.noop.data.WhoopDao.LAB_BOOK_SOURCE_ID, key, "0000-01-01", satKey,
+        ).lastOrNull()?.value?.takeIf { it.isFinite() && it > 0.0 }
+        val labWeight = latestLab("weight")
+        val labHeight = latestLab("height")
+        val labWaist = latestLab("waist")
+        val labBodyFat = latestLab("body_fat")
+        val rhrs = gateDays.mapNotNull { it.restingHr }.map { it.toDouble() }
+        val strains = gateDays.mapNotNull { it.strain }.filter { it >= 30.0 }
+        val meanStrain = if (strains.isEmpty()) 0.0 else strains.average()
+        val waist = labWaist
+        val ready = FitnessAgeEngine.assessReadiness(
+            hasAge = profile.age > 0, hasSex = profile.sex.isNotEmpty(),
+            rhrDays = rhrs.size, activityDays = gateDays.mapNotNull { it.strain }.size,
+            hasHeightWeight = labHeight != null && labWeight != null, hasWaist = waist != null)
+        if (!ready.canCompute) return emptyList()
+        val res = FitnessAgeEngine.compute(
+            age = profile.age, sex = profile.sex,
+            restingHR = medianOfDoubles(rhrs),
+            paIndex = FitnessAgeEngine.physicalActivityIndexFromStrain(strains.size, meanStrain),
+            waistCm = waist, weightKg = labWeight, heightCm = labHeight, bodyFatPct = labBodyFat) ?: return emptyList()
+        val rows = mutableListOf(MetricSeriesRow(deviceId = computedId, day = satKey, key = "fitness_age", value = res.fitnessAge))
+        res.bmi?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_bmi", it) }
+        res.waistToHeightRatio?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_whtr", it) }
+        res.bodyFatPct?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_body_fat", it) }
+        res.metabolicDeltaYears?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_metabolic_delta", it) }
         // #1391: offer a VO₂max even without a waist. res.vo2max is the Nes 2011 waist-based estimate (null
         // when no waist is set). Fall back to the Uth 2004 HR-ratio estimate (15.3·HRmax/RHR — waist-free,
         // the SAME formula the calorie path already uses), so any user past the age+RHR fitness-age gate gets
@@ -2763,6 +2807,25 @@ object IntelligenceEngine {
         }
         return rows
     }
+    internal suspend fun weeklyHistoricalRows(repo: WhoopRepository,
+        history: List<DailyMetric>, profile: UserProfile, computedId: String, newestDay: String,
+        existing: Set<Pair<String, String>>,
+    ): List<MetricSeriesRow> {
+        val currentSaturday = saturdayKeyOnOrBefore(newestDay)
+        val byDay = history.associateBy { it.day }
+        val anchors = history.asSequence().map { saturdayKeyOnOrBefore(it.day) }
+            .filter { it < currentSaturday }.distinct().sorted().toList()
+        val rows = ArrayList<MetricSeriesRow>()
+        for (anchorDay in anchors) {
+            val anchor = runCatching { java.time.LocalDate.parse(anchorDay) }.getOrNull() ?: continue
+            val from = anchor.minusDays(6).toString()
+            val week = byDay.values.filter { it.day in from..anchorDay }.sortedBy { it.day }
+            val candidates = fitnessAgeRows(repo, week, profile, computedId, anchorDay) +
+                vitalityRows(week, profile, computedId, anchorDay)
+            for (row in candidates) if ((row.day to row.key) !in existing) rows.add(row)
+        }
+        return rows
+    }
 
     private suspend fun backfillWeeklyFitnessAndVitalityIfNeeded(
         repo: WhoopRepository, profile: UserProfile, importedDeviceId: String, computedId: String,
@@ -2775,7 +2838,7 @@ object IntelligenceEngine {
         val bodyAge = repo.metricSeriesComputedUnion(importedDeviceId, "body_age", from, to)
         if (vo2.size > 1 && vitality.size > 1) return
         val existing = (fitness + vo2 + vitality + bodyAge).mapTo(HashSet()) { it.day to it.key }
-        val rows = weeklyHistoricalRows(
+        val rows = weeklyHistoricalRows(repo,
             repo.daysMerged(importedDeviceId), profile, computedId, newestDay, existing,
         )
         if (rows.isEmpty()) {
@@ -2821,7 +2884,7 @@ object IntelligenceEngine {
         val oldestDay = AnalyticsEngine.dayString(nowLocalMidnight - (maxDays - 1) * SECONDS_PER_DAY, tzOffsetSeconds)
         val gate7 = repo.daysMerged(importedDeviceId)
             .filter { it.day in oldestDay..newestDay }.sortedBy { it.day }.takeLast(7)
-        val rows = fitnessAgeRows(gate7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
+        val rows = fitnessAgeRows(repo, gate7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
         if (rows.isNotEmpty()) {
             repo.upsertMetricSeriesWithProvenance(
                 rows = rows,
