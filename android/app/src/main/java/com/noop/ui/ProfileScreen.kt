@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +47,7 @@ internal fun ProfileScreen(onOpenSettings: () -> Unit) {
             icon = Icons.Filled.AccountCircle,
             title = uiString(R.string.l10n_settings_screen_profile_ff4fc027),
             blurb = "Used only for THOOP's on-device calculations.",
+        collapsible = true,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ProfileNumberField("Age", profile.age.toString()) { value ->
@@ -69,6 +69,7 @@ internal fun ProfileScreen(onOpenSettings: () -> Unit) {
             icon = Icons.Filled.AccountCircle,
             title = uiString(R.string.l10n_settings_screen_profile_photo_33f385bb),
             blurb = "Optional and stored only on this phone.",
+        collapsible = true,
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -94,14 +95,6 @@ internal fun ProfileScreen(onOpenSettings: () -> Unit) {
         }
 
         GoogleAccountCard()
-
-        SettingsCard(
-            icon = Icons.Filled.Settings,
-            title = uiString(R.string.nav_settings),
-            blurb = "Device, scoring, display, automation, backup, and other general preferences.",
-        ) {
-            NoopButton(text = "Open Settings", kind = NoopButtonKind.Secondary, onClick = onOpenSettings)
-        }
     }
 }
 

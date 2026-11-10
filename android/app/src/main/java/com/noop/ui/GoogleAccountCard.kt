@@ -293,6 +293,7 @@ internal fun GoogleAccountCard() {
         icon = Icons.Filled.AccountCircle,
         title = "Google Drive",
         blurb = "Sign in for verified full backup, full restore on a new phone, and read-only archived history.",
+    collapsible = true,
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(Metrics.space12),

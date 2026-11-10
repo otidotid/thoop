@@ -4055,7 +4055,7 @@ fun SettingsScreen(
             collapsible = true,
             icon = Icons.Filled.Info,
             title = uiString(R.string.l10n_settings_screen_about_6b21fb79),
-            blurb = "NOOP: all your data, none of the cloud.",
+            blurb = "THOOP: your personalized health data",
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 NoopCard {
@@ -4069,280 +4069,23 @@ fun SettingsScreen(
                         Text("Current day: ${latest?.day ?: "No daily row"}", style = NoopType.footnote, color = Palette.textSecondary)
                         Text("Oxygen: ${if (latest?.spo2Pct != null) "THOOP computed / calibrated" else "No data"}", style = NoopType.footnote, color = Palette.textSecondary)
                         Text("Skin temperature: ${if (latest?.skinTempC != null) "${if (skinEstimated) "≙ " else ""}${latest.skinTempC} °C · ${skinSource ?: "resolved winner"}" else "No data"}", style = NoopType.footnote, color = Palette.textSecondary)
-                        Text("Imported measurements still win; THOOP only fills missing values.", style = NoopType.caption, color = Palette.textTertiary)
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text("NOOP", style = NoopType.title2, color = Palette.textPrimary)
-                    StatePill(
-                        "v${BuildConfig.VERSION_NAME}",
-                        tone = StrandTone.Neutral,
-                        showsDot = false
-                    )
-                }
-
-                // Project home — NOOP's code, releases, issues and wiki live on GitHub.
-                val projectHomeInteraction = remember { MutableInteractionSource() }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .liquidPress(projectHomeInteraction)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Palette.accent.copy(alpha = 0.10f))
-                        .border(1.dp, Palette.accent.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
-                        .clickable(
-                            interactionSource = projectHomeInteraction,
-                            indication = null,
-                        ) {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://github.com/ryanbr/noop")
-                            )
-                            try {
-                                context.startActivity(intent)
-                            } catch (_: ActivityNotFoundException) {
-                                Toast.makeText(context, "github.com/ryanbr/noop", Toast.LENGTH_LONG)
-                                    .show()
-                            }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                        .semantics {
-                            contentDescription =
-                                uiString(R.string.l10n_settings_screen_project_home_and_source_on_github_a067ed35)
-                        },
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            uiString(R.string.l10n_settings_screen_project_home_source_994627c1),
-                            style = NoopType.body,
-                            color = Palette.textPrimary
+                            "Imported measurements remain authoritative.",
+                            style = NoopType.caption,
+                            color = Palette.textTertiary,
                         )
                         Text(
-                            uiString(R.string.l10n_settings_screen_github_code_releases_issues_and_the_50b41e25),
+                            "THOOP only fills compatible missing values.",
+                            style = NoopType.caption,
+                            color = Palette.textTertiary,
+                        )
+                        Text(
+                            "Copyright source code by NOOP.",
                             style = NoopType.caption,
                             color = Palette.textTertiary,
                         )
                     }
                 }
-
-                // Check for updates — a single, user-initiated call to the project's public releases API (GitHub)
-                // when the button is tapped. No background polling, no auto-update; nothing about you
-                // is sent. Android already holds INTERNET (for the opt-in Coach), so this adds nothing.
-                var updChecking by remember { mutableStateOf(false) }
-                var updResult by remember { mutableStateOf<UpdateCheck.Result?>(null) }
-                // #1659: the automatic half. A sideloaded build has no store to update it, so noticing a
-                // release and saying so in the Updates inbox is the whole of what is possible. ON by
-                // default, because a setting nobody finds is the feature not existing; switching it off
-                // here stops the request entirely. See UpdateAvailability.DEFAULT_ENABLED.
-                var autoCheck by remember {
-                    mutableStateOf(com.noop.update.UpdateWatch.isEnabled(context))
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                if (!updChecking) {
-                                    updChecking = true
-                                    updResult = null
-                                    scope.launch {
-                                        updResult = UpdateCheck.check(BuildConfig.VERSION_NAME)
-                                        updChecking = false
-                                    }
-                                }
-                            },
-                            enabled = !updChecking,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.accent),
-                        ) {
-                            if (updChecking) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier
-                                        .size(14.dp)
-                                        .padding(end = 6.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Palette.accent,
-                                )
-                                Text(
-                                    uiString(R.string.l10n_settings_screen_checking_820d6004),
-                                    style = NoopType.captionNumber
-                                )
-                            } else {
-                                Text(
-                                    uiString(R.string.l10n_settings_screen_check_for_updates_736b9062),
-                                    style = NoopType.captionNumber
-                                )
-                            }
-                        }
-                        when (val r = updResult) {
-                            is UpdateCheck.Result.UpToDate ->
-                                Text(
-                                    uiString(
-                                        R.string.l10n_settings_screen_you_re_on_the_latest_r_027a82be,
-                                        r.version
-                                    ),
-                                    style = NoopType.footnote, color = Palette.textSecondary,
-                                )
-
-                            UpdateCheck.Result.Failed ->
-                                Text(
-                                    uiString(R.string.l10n_settings_screen_couldn_t_check_try_again_b3c885d9),
-                                    style = NoopType.footnote, color = Palette.statusWarning,
-                                )
-
-                            else -> {}
-                        }
-                    }
-
-                    // #1659: the automatic half, directly under the manual button so the two read as one
-                    // feature — the same placement as the Swift twin.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                uiString(R.string.l10n_settings_screen_check_automatically_7cd229d2),
-                                style = NoopType.subhead,
-                                color = Palette.textPrimary,
-                            )
-                            Text(
-                                uiString(R.string.l10n_settings_screen_once_a_day_noop_asks_github_5683aad3),
-                                style = NoopType.footnote,
-                                color = Palette.textTertiary,
-                            )
-                        }
-                        Switch(
-                            checked = autoCheck,
-                            onCheckedChange = {
-                                autoCheck = it
-                                com.noop.update.UpdateWatch.setEnabled(context, it)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Palette.surfaceBase,
-                                checkedTrackColor = Palette.accent,
-                                uncheckedThumbColor = Palette.textSecondary,
-                                uncheckedTrackColor = Palette.surfaceInset,
-                                uncheckedBorderColor = Palette.hairline,
-                            ),
-                        )
-                    }
-
-                    // Update available: show what's new, with a download straight to the release.
-                    (updResult as? UpdateCheck.Result.Available)?.let { avail ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Palette.surfaceInset)
-                                .border(
-                                    1.dp,
-                                    Palette.accent.copy(alpha = 0.3f),
-                                    RoundedCornerShape(10.dp)
-                                )
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    uiString(
-                                        R.string.l10n_settings_screen_version_avail_version_is_available_5b401bd4,
-                                        avail.version
-                                    ),
-                                    style = NoopType.subhead, color = Palette.textPrimary,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                NoopButton(
-                                    text = uiString(R.string.l10n_settings_screen_download_a479c9c3),
-                                    leadingIcon = Icons.Filled.Download,
-                                    kind = NoopButtonKind.Primary,
-                                    onClick = {
-                                        context.startActivity(
-                                            Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse(avail.url)
-                                            )
-                                        )
-                                    },
-                                )
-                            }
-                            if (avail.notes.isNotEmpty()) {
-                                Text(
-                                    avail.notes,
-                                    style = NoopType.footnote, color = Palette.textSecondary,
-                                    modifier = Modifier
-                                        .heightIn(max = 160.dp)
-                                        .verticalScroll(rememberScrollState()),
-                                )
-                            }
-                        }
-                    }
-
-                    Text(
-                        uiString(R.string.l10n_settings_screen_checks_github_for_the_latest_version_c10a81e2),
-                        style = NoopType.footnote, color = Palette.textTertiary,
-                    )
-                }
-
-                Text(
-                    uiString(R.string.l10n_settings_screen_a_standalone_companion_for_your_whoop_7a132b5a),
-                    style = NoopType.subhead,
-                    color = Palette.textSecondary,
-                )
-
-                // What's new — re-open the changelog sheet any time (macOS About parity).
-                val whatsNewInteraction = remember { MutableInteractionSource() }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .liquidPress(whatsNewInteraction)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Palette.surfaceInset)
-                        .border(1.dp, Palette.hairline, RoundedCornerShape(10.dp))
-                        .clickable(
-                            interactionSource = whatsNewInteraction,
-                            indication = null,
-                        ) { showWhatsNew = true }
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                        .semantics {
-                            contentDescription = uiString(
-                                R.string.l10n_settings_screen_what_s_new_in_noop_appchangelog_d26fb453,
-                                AppChangelog.CURRENT_VERSION
-                            )
-                        },
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(
-                            Icons.Filled.Campaign,
-                            contentDescription = null,
-                            tint = Palette.accent,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                uiString(R.string.l10n_settings_screen_what_s_new_4d8dc5fe),
-                                style = NoopType.headline,
-                                color = Palette.textPrimary
-                            )
-                            Text(
-                                uiString(R.string.l10n_settings_screen_recent_changes_and_what_to_expect_3ceb660b),
-                                style = NoopType.footnote,
-                                color = Palette.textSecondary,
-                            )
-                        }
-                        Text("›", style = NoopType.title2, color = Palette.accent)
-                    }
-                }
-
                 // How your scores work — the honest explainer for Charge/Effort/Rest + the
                 // confidence labels, opened any time (macOS/iOS About parity).
                 val scoringGuideInteraction = remember { MutableInteractionSource() }
@@ -4390,7 +4133,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // How NOOP works — the plain-English primer (COMPONENT 5 of the explainability layer):
+                // How THOOP works — the plain-English primer (COMPONENT 5 of the explainability layer):
                 // how sleep is sorted, how scores + calibration work, what recording means, and where
                 // each number comes from. The one "?" entry point into the primer (macOS/iOS parity).
                 val howNoopWorksInteraction = remember { MutableInteractionSource() }
@@ -4408,7 +4151,7 @@ fun SettingsScreen(
                         .padding(horizontal = 14.dp, vertical = 12.dp)
                         .semantics {
                             contentDescription =
-                                uiString(R.string.l10n_settings_screen_how_noop_works_3396b27a)
+                                "How THOOP works"
                         },
                 ) {
                     Row(
@@ -4424,7 +4167,7 @@ fun SettingsScreen(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                uiString(R.string.l10n_settings_screen_how_noop_works_3396b27a),
+                                "How THOOP works",
                                 style = NoopType.headline,
                                 color = Palette.textPrimary
                             )
