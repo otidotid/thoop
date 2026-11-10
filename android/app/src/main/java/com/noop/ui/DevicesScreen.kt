@@ -3,7 +3,16 @@ package com.noop.ui
 import com.noop.R
 import androidx.compose.ui.res.stringResource
 import android.widget.Toast
+import android.content.Context
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,8 +23,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -59,6 +71,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -66,11 +79,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import com.noop.ble.WhoopBleClient
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.noop.ble.SourceCoordinator
@@ -90,6 +106,7 @@ import com.noop.protocol.RebootProbeVariant
 import com.noop.testcentre.TestCentre
 import com.noop.testcentre.TestDomain
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 // MARK: - Devices
 //
@@ -262,6 +279,8 @@ fun DevicesScreen(
                         whoopPct = live.batteryPct,
                         ringPct = ouraBatteryPct,
                     ) else null,
+                liveCharging = device.status == DeviceStatus.active.name && live.connected &&
+                    SourceCoordinator.isWhoop(device) && live.charging == true,
                 liveBatteryMv = if (device.status == DeviceStatus.active.name && live.connected)
                     live.batteryMv else null,
                 livePackSocPct = if (device.status == DeviceStatus.active.name && live.connected)
@@ -745,6 +764,8 @@ private fun DeviceCard(
     /** The active+connected device's live battery percent (0–100) — surfaced the same way for WHOOP, a
      *  generic strap, or an FTMS machine. null when not active/connected or no battery was reported. */
     liveBatteryPct: Int? = null,
+    /** Authoritative WHOOP charging state; never inferred from percentage changes. */
+    liveCharging: Boolean = false,
     liveBatteryMv: Int? = null,
     /** Battery-pack charge % (5/MG only), from the pushed pack event. Null when no pack is attached or
      *  none has been reported yet — the row is simply absent then, which is the "only show it when a
@@ -863,7 +884,7 @@ private fun DeviceCard(
             // progress bar, so a static (posed) LiquidTube is exactly right; it replaces the "· Battery x%"
             // that used to sit in the text line below. The SAME `liveBatteryPct` binding drives it.
             if (liveBatteryPct != null) {
-                BatteryTube(pct = liveBatteryPct)
+                BatteryTube(pct = liveBatteryPct, charging = liveCharging)
             }
 
             // #592: strap pack voltage (mV → volts, 2dp) beside the percent, when the battery event has
@@ -942,24 +963,91 @@ private fun DeviceCard(
  * that used to read as "· Battery x%" in the meta line now reads as the liquid vessel the design calls for.
  */
 @Composable
-private fun BatteryTube(pct: Int) {
+private fun BatteryTube(pct: Int, charging: Boolean) {
     val clamped = pct.coerceIn(0, 100)
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val reduceMotion = remember(context) {
+        runCatching {
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+        }.getOrDefault(false)
+    }
+    val batterySaver = remember(context) {
+        (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isPowerSaveMode == true
+    }
+    val fullyCharged = charging && clamped >= 100
+    val animateCharging = charging && !fullyCharged && !reduceMotion && !batterySaver
+    val animatedFraction by animateFloatAsState(
+        targetValue = clamped / 100f,
+        animationSpec = tween(durationMillis = 500),
+        label = "device-battery-level",
+    )
+    val shimmerPhase = if (animateCharging) {
+        rememberInfiniteTransition(label = "device-battery-charging").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(durationMillis = 1800, easing = LinearEasing)),
+            label = "device-battery-shimmer",
+        ).value
+    } else 0f
+    var fillWidthPx by remember { mutableIntStateOf(0) }
+    val shimmerWidthPx = with(density) { 42.dp.toPx() }
+    val label = when {
+        fullyCharged -> "Fully charged"
+        charging -> "Charging"
+        else -> uiString(R.string.l10n_devices_screen_battery_4a9be042)
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.semantics { contentDescription = uiString(R.string.l10n_devices_screen_battery_clamped_2494c8c9, clamped) },
+        modifier = Modifier.semantics { contentDescription = "$label, $clamped percent" },
     ) {
-        Text(uiString(R.string.l10n_devices_screen_battery_4a9be042), style = NoopType.footnote, color = Palette.textTertiary)
-        LiquidTube(
-            frac = clamped / 100.0,
-            tint = Palette.accent,
-            animated = false,
-            modifier = Modifier.weight(1f),
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (charging) {
+                Icon(Icons.Filled.Bolt, null, tint = Color(0xFF55C7FF), modifier = Modifier.size(15.dp))
+            }
+            Text(label, style = NoopType.footnote, color = if (charging) Color(0xFF7BD8FF) else Palette.textTertiary)
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(14.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xFF151C27))
+                .border(1.dp, Color(0xFF344258), RoundedCornerShape(999.dp)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedFraction.coerceIn(0f, 1f))
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF246BDB), Color(0xFF39A8FF), Color(0xFF73DFFF))))
+                    .onSizeChanged { fillWidthPx = it.width },
+            ) {
+                if (animateCharging && fillWidthPx > 0) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(42.dp)
+                            .offset {
+                                IntOffset(
+                                    ((fillWidthPx + shimmerWidthPx) * shimmerPhase - shimmerWidthPx).roundToInt(),
+                                    0,
+                                )
+                            }
+                            .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.78f), Color.Transparent))),
+                    )
+                }
+            }
+        }
+        Text(
+            uiString(R.string.l10n_devices_screen_clamped_1f39cebb, clamped),
+            style = NoopType.footnote,
+            color = if (charging) Color(0xFFBCEBFF) else Palette.textSecondary,
         )
-        Text(uiString(R.string.l10n_devices_screen_clamped_1f39cebb, clamped), style = NoopType.footnote, color = Palette.textSecondary)
     }
 }
-
 /**
  * The device card's state-pill label + tone, as a priority-ordered pure decision (#221): archived beats
  * everything; on the active card, reconnecting > bond-refused > live > plain active; a non-active card is

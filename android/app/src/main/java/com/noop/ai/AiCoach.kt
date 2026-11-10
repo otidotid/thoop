@@ -676,20 +676,51 @@ class AiCoach(
             }
         }
 
-        // --- Lab Book snapshot: the latest reading per marker the user has entered ---
-        val latestByMarker = runCatching { latestLabMarkers() }.getOrDefault(emptyList())
-        if (latestByMarker.isNotEmpty()) {
+        // --- Current THOOP Age and body-composition factors: read-only persisted results. ---
+        val activeId = activeStrapId()
+        val ageRows = linkedMapOf(
+            "THOOP Age" to "fitness_age",
+            "Estimated VO2 Max" to "vo2max_est",
+            "BMI factor" to "fitness_factor_bmi",
+            "Waist-to-height ratio factor" to "fitness_factor_whtr",
+            "Body-fat factor" to "fitness_factor_body_fat",
+            "Metabolic impact (years)" to "fitness_factor_metabolic_delta",
+        ).mapNotNull { (label, key) ->
+            runCatching { repo.latestMetricComputedUnion(activeId, key) }.getOrNull()
+                ?.let { Triple(label, it.day, it.value) }
+        }
+        if (ageRows.isNotEmpty()) {
             if (sb.isNotEmpty()) sb.append("\n")
-            sb.append("LAB BOOK (numbers the user entered themselves from their own reports; NOOP does not ")
-            sb.append("test or interpret them — never assert whether a value is normal/high/low):\n")
-            for (row in latestByMarker) {
-                val name = MarkerCatalog.definition(row.markerKey)?.displayName
-                    ?: row.markerKey.replace("_", " ").replaceFirstChar { it.uppercase() }
-                val value = row.value?.let { fmt1(it) + " " + row.unit } ?: (row.valueText ?: "—")
-                sb.append("  • $name: $value\n")
+            sb.append("THOOP AGE AND BODY-COMPOSITION CONTEXT ")
+            sb.append("(read-only values calculated on-device; explain them but never recalculate or replace THOOP Age):\n")
+            for ((label, day, value) in ageRows) {
+                sb.append("  â€¢ $label: ${fmt1(value)} (snapshot $day)\n")
             }
         }
 
+        // --- Complete latest Lab Book snapshot: newest reading for every available marker. ---
+        val latestByMarker = runCatching { latestLabMarkers() }.getOrDefault(emptyList())
+        if (latestByMarker.isNotEmpty()) {
+            if (sb.isNotEmpty()) sb.append("\n")
+            sb.append("LAB BOOK â€” LATEST READING FOR EVERY AVAILABLE MARKER ")
+            sb.append("(interpret using the stated unit, date, source, report range and uncertainty; ")
+            sb.append("informational only, never a diagnosis or medication instruction):\n")
+            for (row in latestByMarker) {
+                val name = MarkerCatalog.definition(row.markerKey)?.displayName
+                    ?: row.markerKey.replace("_", " ").replaceFirstChar { it.uppercase() }
+                val value = row.value?.let { fmt1(it) + " " + row.unit } ?: (row.valueText ?: "â€”")
+                sb.append("  â€¢ $name [${row.markerKey}]: $value; measured ${row.day}; ")
+                sb.append("category ${row.category}; source ${row.source}")
+                row.referenceText?.takeIf { it.isNotBlank() }?.let { reference ->
+                    sb.append("; report reference: ${reference.replace("\n", " ").take(160)}")
+                }
+                row.note?.takeIf { it.isNotBlank() }?.let { note ->
+                    sb.append("; note: ${note.replace("\n", " ").take(160)}")
+                }
+                sb.append("\n")
+            }
+            sb.append("  â€¢ Missing markers are unknown, not zero and not normal.\n")
+        }
         return sb.toString().trim().takeIf { it.isNotEmpty() }
     }
 
