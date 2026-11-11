@@ -2936,8 +2936,8 @@ private fun LiquidBatteryRing(batteryPct: Double?, isRing: Boolean, onClick: () 
         if (batteryPct != null) {
             val pct = batteryPct.coerceIn(0.0, 100.0)
             val ringColor = when {
-                pct < 15 -> Palette.statusCritical
-                pct < 35 -> Palette.statusWarning
+                pct <= 25.0 -> Palette.statusCritical
+                pct < 80.0 -> Palette.statusWarning
                 else -> Palette.chargeColor
             }
             Canvas(modifier = Modifier.size(HeaderClusterControl).padding(2.5.dp)) {

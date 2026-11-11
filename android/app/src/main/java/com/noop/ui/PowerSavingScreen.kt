@@ -12,6 +12,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,7 +39,14 @@ import kotlin.math.roundToInt
 fun PowerSavingScreen(vm: AppViewModel) {
     val context = LocalContext.current
     var powerSaving by remember { mutableStateOf(NoopPrefs.powerSaving(context)) }
-    var powerSavingBatteryPct by remember { mutableStateOf(NoopPrefs.powerSavingBatteryPct(context)) }
+    val storedPowerSavingBatteryPct = remember { NoopPrefs.powerSavingBatteryPct(context) }
+    var powerSavingBatteryPct by remember { mutableStateOf(normalizePowerSavingThreshold(storedPowerSavingBatteryPct)) }
+
+    LaunchedEffect(Unit) {
+        if (storedPowerSavingBatteryPct != powerSavingBatteryPct) {
+            vm.setPowerSavingBatteryPct(powerSavingBatteryPct)
+        }
+    }
     var pauseHrvOnPowerSave by remember { mutableStateOf(NoopPrefs.pauseHrvOnPowerSave(context)) }
     var lowRefresh by remember { mutableStateOf(NoopPrefs.lowRefresh(context)) }
 
@@ -95,12 +103,10 @@ fun PowerSavingScreen(vm: AppViewModel) {
                 }
                 Slider(
                     value = powerSavingBatteryPct.toFloat(),
-                    // 10–35% snapping to 5% steps (10/15/20/25/30/35). steps = the 4 stops BETWEEN ends.
-            // 35 buys one more step of strap life than the old 30 ceiling: the levers engage ~5%
-            // earlier in the discharge, at the cost of a slightly longer stretch of quieter syncing.
-                    onValueChange = { powerSavingBatteryPct = it.roundToInt() },
+                    // Six exact activation thresholds: 15, 30, 45, 60, 75 and 90 percent.
+                    onValueChange = { powerSavingBatteryPct = normalizePowerSavingThreshold(it.roundToInt()) },
                     onValueChangeFinished = { vm.setPowerSavingBatteryPct(powerSavingBatteryPct) },
-                    valueRange = 10f..35f,
+                    valueRange = 15f..90f,
                     steps = 4,
                     colors = SliderDefaults.colors(
                         thumbColor = Palette.accent,
@@ -173,3 +179,7 @@ fun PowerSavingScreen(vm: AppViewModel) {
     }
     }
 }
+internal val powerSavingThresholds: List<Int> = listOf(15, 30, 45, 60, 75, 90)
+
+internal fun normalizePowerSavingThreshold(value: Int): Int =
+    powerSavingThresholds.minByOrNull { kotlin.math.abs(it - value) } ?: 30

@@ -276,6 +276,8 @@ fun LabBookScreen(vm: AppViewModel) {
                         title = category.displayName,
                         overline = if (keys.size == 1) "1 marker" else "${keys.size} markers",
                     )
+                    Spacer(Modifier.height(8.dp))
+
                     for (key in keys) {
                         MarkerRow(key = key, readings = readingsFor(markers, key)) { detailKey = key }
                     }
@@ -371,7 +373,11 @@ fun LabBookScreen(vm: AppViewModel) {
 private fun MarkerRow(key: String, readings: List<LabMarkerRow>, onClick: () -> Unit) {
     val numeric = readings.mapNotNull { it.value }
     val latest = readings.lastOrNull()
-    NoopCard(modifier = Modifier.clickable(onClick = onClick)) {
+    NoopCard(
+        modifier = Modifier
+            .padding(vertical = 5.dp)
+            .clickable(onClick = onClick),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(displayName(key, readings), style = NoopType.headline, color = Palette.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
