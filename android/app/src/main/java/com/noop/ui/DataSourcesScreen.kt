@@ -484,9 +484,9 @@ fun DataSourcesScreen(vm: AppViewModel) {
         SourceCard(
             title = uiString(R.string.l10n_data_sources_screen_health_connect_be6bca3e),
             icon = Icons.Filled.MonitorHeart,
-            subtitle = "Manual import only. Activity only imports steps and calories; All also imports " +
-                "exercise sessions and their distance. Sleep, HR, HRV, SpO₂, VO₂ max and body " +
-                "composition are never read.",
+            subtitle = "Manual import only. Workout Only imports exercise sessions, distance and GPS route when available. " +
+                "Workout + Activity also imports supported steps and calorie activity. Sleep, HR, HRV, SpO₂, " +
+                "VO₂ max and body composition are never read.",
         ) {
             val hasHc = (hcDays ?: 0) > 0 || (hcWorkouts ?: 0) > 0
             if (hasHc) {
@@ -549,7 +549,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
                 if (hcWriteback && hcWbStatus.code.isNotEmpty()) {
                     when (hcWbStatus.code) {
                         NoopPrefs.HC_WB_PERMISSION_DENIED -> Text(
-                            uiString(R.string.l10n_data_sources_screen_sharing_paused_health_connect_permission_was_e8950315),
+                            "Last share was paused. Tap to re-check write access and retry.",
                             style = NoopType.footnote,
                             color = Palette.accent,
                             modifier = Modifier

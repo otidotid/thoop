@@ -1511,6 +1511,36 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, onDismiss: ()
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            row.routePolyline?.takeIf { it.isNotBlank() }?.let { encoded ->
+                val route = remember(encoded) { runCatching { RouteMath.decode(encoded) }.getOrDefault(emptyList()) }
+                if (route.size >= 2) {
+                    NoopCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Route", style = NoopType.headline, color = Palette.textPrimary)
+                            Canvas(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(210.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Palette.surfaceRaised)
+                                    .semantics { contentDescription = "Workout GPS route map" },
+                            ) {
+                                val points = RouteMath.normalizeToBox(route, size.width, size.height, 20f)
+                                if (points.size >= 2) {
+                                    val routePath = androidx.compose.ui.graphics.Path().apply {
+                                        moveTo(points.first().first, points.first().second)
+                                        points.drop(1).forEach { lineTo(it.first, it.second) }
+                                    }
+                                    drawPath(routePath, Palette.accent, style = Stroke(width = 7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                    drawCircle(Palette.textPrimary, 9f, androidx.compose.ui.geometry.Offset(points.first().first, points.first().second))
+                                    drawCircle(Palette.accent, 11f, androidx.compose.ui.geometry.Offset(points.last().first, points.last().second))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     sportIcon(row.sport),

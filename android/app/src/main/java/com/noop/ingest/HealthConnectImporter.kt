@@ -107,22 +107,20 @@ object HealthConnectImporter {
         val storageKey: String,
         internal val recordTypes: Set<KClass<out Record>>,
     ) {
+        // Storage keys remain unchanged for backward compatibility.
+        // ACTIVITY_ONLY now means Workout Only; ALL means Workout + Activity.
         ACTIVITY_ONLY(
             "activity-only",
-            setOf(
-                StepsRecord::class,
-                TotalCaloriesBurnedRecord::class,
-                ActiveCaloriesBurnedRecord::class,
-            ),
+            setOf(ExerciseSessionRecord::class, DistanceRecord::class),
         ),
         ALL(
             "all",
             setOf(
+                ExerciseSessionRecord::class,
+                DistanceRecord::class,
                 StepsRecord::class,
                 TotalCaloriesBurnedRecord::class,
                 ActiveCaloriesBurnedRecord::class,
-                ExerciseSessionRecord::class,
-                DistanceRecord::class,
             ),
         ),
     }

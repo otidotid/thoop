@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
@@ -111,6 +112,7 @@ fun LabBookScreen(vm: AppViewModel) {
     var showEditor by remember { mutableStateOf(false) }
     var showDisclaimer by remember { mutableStateOf(false) }
     var detailKey by remember { mutableStateOf<String?>(null) }
+    var editingRow by remember { mutableStateOf<LabMarkerRow?>(null) }
 
     // Markers CSV import (LabMarkerCsvImport, Phase 2).
     var csvImporting by remember { mutableStateOf(false) }
@@ -265,7 +267,10 @@ fun LabBookScreen(vm: AppViewModel) {
                 }
             }
             else -> {
-                for (category in orderedCategories(markers)) {
+                orderedCategories(markers).forEachIndexed { categoryIndex, category ->
+                    if (categoryIndex > 0) {
+                        Spacer(Modifier.height(20.dp))
+                    }
                     val keys = markerKeys(markers, category)
                     SectionHeader(
                         title = category.displayName,
@@ -322,6 +327,7 @@ fun LabBookScreen(vm: AppViewModel) {
             vm = vm,
             markerKey = key,
             readings = readingsFor(markers, key),
+            onEdit = { row -> editingRow = row },
             onDelete = { id ->
                 scope.launch {
                     vm.repo.deleteLabMarker(id)
@@ -329,6 +335,32 @@ fun LabBookScreen(vm: AppViewModel) {
                 }
             },
             onDismiss = { detailKey = null },
+        )
+    }
+
+    editingRow?.let { original ->
+        CustomMarkerEditScreen(
+            row = original,
+            onDismiss = { editingRow = null },
+            onSave = { edited ->
+                scope.launch {
+                    val sameMarker = markers.filter { it.markerKey == original.markerKey }
+                    if (edited.markerKey != original.markerKey) {
+                        sameMarker.forEach { existing ->
+                            val replacement = if (existing.id == original.id) edited else existing.copy(
+                                markerKey = edited.markerKey,
+                                displayName = edited.displayName,
+                            )
+                            vm.repo.replaceLabMarker(existing.id, replacement)
+                        }
+                    } else {
+                        vm.repo.replaceLabMarker(original.id, edited)
+                    }
+                    reloadSeq++
+                    detailKey = edited.markerKey
+                    editingRow = null
+                }
+            },
         )
     }
 }
@@ -342,11 +374,11 @@ private fun MarkerRow(key: String, readings: List<LabMarkerRow>, onClick: () -> 
     NoopCard(modifier = Modifier.clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(displayName(key), style = NoopType.headline, color = Palette.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(displayName(key, readings), style = NoopType.headline, color = Palette.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(lastTakenCaption(latest), style = NoopType.footnote, color = Palette.textTertiary)
             }
-            if (numeric.size > 1) {
-                MiniSpark(values = numeric, color = Palette.metricCyan, modifier = Modifier.width(64.dp).height(28.dp))
+            if (numeric.size >= 2 && numeric.distinct().size >= 2) {
+                MiniSpark(values = numeric, color = Palette.metricCyan, modifier = Modifier.width(64.dp).height(28.dp).clip(RoundedCornerShape(6.dp)))
             }
             Text(latestLabel(latest, key), style = NoopType.number(18f), color = Palette.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Palette.textTertiary, modifier = Modifier.size(16.dp))
@@ -361,10 +393,11 @@ private fun MarkerDetailSheet(
     vm: AppViewModel,
     markerKey: String,
     readings: List<LabMarkerRow>,
+    onEdit: (LabMarkerRow) -> Unit,
     onDelete: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val name = displayName(markerKey)
+    val name = displayName(markerKey, readings)
     val unit = readings.lastOrNull()?.unit ?: MarkerCatalog.definition(markerKey)?.canonicalUnit ?: ""
     val numeric = readings.filter { it.value != null }
 
@@ -455,7 +488,7 @@ private fun MarkerDetailSheet(
                 Column {
                     val reversed = readings.reversed()
                     reversed.forEachIndexed { idx, row ->
-                        HistoryRow(markerKey, row, onDelete)
+                        HistoryRow(markerKey, row, onEdit, onDelete)
                         if (idx < reversed.size - 1) {
                             Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
                         }
@@ -561,7 +594,7 @@ private fun SignalPicker(selected: LabSignal?, onSelect: (LabSignal?) -> Unit) {
 }
 
 @Composable
-private fun HistoryRow(markerKey: String, row: LabMarkerRow, onDelete: (String) -> Unit) {
+private fun HistoryRow(markerKey: String, row: LabMarkerRow, onEdit: (LabMarkerRow) -> Unit, onDelete: (String) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
         verticalAlignment = Alignment.Top,
@@ -573,6 +606,16 @@ private fun HistoryRow(markerKey: String, row: LabMarkerRow, onDelete: (String) 
             row.note?.takeIf { it.isNotEmpty() }?.let {
                 Text(it, style = NoopType.footnote, color = Palette.textSecondary)
             }
+        }
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onEdit(row) }
+                .semantics { contentDescription = "Edit this reading" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Edit, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(15.dp))
         }
         Box(
             modifier = Modifier
@@ -653,8 +696,10 @@ private fun countLine(markers: List<LabMarkerRow>): String {
     return "$keys $markerWord tracked · ${markers.size} $readingWord"
 }
 
-private fun displayName(key: String): String =
-    MarkerCatalog.definition(key)?.displayName ?: key.replace("_", " ").replaceFirstChar { it.uppercase() }
+private fun displayName(key: String, readings: List<LabMarkerRow> = emptyList()): String =
+    MarkerCatalog.definition(key)?.displayName
+        ?: readings.lastOrNull { !it.displayName.isNullOrBlank() }?.displayName
+        ?: key.removePrefix("custom_").replace("_", " ").replaceFirstChar { it.uppercase() }
 
 private fun readingsFor(markers: List<LabMarkerRow>, key: String): List<LabMarkerRow> =
     markers.filter { it.markerKey == key }

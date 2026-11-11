@@ -1152,6 +1152,17 @@ interface WhoopDao : DeviceRegistryDao {
         return true
     }
 
+    /** Atomic Labs edit, including marker rename, value, unit, and date changes. */
+    @Transaction
+    suspend fun replaceLabMarker(id: String, edited: LabMarkerRow): Boolean {
+        val old = labMarkerById(id) ?: return false
+        deleteLabMarkerRaw(id)
+        reprojectCell(old.deviceId, old.markerKey, old.day)
+        insertLabMarkersRaw(listOf(edited.copy(id = id)))
+        reprojectCell(edited.deviceId, edited.markerKey, edited.day)
+        return true
+    }
+
     /** Recompute the `metricSeries` projection (under [LAB_BOOK_SOURCE_ID]) for one cell from the
      *  CURRENT labMarker rows: latest-numeric-per-day wins; no numeric reading → drop the day. */
     @Transaction

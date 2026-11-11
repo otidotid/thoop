@@ -503,6 +503,12 @@ data class LabMarkerRow(
     val source: String,
     val note: String? = null,
     val referenceText: String? = null, // user-entered range, shown verbatim; NOOP ships none
+    // Schema v42: editable custom-marker metadata. Nullable keeps existing rows compatible.
+    val displayName: String? = null,
+    val sampleCondition: String? = null,
+    val hoursSinceMeal: Double? = null,
+    val evidenceProfileId: String? = null,
+    val evidenceVersion: String? = null,
 )
 
 /**

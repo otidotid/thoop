@@ -2730,6 +2730,32 @@ object IntelligenceEngine {
         val labHeight = latestLab("height")
         val labWaist = latestLab("waist")
         val labBodyFat = latestLab("body_fat")
+        // Custom non-fasting glucose is a conservative fallback inside the glycaemic cluster.
+        // Stronger standard markers win to prevent double-counting.
+        val hasPrimaryGlycemic = latestLab("fasting_glucose") != null || latestLab("hba1c") != null
+        val customGlycemic = if (hasPrimaryGlycemic) null else
+            repo.labMarkersByCategory("my-whoop", "other")
+                .asSequence()
+                .filter { it.day <= satKey && it.evidenceProfileId == "glycemic_non_fasting" && it.value != null }
+                .maxByOrNull { it.takenAt }
+        val customGlycemicDelta = customGlycemic?.let { reading ->
+            val condition = when (reading.sampleCondition) {
+                "non_fasting" -> CustomLabAgePolicy.SampleCondition.NON_FASTING
+                "post_meal" -> CustomLabAgePolicy.SampleCondition.POST_MEAL
+                else -> CustomLabAgePolicy.SampleCondition.UNKNOWN
+            }
+            CustomLabAgePolicy.nonFastingGlucose(
+                CustomLabAgePolicy.Reading(
+                    value = reading.value!!,
+                    unit = reading.unit,
+                    day = java.time.LocalDate.parse(reading.day),
+                    condition = condition,
+                    hoursSinceMeal = reading.hoursSinceMeal,
+                ),
+                java.time.LocalDate.parse(satKey),
+            ).takeIf { it.eligible }?.ageDeltaYears
+        } ?: 0.0
+
         val rhrs = gateDays.mapNotNull { it.restingHr }.map { it.toDouble() }
         val strains = gateDays.mapNotNull { it.strain }.filter { it >= 30.0 }
         val meanStrain = if (strains.isEmpty()) 0.0 else strains.average()
@@ -2744,7 +2770,7 @@ object IntelligenceEngine {
             restingHR = medianOfDoubles(rhrs),
             paIndex = FitnessAgeEngine.physicalActivityIndexFromStrain(strains.size, meanStrain),
             waistCm = waist, weightKg = labWeight, heightCm = labHeight, bodyFatPct = labBodyFat) ?: return emptyList()
-        val rows = mutableListOf(MetricSeriesRow(deviceId = computedId, day = satKey, key = "fitness_age", value = res.fitnessAge))
+        val rows = mutableListOf(MetricSeriesRow(deviceId = computedId, day = satKey, key = "fitness_age", value = res.fitnessAge + customGlycemicDelta))
         res.bmi?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_bmi", it) }
         res.waistToHeightRatio?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_whtr", it) }
         res.bodyFatPct?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_body_fat", it) }
