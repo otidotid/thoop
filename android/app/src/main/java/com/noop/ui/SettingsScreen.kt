@@ -132,7 +132,7 @@ import com.noop.analytics.Zones
 import com.noop.R
 import com.noop.ble.PuffinExperiment
 import com.noop.ble.WhoopBleClient
-// #174: the R22 card reads the flag COUNT off Whoop5Config.enableR22Sequence rather than restating it —
+// #174: the R22 card reads the flag COUNT off Whoop5Config.enableR22Sequence rather than restating it â€”
 // the hardcoded "15" outlived the sequence growing to 16 and declared success a flag early.
 import com.noop.protocol.Whoop5Config
 import com.noop.protocol.EcgRawDataGateReport
@@ -164,7 +164,7 @@ import com.noop.analytics.ClockFormatPreference
 //    store in the app, so HealthScreen's age-agnostic HR-max default can later read
 //    from it. Values persist immediately on every change.
 //  - macOS used native +/- Steppers; Compose has no Stepper, so each numeric field
-//    is a tabular value flanked by round −/+ buttons (same intent, same ranges).
+//    is a tabular value flanked by round âˆ’/+ buttons (same intent, same ranges).
 //  - The strap "Re-scan / Disconnect" controls map to the ViewModel's connect() /
 //    disconnect() pass-throughs.
 //  - Backup export/import run through SAF (CreateDocument / OpenDocument); the macOS
@@ -174,12 +174,12 @@ import com.noop.analytics.ClockFormatPreference
 // MARK: - Profile store (SharedPreferences-backed; the macOS ProfileStore equivalent)
 
 /**
- * The user's body profile — age / sex / weight / height plus an optional manual
+ * The user's body profile â€” age / sex / weight / height plus an optional manual
  * HR-max override. Persisted to SharedPreferences so the values survive restarts
  * and other screens (HealthScreen, Coach zones) can read the same source of truth.
  *
  * Mirrors the macOS `ProfileStore` fields and ranges exactly. `hrMaxOverride == 0`
- * means "auto" — fall back to the Tanaka estimate from [age].
+ * means "auto" â€” fall back to the Tanaka estimate from [age].
  */
 class ProfileStore(private val prefs: SharedPreferences) {
 
@@ -193,7 +193,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
         get() = yearsFromDob(dateOfBirthMillis).coerceIn(AGE_MIN, AGE_MAX)
 
     /**
-     * Date of birth as epoch millis — the canonical source of truth for [age] (#146). The getter
+     * Date of birth as epoch millis â€” the canonical source of truth for [age] (#146). The getter
      * lazily migrates a pre-#146 stored age (or a restored legacy `age`, see [applyBackup]) into an
      * anchored DOB the first time it's read, then persists it so the derivation is stable. The setter
      * mirrors the derived Int age under the legacy [KEY_AGE] so the `.noopbak` backup whitelist keeps
@@ -219,7 +219,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
         dateOfBirthMillis = dobForAge(years.coerceIn(AGE_MIN, AGE_MAX))
     }
 
-    /** "male" | "female" | "nonbinary" — matches the macOS tag values. */
+    /** "male" | "female" | "nonbinary" â€” matches the macOS tag values. */
     var sex: String
         get() = prefs.getString(KEY_SEX, "male") ?: "male"
         set(v) = prefs.edit().putString(KEY_SEX, v).apply()
@@ -256,8 +256,8 @@ class ProfileStore(private val prefs: SharedPreferences) {
             .apply()
 
     /**
-     * Waist circumference in cm; 0 = unset (the Fitness Age VO₂max estimate is hidden until a waist
-     * is entered). Optional — it only unlocks the VO₂max read-out and never moves the headline Fitness
+     * Waist circumference in cm; 0 = unset (the Fitness Age VOâ‚‚max estimate is hidden until a waist
+     * is entered). Optional â€” it only unlocks the VOâ‚‚max read-out and never moves the headline Fitness
      * Age (the engine's body term cancels). No coercion floor (0 has to remain a sentinel for "unset");
      * the upper bound is clamped so a fat-fingered entry can't run away.
      */
@@ -272,8 +272,8 @@ class ProfileStore(private val prefs: SharedPreferences) {
 
     /**
      * Step-calibration divisor (#139/#132): counter ticks per real step for the @57 motion
-     * counter. 1.0 = raw pass-through (default — no behavior change). Clamped 0.5–30.0
-     * (WHOOP 5/MG motion-counter overcount can reach ~24×, so the ceiling has to be high).
+     * counter. 1.0 = raw pass-through (default â€” no behavior change). Clamped 0.5â€“30.0
+     * (WHOOP 5/MG motion-counter overcount can reach ~24Ã—, so the ceiling has to be high).
      */
     var stepTicksPerStep: Double
         get() = prefs.getFloat(KEY_STEP_SCALE, 1f).toDouble()
@@ -283,14 +283,14 @@ class ProfileStore(private val prefs: SharedPreferences) {
             .apply()
 
     /**
-     * The analytics [UserProfile] for this store — the ONE place the mapping lives.
+     * The analytics [UserProfile] for this store â€” the ONE place the mapping lives.
      *
      * Every field matters somewhere and a missing one fails silently rather than loudly. Dropping
-     * [waistCm] does not blank VO₂max, it swaps the estimator: `FitnessAgeEngine.compute` returns a
+     * [waistCm] does not blank VOâ‚‚max, it swaps the estimator: `FitnessAgeEngine.compute` returns a
      * waist-based Nes value only when a waist is supplied, and `fitnessAgeRows` otherwise falls back to
      * the Uth HR-ratio formula and writes THAT under the same "vo2max_est" key. Two passes built two
      * profiles, one of them lost the waist, and the card alternated between the two estimators with no
-     * visible cause — a fit user with a low resting HR saw it swing by ~14 (#1493). Build the profile
+     * visible cause â€” a fit user with a low resting HR saw it swing by ~14 (#1493). Build the profile
      * here so a caller cannot omit a field by writing one out longhand.
      */
     fun toUserProfile(): UserProfile = UserProfile(
@@ -302,7 +302,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
         waistCm = waistCm,
     )
 
-    // ── Steps ESTIMATE calibration (WHOOP 4.0; StepsEstimateEngine) ─────────────────────────────
+    // â”€â”€ Steps ESTIMATE calibration (WHOOP 4.0; StepsEstimateEngine) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Mirror of the macOS ProfileStore fields: the engine writes the auto-fit each analytics pass and
     // the Settings/Steps screen reads them. [stepsManualCoefficient] is the ONLY user-settable field
     // (0 = auto-fit / null to the engine; > 0 = manual override fed into calibrate()); the other three
@@ -317,7 +317,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
         get() = prefs.getInt(KEY_STEPS_SAMPLE_DAYS, 0)
         set(v) = prefs.edit().putInt(KEY_STEPS_SAMPLE_DAYS, v).apply()
 
-    /** 0–1 trust in the last fit (1.0 for a manual coefficient). */
+    /** 0â€“1 trust in the last fit (1.0 for a manual coefficient). */
     var stepsCalibrationConfidence: Double
         get() = prefs.getFloat(KEY_STEPS_CONFIDENCE, 0f).toDouble()
         set(v) = prefs.edit().putFloat(KEY_STEPS_CONFIDENCE, v.toFloat()).apply()
@@ -338,7 +338,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
     val stepsManualOverride: Double? get() = stepsManualCoefficient.takeIf { it > 0 }
 
     /**
-     * #1816: true when the strap has banked ANY motion (gravity samples → `dayMotionIntensity > 0`)
+     * #1816: true when the strap has banked ANY motion (gravity samples â†’ `dayMotionIntensity > 0`)
      * in the calibration scan window. Written by the analytics engine on every pass so it tracks a
      * fresh strap's first sync without a separate query. The Today tile reads this to decide whether
      * "Need N more days where your phone also counted steps" is the honest caption or a lie: a step
@@ -401,9 +401,9 @@ class ProfileStore(private val prefs: SharedPreferences) {
         hrZoneThresholds = current
     }
 
-    // ── Backup settings snapshot/apply (#1000) ──────────────────────────────────────────────────
+    // â”€â”€ Backup settings snapshot/apply (#1000) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // The profile half of a `.noopbak`'s `settings.json`. Canonical key strings mirror
-    // `BackupSettingsCodec.WHITELIST` (and the Apple `BackupSettings.whitelist`) exactly — note
+    // `BackupSettingsCodec.WHITELIST` (and the Apple `BackupSettings.whitelist`) exactly â€” note
     // canonical `profile.hrMax` maps onto this store's `hr_max_override` pref. Lives on ProfileStore
     // because only it knows its private pref keys; `contains` checks keep never-set fields OUT of the
     // snapshot so restoring on another device doesn't stamp defaults over that device's real values.
@@ -433,7 +433,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
      */
     fun applyBackup(values: Map<String, Any>) {
         // #146: a restore carries only an Int age. Route it through setAge so the restored age
-        // re-anchors this device's DOB (clearing any stale local DOB) and then advances on its own —
+        // re-anchors this device's DOB (clearing any stale local DOB) and then advances on its own â€”
         // the deterministic twin of the Apple side clearing `profile.dateOfBirth` on apply.
         (values["profile.age"] as? Number)?.let { setAge(it.toInt()) }
         (values["profile.sex"] as? String)?.let { sex = it }
@@ -449,7 +449,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
     companion object {
         internal const val PREFS = "noop_profile"
 
-        /** Date of birth as epoch millis — the #146 source of truth for [age]. */
+        /** Date of birth as epoch millis â€” the #146 source of truth for [age]. */
         private const val KEY_DOB = "date_of_birth"
 
         /** Pre-#146 age key, now kept mirrored from the DOB so the `.noopbak` whitelist (Int age)
@@ -495,10 +495,10 @@ class ProfileStore(private val prefs: SharedPreferences) {
         /**
          * Variable step for the calibration stepper so high values stay reachable: fine near the
          * 1.0 default (where most people land), coarse up at the 20s+ a 5/MG needs. A flat 0.1 step
-         * from 0.5 to 30 would be ~295 taps — unusable. Mirrors macOS `ProfileStore.stepScaleIncrement`.
-         *  - `< 2.0` → 0.1   (precision around the default)
-         *  - `2.0–5.0` → 0.5
-         *  - `>= 5.0` → 1.0   (ballpark the ~24× overcount in ~19 taps)
+         * from 0.5 to 30 would be ~295 taps â€” unusable. Mirrors macOS `ProfileStore.stepScaleIncrement`.
+         *  - `< 2.0` â†’ 0.1   (precision around the default)
+         *  - `2.0â€“5.0` â†’ 0.5
+         *  - `>= 5.0` â†’ 1.0   (ballpark the ~24Ã— overcount in ~19 taps)
          */
         fun stepScaleIncrement(value: Double): Double = when {
             value < 2.0 -> 0.1
@@ -506,8 +506,8 @@ class ProfileStore(private val prefs: SharedPreferences) {
             else -> 1.0
         }
 
-        // ── #146 age <-> date-of-birth ──────────────────────────────────────────────────────────
-        /** Whole years between the DOB and today (floor — a birthday not yet reached doesn't count).
+        // â”€â”€ #146 age <-> date-of-birth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        /** Whole years between the DOB and today (floor â€” a birthday not yet reached doesn't count).
          *  Uses the device's default zone so the rollover matches the user's local calendar. Mirrors
          *  the Apple `ProfileStore.years(from:to:)`. */
         fun yearsFromDob(dobMillis: Long): Int {
@@ -528,8 +528,8 @@ class ProfileStore(private val prefs: SharedPreferences) {
         /**
          * One increment/decrement of the calibration divisor, snapped to the increment grid and
          * clamped to [STEP_SCALE_MIN]..[STEP_SCALE_MAX]. Decrement uses the increment for the
-         * *target* band so the up/down sequence is symmetric at band boundaries (e.g. 5.0 −1 → 4.0,
-         * 4.0 +0.5 → 4.5). Mirrors macOS `ProfileStore.steppedStepScale`.
+         * *target* band so the up/down sequence is symmetric at band boundaries (e.g. 5.0 âˆ’1 â†’ 4.0,
+         * 4.0 +0.5 â†’ 4.5). Mirrors macOS `ProfileStore.steppedStepScale`.
          */
         fun steppedStepScale(value: Double, up: Boolean): Double {
             val delta = if (up) stepScaleIncrement(value) else stepScaleIncrement(value - 0.0001)
@@ -571,15 +571,15 @@ fun SettingsScreen(
     // #820 made a BLE callback a writer of `noop_experiments`: a strap FAMILY switch clears the
     // 5/MG-only probes. Without this the toggles below would keep showing their old state until you
     // navigated away and back, because an unkeyed remember{} reads once per composition. macOS gets
-    // this free — @AppStorage republishes on any UserDefaults write — and Compose needs it spelled
+    // this free â€” @AppStorage republishes on any UserDefaults write â€” and Compose needs it spelled
     // out. Bumping `rev` is the whole mechanism; every experiment read below is keyed on it. Deliberately
-    // not stated as a count — it was already wrong before the #1635 toggle was added to the list.
+    // not stated as a count â€” it was already wrong before the #1635 toggle was added to the list.
     DisposableEffect(Unit) {
         val expPrefs = context.getSharedPreferences(PuffinExperiment.PREFS, Context.MODE_PRIVATE)
         // Strong local for the effect's lifetime: Android holds these listeners WEAKLY, so one that is
         // only referenced by the register call gets collected and silently stops firing.
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            // `key` is @Nullable on modern SDKs — it arrives null when the whole file is cleared — so
+            // `key` is @Nullable on modern SDKs â€” it arrives null when the whole file is cleared â€” so
             // the null check is required to compile, not just defensive. A clear() is not something
             // this app does, but treating it as "everything changed" is the correct reading anyway.
             if (key == null || key in PuffinExperiment.FIVE_MG_GATED_KEYS) rev++
@@ -615,7 +615,7 @@ fun SettingsScreen(
     var backupFailure by remember { mutableStateOf<String?>(null) }
 
     // #646/#651: LogExport's zip build + file read now run on Dispatchers.IO instead of blocking the
-    // caller, so these buttons no longer freeze the UI — but nothing else stopped a second tap mid-export
+    // caller, so these buttons no longer freeze the UI â€” but nothing else stopped a second tap mid-export
     // either. A big raw capture is exactly when someone taps twice, firing two zips / two chooser
     // intents. Same disable-while-busy + spinner shape as backupBusy above, one flag per button.
     // Each clears in a `finally`, not after the call: they only cleared correctly before because every
@@ -624,13 +624,13 @@ fun SettingsScreen(
     // stops, with no way back short of leaving the screen.
     var strapLogBusy by remember { mutableStateOf(false) }
 
-    // Re-scan must request the runtime Bluetooth permission before scanning — without this the
+    // Re-scan must request the runtime Bluetooth permission before scanning â€” without this the
     // button calls connect() directly and silently no-ops on Android 12+ when the permission was
     // denied/revoked (issue #1). Shared with Live's Connect via the one rememberRequestScan gate.
     val requestScan = rememberRequestScan { vm.connect() }
 
     // "What's New" changelog sheet, reachable any time from About (mirrors the macOS
-    // Settings → About "What's new" button). Persistence/gating lives in NoopRoot; this
+    // Settings â†’ About "What's new" button). Persistence/gating lives in NoopRoot; this
     // is a manual re-open and writes nothing.
     var showWhatsNew by remember { mutableStateOf(false) }
 
@@ -638,11 +638,11 @@ fun SettingsScreen(
     var showScoringGuide by remember { mutableStateOf(false) }
 
     // "How NOOP works" primer sheet (COMPONENT 5 of the explainability layer), reachable any time
-    // from About — the plain-English tour of sleep sorting, scores, recording and provenance.
+    // from About â€” the plain-English tour of sleep sorting, scores, recording and provenance.
     var showHowNoopWorks by remember { mutableStateOf(false) }
 
     // "WHOOP 4.0 vs 5.0/MG: what each can read and why" explainer (FI-2 / #490), reachable from the
-    // Strap section by BOTH model owners. Clears up which features each strap supports — e.g. why the
+    // Strap section by BOTH model owners. Clears up which features each strap supports â€” e.g. why the
     // strap-firmware broadcast-out is 5/MG-only while NOOP's own re-broadcast works on any strap.
     var showModelComparison by remember { mutableStateOf(false) }
 
@@ -675,13 +675,13 @@ fun SettingsScreen(
 
     // #174: set when the deep-data switch is turned OFF, so the app can OFFER to clear the flags on the
     // strap instead of silently leaving them set. The switch alone has never written anything in either
-    // direction — it gates sends — so turning it off used to change nothing on the hardware while reading
+    // direction â€” it gates sends â€” so turning it off used to change nothing on the hardware while reading
     // like an undo. Asking is the right shape rather than writing automatically: the strap may not be
     // connected, and a write to bonded hardware is not something a toggle should do unannounced.
     var confirmingDeepDataDisable by remember { mutableStateOf(false) }
     val r22DisableReport by vm.ble.r22DisableReport.collectAsState()
     // How many flags the enable sequence actually writes. Read from the sequence rather than restated, so
-    // the card cannot drift from it again — it said "15" for the whole life of the 16-flag sequence.
+    // the card cannot drift from it again â€” it said "15" for the whole life of the 16-flag sequence.
     val r22FlagCount = Whoop5Config.enableR22Sequence.size
     var broadcastHr by remember(rev) { mutableStateOf(puffinExperiment.broadcastHr) }
     var explicitBond by remember(rev) { mutableStateOf(puffinExperiment.explicitBond) }
@@ -692,16 +692,16 @@ fun SettingsScreen(
     val ecgGateReport by vm.ble.ecgRawDataGate.collectAsStateWithLifecycle()
     val ecgVariant by vm.ble.whoop5VariantFlow.collectAsStateWithLifecycle()
     val ecgVariantIsMG = ecgVariant.isMG
-    // "Sleep staging (V2)" — V2 is the DEFAULT for every strap (WHOOP 4 and 5/MG); turn it OFF to fall back
+    // "Sleep staging (V2)" â€” V2 is the DEFAULT for every strap (WHOOP 4 and 5/MG); turn it OFF to fall back
     // to V1. Model-agnostic, so it lives outside the 5/MG-only card. 4.0 is unvalidated either way (#319/#347).
     var experimentalSleepV2 by remember { mutableStateOf(puffinExperiment.experimentalSleepV2) }
-    // "Motion-aware wake refinement" (#364 follow-up) — OFF by default. Self-gates on observed gravity +
+    // "Motion-aware wake refinement" (#364 follow-up) â€” OFF by default. Self-gates on observed gravity +
     // step density, so it is a no-op on a sparse (e.g. WHOOP 4.0) night regardless of this switch.
     var motionAwareWake by remember { mutableStateOf(puffinExperiment.motionAwareWake) }
 
     // Whether to surface the WHOOP 5/MG-only probes (puffin / R22 / broadcast-HR / frame-capture). Gated
     // so a confident 4.0 owner never sees 5/MG controls that can't touch their strap (#22). The model
-    // preference DEFAULTS to WHOOP4, so we deliberately do NOT hide on the raw default alone — the same
+    // preference DEFAULTS to WHOOP4, so we deliberately do NOT hide on the raw default alone â€” the same
     // "noop.selectedWhoopModel" key is rewritten to the family that actually advertised when a strap
     // connects (WhoopBleClient.persistSelectedModel, PR#195), so a real 5/MG owner who never opened the
     // model picker still flips this true once their strap is discovered. We also show it whenever a 5/MG
@@ -713,13 +713,13 @@ fun SettingsScreen(
     }
     val showFiveMGControls = selectedModelName == WhoopModel.WHOOP5_MG.name || live.whoop5Detected
 
-    // "Keep connected in the background" — drives WhoopConnectionService (foreground service). Default
+    // "Keep connected in the background" â€” drives WhoopConnectionService (foreground service). Default
     // on. SharedPreferences isn't reactive, so the Switch mirrors into a local state.
     var backgroundConnection by remember { mutableStateOf(NoopPrefs.backgroundConnection(context)) }
     var fastHistorySync by remember { mutableStateOf(NoopPrefs.fastHistorySync(context)) }
     var fastLinkPhy by remember { mutableStateOf(NoopPrefs.fastLinkPhy(context)) }
 
-    // "Continuous HRV capture" — hold the dense realtime stream armed 24/7 (better overnight HRV) at the
+    // "Continuous HRV capture" â€” hold the dense realtime stream armed 24/7 (better overnight HRV) at the
     // cost of more battery. Default OFF; only does anything with background connection on. Local mirror.
     var continuousHrv by remember { mutableStateOf(NoopPrefs.continuousHrv(context)) }
 
@@ -751,7 +751,7 @@ fun SettingsScreen(
     var workoutKeepScreenOn by remember {
         mutableStateOf(NoopPrefs.of(context).getBoolean("workoutKeepScreenOn", false))
     }
-    // Live Sessions (beta) — gates the Today "Start session" entry. Unlike its section-mates this is a
+    // Live Sessions (beta) â€” gates the Today "Start session" entry. Unlike its section-mates this is a
     // BETA feature flag, default ON (`live_sessions_beta`, see LiveSessionPrefs); off hides the entry.
     var liveSessionsBeta by remember { mutableStateOf(LiveSessionPrefs.enabled(context)) }
 
@@ -770,29 +770,29 @@ fun SettingsScreen(
     var temperatureRaw by remember {
         mutableStateOf(NoopPrefs.of(context).getString(NoopPrefs.KEY_TEMPERATURE_UNIT, "") ?: "")
     }
-    // #1846: which skin-temp number the cards lead with. Display-only, like the row above — the stored
+    // #1846: which skin-temp number the cards lead with. Display-only, like the row above â€” the stored
     // value never changes, so flipping it just re-reads the same night on the other scale.
     var skinTempKind by remember { mutableStateOf(UnitPrefs.skinTempPreferred(context)) }
-    // Effort display scale (#268) — show NOOP's native 0–100 Effort or WHOOP's 0–21 Day Strain axis.
+    // Effort display scale (#268) â€” show NOOP's native 0â€“100 Effort or WHOOP's 0â€“21 Day Strain axis.
     // Display-only; the stored value never changes. Mirrors into local state like the toggles above.
     var effortScale by remember { mutableStateOf(UnitPrefs.effortScale(context)) }
 
-    // App icon (v3 "Titanium & Gold") — machined-titanium (.IconDefault) or blued-titanium (.IconNavy).
+    // App icon (v3 "Titanium & Gold") â€” machined-titanium (.IconDefault) or blued-titanium (.IconNavy).
     // SharedPreferences isn't reactive, so the segmented control drives this local mirror; flipping it
     // enables exactly one launcher alias via PackageManager (see setAppIcon below).
     var appIconNavy by remember { mutableStateOf(NoopPrefs.appIconNavy(context)) }
 
-    // Theme (System / Light / Dark) — drives NoopTheme; AppearancePrefs mirrors it in snapshot state.
+    // Theme (System / Light / Dark) â€” drives NoopTheme; AppearancePrefs mirrors it in snapshot state.
     var themeMode by remember { mutableStateOf(AppearancePrefs.mode) }
     // App language owns the process resource locale; changing it recreates this Activity below so every
     // composable and non-composable resource lookup switches together.
     var appLanguage by remember { mutableStateOf(AppLanguagePrefs.selected(context)) }
-    // Chart colours (Titanium / Classic) — re-colours gauges + charts; ChartStylePrefs mirrors it live.
+    // Chart colours (Titanium / Classic) â€” re-colours gauges + charts; ChartStylePrefs mirrors it live.
     var chartStyle by remember { mutableStateOf(ChartStylePrefs.style) }
-    // Chrome accent (Mint / WHOOP Blue / Custom) — chrome only; AccentPrefs mirrors it in snapshot state.
+    // Chrome accent (Mint / WHOOP Blue / Custom) â€” chrome only; AccentPrefs mirrors it in snapshot state.
     var accentColor by remember { mutableStateOf(AccentPrefs.color) }
     var accentCustomHex by remember { mutableStateOf(AccentPrefs.customHex) }
-    // Trend charts (Line / Bar) — flips the Trends tab between the gradient line and value-ramp bars.
+    // Trend charts (Line / Bar) â€” flips the Trends tab between the gradient line and value-ramp bars.
     // Display-only; SharedPreferences isn't reactive, so mirror into local state and persist on select.
     var trendChartStyle by remember { mutableStateOf(UnitPrefs.trendChartStyle(context)) }
     var sleepChartStyle by remember { mutableStateOf(UnitPrefs.sleepChartStyle(context)) }
@@ -802,20 +802,20 @@ fun SettingsScreen(
     // Ring vs vessel gauges on Today (#2311 follow-up), default ON (rings). Unlike quietMotion directly
     // above, this one is NOT live: Today reads it on entry, like the other Today-screen display toggles.
     var todayRingGauges by remember { mutableStateOf(NoopPrefs.todayRingGauges(context)) }
-    // HRV window (#141) — whole-night vs deep-sleep (WHOOP-style). NOT display-only: it changes the computed
+    // HRV window (#141) â€” whole-night vs deep-sleep (WHOOP-style). NOT display-only: it changes the computed
     // avgHrv, so a switch clears the analyze watermark to force a re-score + re-baseline on the next pass.
     var hrvWindow by remember { mutableStateOf(UnitPrefs.hrvWindow(context)) }
-    // Day-cycle background (#698) — the time-of-day scene behind Today. Default ON. SharedPreferences
+    // Day-cycle background (#698) â€” the time-of-day scene behind Today. Default ON. SharedPreferences
     // isn't reactive, so the Switch mirrors into local state; TodayScreen reads the same pref on entry.
     var showDayCycleBackground by remember { mutableStateOf(NoopPrefs.showDayCycleBackground(context)) }
-    // "Sky behind cards" (opt-in, default OFF) — extend the day-cycle sky behind the whole Today scroll so
+    // "Sky behind cards" (opt-in, default OFF) â€” extend the day-cycle sky behind the whole Today scroll so
     // Card transparency reveals it under every card. Mirrors into local state; TodayScreen reads on entry.
     var skyBehindCards by remember { mutableStateOf(NoopPrefs.skyBehindCards(context)) }
     // Card-surface opacity (0f = clear, 1f = solid), for the "Card transparency" slider. Live-previews via
     // CardAppearance; saved on release.
     var cardOpacity by remember { mutableStateOf(NoopPrefs.cardOpacityPercent(context) / 100f) }
 
-    // SAF launchers — CreateDocument for export, OpenDocument for import.
+    // SAF launchers â€” CreateDocument for export, OpenDocument for import.
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
@@ -830,11 +830,11 @@ fun SettingsScreen(
             result.fold(
                 onSuccess = { outcome ->
                     // #1807: the file is written and valid either way. When the database is past the
-                    // ceiling the RESTORE path enforces, say so NOW — the alternative is finding out
+                    // ceiling the RESTORE path enforces, say so NOW â€” the alternative is finding out
                     // during a restore, which is the one moment the original is gone. The second
                     // sentence is the refusal's own wording, reused so this adds no untranslated copy.
                     val note = if (outcome.overRestoreCeiling) {
-                        "Backup exported. The backup archive is too large to restore safely — " +
+                        "Backup exported. The backup archive is too large to restore safely â€” " +
                                 "restoring it will ask you to confirm."
                     } else {
                         "Backup exported. Copy this file to your new phone and use Import there to restore everything."
@@ -851,7 +851,7 @@ fun SettingsScreen(
         }
     }
 
-    // CSV export — the 4-CSV WHOOP-format zip NOOP's own importers re-import (Android + Mac).
+    // CSV export â€” the 4-CSV WHOOP-format zip NOOP's own importers re-import (Android + Mac).
     val csvExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
@@ -860,7 +860,7 @@ fun SettingsScreen(
         }
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                // #458: thread the registry's ACTIVE strap id — the exporter's old "my-whoop" default
+                // #458: thread the registry's ACTIVE strap id â€” the exporter's old "my-whoop" default
                 // exported an empty zip on live-BLE installs (the engine banks under "<strapId>-noop").
                 runCatching { WhoopCsvExporter.exportZip(context, uri, vm.repo, vm.activeStrapId) }
             }
@@ -869,7 +869,7 @@ fun SettingsScreen(
                 onSuccess = { msg ->
                     Toast.makeText(
                         context,
-                        "$msg Re-import it via Data sources → WHOOP import, on Android or Mac.",
+                        "$msg Re-import it via Data sources â†’ WHOOP import, on Android or Mac.",
                         Toast.LENGTH_LONG,
                     ).show()
                 },
@@ -900,7 +900,7 @@ fun SettingsScreen(
                 ).show()
 
                 is DataBackup.ImportResult.Failed -> backupFailure = result.message
-                // #1807: refused ONLY for size, which is recoverable — offer to go ahead rather than
+                // #1807: refused ONLY for size, which is recoverable â€” offer to go ahead rather than
                 // ending on a Toast the user can do nothing about. The cap is a decompression guard
                 // against a hostile archive; a backup they just picked out of their own files is not
                 // that threat, and refusing outright strands real history.
@@ -927,7 +927,7 @@ fun SettingsScreen(
         }
     }
 
-    // Custom background image (#custom-background) — two sources per the design: the modern Photo Picker
+    // Custom background image (#custom-background) â€” two sources per the design: the modern Photo Picker
     // (no storage permission) and the system file browser ("Browse"). Both read the bytes ONCE, downscale
     // + persist a private JPEG off the main thread via BackgroundImageStore, which flips the live backdrop
     // on every tab. We copy immediately, so no persistable-Uri grant is needed for the file source.
@@ -951,7 +951,7 @@ fun SettingsScreen(
     ScreenScaffold(
         title = uiString(R.string.l10n_settings_screen_settings_c7f73bb5),
         subtitle = "Your numbers, your strap, and how NOOP works. All on this phone.",
-        // LIQUID SKY BACKDROP (the pilot pattern — LiquidScreenSky.kt): the static time-of-day sky settles
+        // LIQUID SKY BACKDROP (the pilot pattern â€” LiquidScreenSky.kt): the static time-of-day sky settles
         // into the theme canvas behind the top of the list, exactly like the liquid Today. This is a long,
         // scroll-heavy list with NO hero gauge, so the liquid finish here is just the sky + liquidPress on
         // the tappable rows. Gated on the same day-cycle background pref Today reads, so turning that off
@@ -1058,7 +1058,7 @@ fun SettingsScreen(
                         value = profile.age.toString(),
                         accessibility = "Age, ${profile.age} years",
                         // #146: age is derived from a stored date of birth, so it advances on its own. The
-                        // stepper re-anchors the DOB via setAge (which clamps to 13..100 — age feeds the
+                        // stepper re-anchors the DOB via setAge (which clamps to 13..100 â€” age feeds the
                         // Fitness Age + Vitality engines that gate on age > 0, so it must never go 0/negative).
                         onMinus = { mutate { profile.setAge(profile.age - 1) } },
                         onPlus = { mutate { profile.setAge(profile.age + 1) } },
@@ -1094,7 +1094,7 @@ fun SettingsScreen(
                             text = if (profile.hrMaxOverride > 0) {
                                 "Manual override"
                             } else {
-                                "Auto · ${profile.hrMaxAuto} bpm (Tanaka)"
+                                "Auto Â· ${profile.hrMaxAuto} bpm (Tanaka)"
                             },
                             style = NoopType.footnote,
                             color = if (profile.hrMaxOverride > 0) Palette.accent else Palette.textTertiary,
@@ -1157,9 +1157,9 @@ fun SettingsScreen(
                     }
                 }
                 SettingsRowDivider()
-                // Step calibration (#139/#132): daily steps = @57 counter ticks ÷ this divisor.
+                // Step calibration (#139/#132): daily steps = @57 counter ticks Ã· this divisor.
                 // 1.0 = raw pass-through until the true 5/MG tick rate is known. The divisor goes
-                // up to 30 because a 5/MG motion counter can overcount by ~24×; the stepper uses a
+                // up to 30 because a 5/MG motion counter can overcount by ~24Ã—; the stepper uses a
                 // variable increment (fine near 1.0, coarse up top) so high values stay reachable.
                 SettingsFormRow(label = uiString(R.string.l10n_settings_screen_step_calibration_351c09bf)) {
                     StepperField(
@@ -1197,7 +1197,7 @@ fun SettingsScreen(
                 val stepsSummary = when {
                     profile.stepsManualCoefficient > 0 -> "Manual"
                     profile.stepsCalibrationCoefficient > 0 ->
-                        "Auto · ${StepsCalibrationFormat.confidenceLabel(profile.stepsCalibrationConfidence)} confidence"
+                        "Auto Â· ${StepsCalibrationFormat.confidenceLabel(profile.stepsCalibrationConfidence)} confidence"
 
                     else -> "Not calibrated"
                 }
@@ -1320,7 +1320,7 @@ fun SettingsScreen(
                 }
                 SettingsRowDivider()
                 SettingsFormRow(label = uiString(R.string.l10n_settings_screen_temperature_0a9062a9)) {
-                    // Three-way: the default follows body measurements; °C / °F pin it explicitly.
+                    // Three-way: the default follows body measurements; Â°C / Â°F pin it explicitly.
                     SegmentedPillControl(
                         items = listOf(
                             "",
@@ -1330,8 +1330,8 @@ fun SettingsScreen(
                         selection = temperatureRaw,
                         label = {
                             when (it) {
-                                TemperatureUnit.CELSIUS.raw -> "°C"
-                                TemperatureUnit.FAHRENHEIT.raw -> "°F"
+                                TemperatureUnit.CELSIUS.raw -> "Â°C"
+                                TemperatureUnit.FAHRENHEIT.raw -> "Â°F"
                                 else -> uiString(R.string.units_follow_body)
                             }
                         },
@@ -1343,8 +1343,8 @@ fun SettingsScreen(
                 }
                 SettingsRowDivider()
                 SettingsFormRow(label = uiString(R.string.l10n_settings_screen_skin_temperature_fc103030)) {
-                    // #1846: lead with a temperature ("33.5 °C") or with the move from your own baseline
-                    // ("-0.1 Δ°C"). Only a PREFERENCE — a night that measured just one of the two still
+                    // #1846: lead with a temperature ("33.5 Â°C") or with the move from your own baseline
+                    // ("-0.1 Î”Â°C"). Only a PREFERENCE â€” a night that measured just one of the two still
                     // shows that one, so the choice can never blank a card.
                     SegmentedPillControl(
                         items = listOf(
@@ -1366,7 +1366,7 @@ fun SettingsScreen(
                     )
                 }
                 SettingsRowDivider()
-                // Effort scale (#268) — NOOP's native 0–100 Effort or WHOOP's 0–21 Day Strain axis.
+                // Effort scale (#268) â€” NOOP's native 0â€“100 Effort or WHOOP's 0â€“21 Day Strain axis.
                 // Display-only; the stored value never changes, so a flip just re-labels every read-out.
                 SettingsFormRow(label = uiString(R.string.l10n_settings_screen_effort_scale_81afa9ef)) {
                     SegmentedPillControl(
@@ -1380,14 +1380,14 @@ fun SettingsScreen(
                     )
                 }
                 // #1545: sits directly under the Effort SCALE row on purpose. It shipped in the
-                // experimental block beside the sleep-staging toggles, where @dofimn could not find it —
+                // experimental block beside the sleep-staging toggles, where @dofimn could not find it â€”
                 // a setting built for a specific report is no use if the person who asked for it cannot
                 // locate it. The two rows are different concepts (that one is the display AXIS, this one
                 // is the computation RECIPE) but a user asking "how is my Effort worked out" reaches for
                 // the same place for both, and each row's own caption separates them.
                 // #1545: Effort on Banister's EXPONENTIAL TRIMP instead of Edwards' heart-rate zones.
-                // Edwards pays nothing below 50% HRR, so an hour of lifting — hard sets averaged against
-                // the rests — can score near zero. Default OFF: it re-scores the whole window against a
+                // Edwards pays nothing below 50% HRR, so an hour of lifting â€” hard sets averaged against
+                // the rests â€” can score near zero. Default OFF: it re-scores the whole window against a
                 // different recipe. Both scales top out at 100 via their own log denominator. Mirrors iOS.
                 SettingsRowDivider()
                 var banisterEffort by remember { mutableStateOf(NoopPrefs.banisterEffort(context)) }
@@ -1507,7 +1507,7 @@ fun SettingsScreen(
                 )
             }
             SettingsRowDivider()
-            // Theme presets — one-tap bundles coordinating accent + chart world + backdrop + card opacity.
+            // Theme presets â€” one-tap bundles coordinating accent + chart world + backdrop + card opacity.
             // Derived (no stored value): tweaking any control below flips this to Custom.
             SettingsFormRow(label = uiString(R.string.l10n_settings_screen_preset)) {
                 ThemePresetDropdown(
@@ -1556,10 +1556,10 @@ fun SettingsScreen(
                 )
             }
             SettingsRowDivider()   // #79 parity: the hairline every other section has between FormRows (Android rows
-            // were already 16dp-spaced, unlike iOS where they touched — this matches both)
+            // were already 16dp-spaced, unlike iOS where they touched â€” this matches both)
             SettingsFormRow(label = uiString(R.string.l10n_settings_screen_chart_colours_525f4a37)) {
-                // Titanium = brand gold/amber/blue ramps; Classic = throwback red→green readiness scale
-                // (cool→hot zones, green→red stress). Re-colours every gauge/chart, in both schemes.
+                // Titanium = brand gold/amber/blue ramps; Classic = throwback redâ†’green readiness scale
+                // (coolâ†’hot zones, greenâ†’red stress). Re-colours every gauge/chart, in both schemes.
                 SegmentedPillControl(
                     items = listOf(ChartStyle.TITANIUM, ChartStyle.CLASSIC),
                     selection = chartStyle,
@@ -1574,7 +1574,7 @@ fun SettingsScreen(
                 )
             }
             SettingsRowDivider()
-            // Chrome accent colour — links/buttons/selection tint only. The recovery/strain/sleep DATA
+            // Chrome accent colour â€” links/buttons/selection tint only. The recovery/strain/sleep DATA
             // colours follow "Chart colours", never this. Custom reveals RGB sliders.
             SettingsFormRow(label = uiString(R.string.l10n_settings_screen_accent)) {
                 SegmentedPillControl(
@@ -1621,8 +1621,8 @@ fun SettingsScreen(
             // changes the drawing, and it falls back to Classic on a night with no timestamped segments.
             // A full-width (adaptsToAvailableWidth) control can't share a SettingsFormRow's single line with
             // a beside-label: it fills the width and starves the weighted label to a tall wrapped sliver,
-            // ballooning the row (the #1129 gap). Stack it — label on its own line, equal-width segments
-            // below — which is how a full-width segmented control is meant to be laid out.
+            // ballooning the row (the #1129 gap). Stack it â€” label on its own line, equal-width segments
+            // below â€” which is how a full-width segmented control is meant to be laid out.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1641,7 +1641,7 @@ fun SettingsScreen(
                         when (it) {
                             SleepChartStyle.FILLED -> "Fill"
                             // "Garmin" not "Garmin Fill": four equal-width segments ellipsis-truncate a long
-                            // label on a normal-width phone (iOS keeps "Garmin Fill" — it's a menu, not a pill).
+                            // label on a normal-width phone (iOS keeps "Garmin Fill" â€” it's a menu, not a pill).
                             SleepChartStyle.GARMIN_FILLED -> "Garmin"
                             SleepChartStyle.RIBBON -> "Ribbon"
                             else -> "Classic"
@@ -1656,7 +1656,7 @@ fun SettingsScreen(
                     adaptsToAvailableWidth = true,
                 )
             }
-            // In-app "Reduce motion in NOOP" (#941) — parity with the Apple quiet-motion toggle. Poses every
+            // In-app "Reduce motion in NOOP" (#941) â€” parity with the Apple quiet-motion toggle. Poses every
             // looping surface still via the third rememberPoseStill() signal. (SettingsRowDivider, not the
             // file-private RowDivider used elsewhere, which isn't visible here.)
             SettingsRowDivider()
@@ -1757,7 +1757,7 @@ fun SettingsScreen(
                 )
             }
 
-            // Transparent cards (#custom-background): a quick on/off over the SAME cardOpacityPercent —
+            // Transparent cards (#custom-background): a quick on/off over the SAME cardOpacityPercent â€”
             // no separate pref, so it stays in lock-step with the slider below. Off = solid (100%); on =
             // a sensible see-through default the slider then fine-tunes. Lets the custom background (or the
             // sky) show through the cards. `checked` is derived from the opacity, so dragging the slider
@@ -1843,178 +1843,16 @@ fun SettingsScreen(
             }
         }
 
-        // The bar's own card. These four options are all about one piece of app-shell chrome, and living
-        // among the theme controls in Appearance meant two of them sat between unrelated rows while the
-        // other two had nowhere to go. Grouped, the size and transparency read as what they are: choices
-        // about the same bar the toggles above them move and hide.
         SettingsCard(
             collapsible = true,
             icon = Icons.Filled.ViewAgenda,
-            title = uiString(R.string.l10n_settings_screen_bottom_bar_f84098a9),
-            blurb = uiString(R.string.l10n_settings_screen_how_the_navigation_bar_looks_f186b099),
+            title = uiString(R.string.l10n_settings_screen_ai_coach_130c3eab),
+            blurb = "Enable THOOP AI Coach and its scheduled brief.",
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Choose bottom bar modules", style = NoopType.headline, color = Palette.textPrimary)
-                Text(
-                    "Today is locked. Pick up to three modules; everything else stays organised inside More.",
-                    style = NoopType.footnote,
-                    color = Palette.textTertiary,
-                )
-                BottomBarLockedRow()
-                BottomBarModuleStore.selected.forEachIndexed { index, destination ->
-                    BottomBarSelectedRow(
-                        destination = destination,
-                        canMoveUp = index > 0,
-                        canMoveDown = index < BottomBarModuleStore.selected.lastIndex,
-                        onMoveUp = { BottomBarModuleStore.move(context, destination, -1) },
-                        onMoveDown = { BottomBarModuleStore.move(context, destination, 1) },
-                        onRemove = { BottomBarModuleStore.setPinned(context, destination, false) },
-                    )
-                }
-                Text(
-                    "${BottomBarModuleStore.selected.size}/${BottomBarModuleStore.MAX_PINNED} optional slots used",
-                    style = NoopType.caption,
-                    color = Palette.accent,
-                )
-                configurableBottomBarDestinations
-                    .filterNot { it in BottomBarModuleStore.selected }
-                    .forEach { destination ->
-                        SettingsToggleRow(
-                            title = stringResource(destination.titleRes),
-                            detail = "Show in bottom bar instead of More",
-                            checked = false,
-                            onCheckedChange = { pinned ->
-                                if (pinned) BottomBarModuleStore.setPinned(context, destination, true)
-                            },
-                        )
-                    }
-                NoopButton(
-                    text = "Reset bottom bar",
-                    kind = NoopButtonKind.Tertiary,
-                    fullWidth = true,
-                    onClick = { BottomBarModuleStore.reset(context) },
-                )
-            }
-            SettingsRowDivider()
-            // The Coach tab's master switch. It sits in this section because the tab is where a wearer
-            // meets the feature, but it is NOT tab chrome: switching it off disables the AI itself, takes
-            // the Today launcher card with it, and cancels the daily brief (which otherwise keeps calling
-            // a provider from the background and posting notifications, with no UI attached to reveal that
-            // it is still running). The saved provider key is kept, so this is a flip and not a re-setup.
             SettingsFormRow(label = uiString(R.string.l10n_settings_screen_ai_coach_130c3eab)) {
                 Switch(
                     checked = BottomBarStyleStore.coachEnabled,
                     onCheckedChange = { BottomBarStyleStore.setCoachEnabled(context, it) },
-                )
-            }
-            SettingsRowDivider()
-            // #1836: which bottom-bar layout to draw. Default OFF — the shipped reserved slot. The
-            // overlay lets a screen's own backdrop show through the bar's glass, which is what it was
-            // built for, but it is app-shell layout no test can judge, so it ships switchable.
-            SettingsFormRow(label = uiString(R.string.l10n_settings_screen_bottom_bar_overlay_f257c96f)) {
-                Switch(
-                    checked = BottomBarStyleStore.overlay,
-                    onCheckedChange = { BottomBarStyleStore.set(context, it) },
-                )
-            }
-            SettingsRowDivider()
-            // #1839: hide the bar while scrolling down, bring it back on scrolling up. Only does anything
-            // with the overlay on, because in the slot layout the space is reserved and hiding the bar
-            // would leave an empty band — so the row is disabled rather than silently inert.
-            // Reduce Motion pins the bar visible (a bar that vanishes without animation reads as a
-            // glitch), so with it on the toggle would flip and change nothing. A switch that silently
-            // does nothing is worse than one that is plainly unavailable, so it greys out for the same
-            // reason it does without the overlay.
-            val autoHideAvailable = BottomBarStyleStore.overlay && !rememberReduceMotion()
-            SettingsFormRow(label = uiString(R.string.l10n_settings_screen_hide_bar_when_scrolling_b077d9f3)) {
-                Switch(
-                    checked = BottomBarStyleStore.autoHide,
-                    enabled = autoHideAvailable,
-                    onCheckedChange = { BottomBarStyleStore.setAutoHide(context, it) },
-                )
-            }
-            // Reaching either control below means scrolling DOWN, which auto-hide reads as "hide the
-            // bar" - so a change made here landed on a bar the user could not see, and neither a slider
-            // drag nor a menu pick is a scroll, so nothing brought it back.
-            //
-            // Keyed on what the bar LOOKS like rather than on either control, so one rule covers both: a
-            // drag restarts this every frame and stays pinned throughout, a menu pick fires it once, and
-            // either way the bar is held a moment longer so the result is visible after the finger lifts.
-            LaunchedEffect(BottomBarStyleStore.scale, BottomBarStyleStore.opacityStep) {
-                BottomBarStyleStore.pinPreview(true)
-                delay(1_500)
-                BottomBarStyleStore.pinPreview(false)
-            }
-            SettingsRowDivider()
-            // Size. A dropdown of fixed multipliers rather than a slider: these are the sizes worth
-            // having, and a continuous control here mostly produces sizes a user cannot tell apart.
-            var sizeMenuOpen by remember { mutableStateOf(false) }
-            SettingsFormRow(label = uiString(R.string.l10n_settings_screen_bar_size_2304bfbb)) {
-                Box {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable { sizeMenuOpen = true }
-                            .background(Palette.surfaceInset)
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            scaleLabel(BottomBarStyleStore.scale), style = NoopType.subhead,
-                            color = Palette.textPrimary
-                        )
-                        Icon(
-                            Icons.Filled.ArrowDropDown, contentDescription = null,
-                            tint = Palette.textSecondary
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = sizeMenuOpen,
-                        onDismissRequest = { sizeMenuOpen = false }) {
-                        BOTTOM_BAR_SCALES.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(scaleLabel(option), color = Palette.textPrimary) },
-                                onClick = {
-                                    sizeMenuOpen = false
-                                    BottomBarStyleStore.setScale(context, option)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            SettingsRowDivider()
-            // Transparency, in the eight steps the store defines. The slider writes on every change so the
-            // bar updates live underneath the sheet - the whole point is seeing it against your own screen.
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    uiString(R.string.l10n_settings_screen_bar_transparency_3f648fbb),
-                    style = NoopType.subhead,
-                    color = Palette.textPrimary
-                )
-                Text(
-                    uiString(R.string.l10n_settings_screen_how_see_through_the_bar_is_ddb0c208),
-                    style = NoopType.footnote,
-                    color = Palette.textTertiary
-                )
-                Slider(
-                    value = BottomBarStyleStore.opacityStep.toFloat(),
-                    // Live while dragging, persisted once on release: a drag emits a value per frame, and
-                    // writing each one records a decision the user makes once. Rounded, not truncated -
-                    // the snapped value can arrive as 5.9999998, which truncation would read as step 5.
-                    onValueChange = { BottomBarStyleStore.previewOpacityStep(it.roundToInt()) },
-                    onValueChangeFinished = {
-                        BottomBarStyleStore.setOpacityStep(context, BottomBarStyleStore.opacityStep)
-                    },
-                    valueRange = MIN_OPACITY_STEP.toFloat()..MAX_OPACITY_STEP.toFloat(),
-                    // Compose counts the stops BETWEEN the ends, so N notches is N-2. Derived, not
-                    // written out, so changing the notch count cannot leave this line disagreeing with it.
-                    steps = MAX_OPACITY_STEP - MIN_OPACITY_STEP - 1,
-                    colors = SliderDefaults.colors(
-                        thumbColor = Palette.accent,
-                        activeTrackColor = Palette.accent,
-                    ),
                 )
             }
         }
@@ -2089,7 +1927,7 @@ fun SettingsScreen(
                     checked = BackgroundImageStore.enabled,
                     onCheckedChange = { BackgroundImageStore.setEnabled(context, it) },
                 )
-                // Scaling label ABOVE a full-width segmented control — NOT a SettingsFormRow. In a
+                // Scaling label ABOVE a full-width segmented control â€” NOT a SettingsFormRow. In a
                 // label|control row the adaptsToAvailableWidth pill fills the width and starves the label
                 // to ~0px, which wrapped "Scaling" one letter per line and blew the row up to a tall
                 // empty gap. A stacked label sidesteps that entirely.
@@ -2129,7 +1967,7 @@ fun SettingsScreen(
         }
 
         // --- App icon (v3 "Titanium & Gold") ---
-        // Two staged launcher icons — machined titanium (default) and blued/dark-blue titanium. The
+        // Two staged launcher icons â€” machined titanium (default) and blued/dark-blue titanium. The
         // swap is done by enabling exactly one <activity-alias> (.IconDefault / .IconNavy) at runtime;
         // the launcher may take a beat (or briefly disappear/redraw) while it re-reads the icon.
         SettingsCard(
@@ -2173,7 +2011,7 @@ fun SettingsScreen(
                             title = uiString(
                                 R.string.l10n_settings_screen_battery_pct_roundtoint_e02e2891,
                                 pct.roundToInt(),
-                                if (live.charging == true) " · " + uiString(R.string.l10n_live_screen_charging_5f99fe21) else "",
+                                if (live.charging == true) " Â· " + uiString(R.string.l10n_live_screen_charging_5f99fe21) else "",
                             ),
                             tone = batteryTone(pct),
                             showsDot = false,
@@ -2192,7 +2030,7 @@ fun SettingsScreen(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     NoopButton(
-                        text = if (live.scanning) "Searching…" else "Re-scan",
+                        text = if (live.scanning) "Searchingâ€¦" else "Re-scan",
                         leadingIcon = Icons.Filled.Refresh,
                         kind = NoopButtonKind.Primary,
                         enabled = !live.scanning,
@@ -2215,7 +2053,7 @@ fun SettingsScreen(
                 // The SECTION renders for any connected 5/MG; only the CONTROLS sit behind Test Centre
                 // Connection. Gating the whole thing put it back to invisible on a default install,
                 // which is the state that had this reported as "you cannot change it" rather than "not
-                // supported yet" — the regression this split exists to prevent.
+                // supported yet" â€” the regression this split exists to prevent.
                 //
                 // The controls are gated because opcode 140 has never been confirmed on this family and
                 // the payload shape is mirrored from the 4.0 form rather than observed. Reversible
@@ -2359,7 +2197,7 @@ fun SettingsScreen(
                 }
 
                 // Keep streaming when the app is closed (Android foreground service). On Mac, NOOP
-                // already keeps your strap connected from the menu bar — just close the window.
+                // already keeps your strap connected from the menu bar â€” just close the window.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -2394,7 +2232,7 @@ fun SettingsScreen(
                 }
 
                 // "Faster history sync" (#533, EXPERIMENTAL): asks Android for a shorter GATT connection
-                // interval for the BOUNDED historical-offload burst only. Off by default — BLE behaviour
+                // interval for the BOUNDED historical-offload burst only. Off by default â€” BLE behaviour
                 // can't be CI-tested, so this needs real-strap field reports on both the speedup and the
                 // battery cost. The live/overnight stream deliberately never escalates.
                 Row(
@@ -2430,7 +2268,7 @@ fun SettingsScreen(
                     )
                 }
 
-                // "Faster Bluetooth link" (#533, EXPERIMENTAL): the other, orthogonal sync-speed lever —
+                // "Faster Bluetooth link" (#533, EXPERIMENTAL): the other, orthogonal sync-speed lever â€”
                 // prefer the LE 2M PHY around the offload. Same bytes in half the airtime, so unlike the
                 // interval lever above it should cost LESS strap radio energy, not more. Separate toggle so
                 // a field report can attribute which lever did what. Off by default: the strap may decline
@@ -2472,19 +2310,19 @@ fun SettingsScreen(
                 // "Keep NOOP alive overnight" (#386): the battery-optimisation whitelist, as a one-way
                 // PROMPT rather than a setting.
                 //
-                // Shown only where it can actually change the outcome — background connection on, a ROM
+                // Shown only where it can actually change the outcome â€” background connection on, a ROM
                 // known to kill background work, and the exemption not yet granted. The whitelist helps a
                 // little on any phone (it also exempts from Doze deferral), but NOOP already survives the
                 // night wherever the AOSP foreground-service contract is honoured, so on those phones the
                 // row was noise about a permission the user did not need. A Pixel or Samsung never sees it.
                 //
                 // Deliberately NOT a toggle. Android lets an app ASK for this exemption and never hand it
-                // back, so a switch advertised an off direction it could not honour — which is exactly how
+                // back, so a switch advertised an off direction it could not honour â€” which is exactly how
                 // it was reported broken, and why replacing it with a "Manage"/"Allow" action then read as
                 // the control having been taken away. A one-way grant gets a one-way control: state the
                 // problem, offer the single action that works, and DISAPPEAR once it is done. Nothing is
                 // ever on screen implying an off that does not exist. Revoking lives where it actually
-                // lives — Android's own battery settings — and the Test Centre reports the exempt state
+                // lives â€” Android's own battery settings â€” and the Test Centre reports the exempt state
                 // for anyone diagnosing a lost night.
                 //
                 // POPUP DISCIPLINE is unchanged: the tap fires exactly ONE system dialog, and the OEM
@@ -2492,14 +2330,14 @@ fun SettingsScreen(
 
                 // Read unconditionally rather than folded into the `if`: `&&` short-circuits, so a
                 // `remember` inside the condition would go uncalled whenever background connection is off
-                // — a composable call in a conditionally-evaluated position, which is how a slot table
+                // â€” a composable call in a conditionally-evaluated position, which is how a slot table
                 // gets corrupted once the condition flips. The gate is one string comparison; the work
                 // worth avoiding sits inside the body regardless.
                 val aggressiveVendor =
                     remember { com.noop.ble.BackgroundHealth.isAggressiveVendor() }
                 if (backgroundConnection && aggressiveVendor) {
                     // Re-read the LIVE exempt state on every ON_RESUME. This is what makes the row vanish
-                    // the moment the user returns from the grant dialog — and reappear if they later
+                    // the moment the user returns from the grant dialog â€” and reappear if they later
                     // revoke it in system settings. Reading it plainly in composition wouldn't recompose
                     // on resume: the row would linger after a successful grant and invite a SECOND,
                     // duplicate popup, defeating the popup discipline.
@@ -2532,7 +2370,7 @@ fun SettingsScreen(
                                     style = NoopType.subhead,
                                     color = Palette.textPrimary,
                                 )
-                                // #386: this was a hardcoded literal — and INVISIBLE to the i18n gate,
+                                // #386: this was a hardcoded literal â€” and INVISIBLE to the i18n gate,
                                 // whose Android regex only matches a literal directly after `Text(`.
                                 // Inside a `Text(if ...)` expression it slid past, so the whole warning
                                 // shipped English-only while the audit reported clean. Now a resource.
@@ -2549,7 +2387,7 @@ fun SettingsScreen(
                                     color = Palette.textTertiary,
                                 )
                                 // A SEPARATE, explicit link to the vendor's auto-start screen, which the
-                                // generic whitelist cannot reach. One extra tap by choice — never
+                                // generic whitelist cannot reach. One extra tap by choice â€” never
                                 // auto-opened alongside the grant dialog.
                                 if (oemAutostart != null) {
                                     Text(
@@ -2575,7 +2413,7 @@ fun SettingsScreen(
                                 style = NoopType.subhead,
                                 color = Palette.accent,
                                 modifier = Modifier
-                                    // A bare Text is ~20dp — under the 48dp minimum, and this is the only
+                                    // A bare Text is ~20dp â€” under the 48dp minimum, and this is the only
                                     // way to act on the row, so it has to be padded rather than merely
                                     // present. `.clickable{}` BEFORE `.padding()`: modifiers apply
                                     // outside-in, so this puts the padding inside the clickable node and
@@ -2609,7 +2447,7 @@ fun SettingsScreen(
 
                 // Continuous HRV capture: keep the dense beat-to-beat (R-R) stream armed even with no Live
                 // screen open, so the strap banks far more data overnight for better HRV/recovery/sleep.
-                // Honest battery framing — continuous HR streaming uses more battery. Needs background
+                // Honest battery framing â€” continuous HR streaming uses more battery. Needs background
                 // connection on (there's no background link to stream over otherwise). Default OFF.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2682,7 +2520,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // HRV window (#141) — grouped with the other HRV settings (#155). Measure nightly HRV over
+                // HRV window (#141) â€” grouped with the other HRV settings (#155). Measure nightly HRV over
                 // the whole night (NOOP's long-standing value) or DEEP sleep only (WHOOP-style, reads lower
                 // and more comparable to WHOOP/Polar). Unlike the Effort scale this CHANGES the number, so a
                 // switch forces a re-score + re-baseline.
@@ -2691,13 +2529,13 @@ fun SettingsScreen(
                         items = listOf(HrvWindow.WHOLE_NIGHT, HrvWindow.DEEP_SLEEP),
                         selection = hrvWindow,
                         // #153: "Night" (not "Whole night") so the two-segment pill reads the same as the iOS
-                        // picker and stays short — keeps the label consistent across platforms.
+                        // picker and stays short â€” keeps the label consistent across platforms.
                         label = { if (it == HrvWindow.DEEP_SLEEP) "Deep sleep" else "Night" },
                         onSelect = {
                             hrvWindow = it
                             UnitPrefs.setHrvWindow(context, it)
                             // #201: the new window shifts every night's avgHrv, so the HRV baseline must reflect
-                            // it too — but a plain re-score already achieves that. analyzeRecent re-scores the
+                            // it too â€” but a plain re-score already achieves that. analyzeRecent re-scores the
                             // recent ~21 nights' avgHrv under the new window AND re-folds the HRV baseline from
                             // them in the same pass, and the baseline's 14-night-half-life EWMA is dominated by
                             // that fresh re-scored tail. So DON'T re-anchor the baseline epoch: doing so would
@@ -2744,7 +2582,7 @@ fun SettingsScreen(
                     NoopBusyRow()
                 }
 
-                // "WHOOP 4.0 vs 5.0/MG — what each can read and why" (FI-2 / #490). Shown to BOTH model
+                // "WHOOP 4.0 vs 5.0/MG â€” what each can read and why" (FI-2 / #490). Shown to BOTH model
                 // owners, so either generation's supported features and protocol differences are clear.
                 val modelComparisonInteraction = remember { MutableInteractionSource() }
                 Box(
@@ -2787,7 +2625,7 @@ fun SettingsScreen(
                                 color = Palette.textSecondary,
                             )
                         }
-                        Text("›", style = NoopType.title2, color = Palette.accent)
+                        Text("â€º", style = NoopType.title2, color = Palette.accent)
                     }
                 }
             }
@@ -2825,7 +2663,7 @@ fun SettingsScreen(
                         onClick = onOpenSelfHostedPush,
                     )
                 }
-                // --- Experimental · WHOOP 5 / MG --- (hidden when the user is confidently on a 4.0, #22)
+                // --- Experimental Â· WHOOP 5 / MG --- (hidden when the user is confidently on a 4.0, #22)
                 // Developer-only 5/MG controls now live in Test Centre. Keep the implementation below during
                 // the compatibility transition, but never render a second copy in everyday Settings.
                 if (false && showFiveMGControls) {
@@ -2910,7 +2748,7 @@ fun SettingsScreen(
                                 color = Palette.textTertiary,
                             )
 
-                            // --- Ask Android to pair — the explicit createBond() experiment. (#1635) ---
+                            // --- Ask Android to pair â€” the explicit createBond() experiment. (#1635) ---
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -2944,7 +2782,7 @@ fun SettingsScreen(
 
                             // --- Try the historical offload on a link that never bonded. (#1635) ---
                             // The offload is gated on the CLIENT_HELLO ack, which a strap answering SMP "Pairing Not
-                            // Supported" can never give — so the gate is ours, not the strap's, and the assumption it
+                            // Supported" can never give â€” so the gate is ours, not the strap's, and the assumption it
                             // rests on has never been measured. This asks, read-only first.
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2979,7 +2817,7 @@ fun SettingsScreen(
 
                             // --- Send the hello even when the suppression latch is set. (#1635) ---
                             // An HCI capture shows the strap answers createBond with SMP "Pairing Not Supported", so
-                            // the bond the hello waits behind can never arrive — and with the hello suppressed the app
+                            // the bond the hello waits behind can never arrive â€” and with the hello suppressed the app
                             // attempts neither handshake. This asks the only question left.
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -3017,7 +2855,7 @@ fun SettingsScreen(
                                 color = Palette.textTertiary,
                             )
 
-                            // --- ECG raw-data gate — an opt-in device-config WRITE with a mandatory read-back. (#891) ---
+                            // --- ECG raw-data gate â€” an opt-in device-config WRITE with a mandatory read-back. (#891) ---
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -3086,7 +2924,7 @@ fun SettingsScreen(
                                 }
                             }
 
-                            // --- R22 deep-data unlock — the one probe that writes to the strap. (#174) ---
+                            // --- R22 deep-data unlock â€” the one probe that writes to the strap. (#174) ---
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -3103,7 +2941,7 @@ fun SettingsScreen(
                                     onCheckedChange = {
                                         deepData = it
                                         puffinExperiment.isDeepDataEnabled = it
-                                        // #174: turning the switch OFF used to write nothing — it only hid the enable
+                                        // #174: turning the switch OFF used to write nothing â€” it only hid the enable
                                         // button, so the strap kept every flag the sequence set while the UI implied it
                                         // had been undone. Now it offers the real undo. Turning it ON still writes
                                         // nothing until the button is tapped.
@@ -3142,7 +2980,7 @@ fun SettingsScreen(
                                     style = NoopType.caption,
                                     color = Palette.textTertiary,
                                 )
-                                // #174: the undo. Offered whenever the flags may be set — which is any time the
+                                // #174: the undo. Offered whenever the flags may be set â€” which is any time the
                                 // opt-in has been on, not only right after a send, because the flags persist across
                                 // launches and the app has no record of what a previous install wrote. Wear is NOT
                                 // required: the on-wrist gate exists because the R22 STREAM is on-wrist only.
@@ -3160,7 +2998,7 @@ fun SettingsScreen(
                                     color = Palette.textTertiary,
                                 )
                                 // Live R22 telemetry (#174): proof of what the strap is doing right now. The threshold
-                                // and the number are both driven off the sequence itself — they were hardcoded to 15
+                                // and the number are both driven off the sequence itself â€” they were hardcoded to 15
                                 // while the sequence carried 16, so the card declared success one flag early.
                                 if (live.r22FlagsAccepted > 0) {
                                     Text(
@@ -3200,12 +3038,12 @@ fun SettingsScreen(
                             }
 
                             // #174: the disable run's per-key result. Shown verbatim because the interesting part
-                            // is the read-back table, not a green tick — a write that acked SUCCESS but did not
+                            // is the read-back table, not a green tick â€” a write that acked SUCCESS but did not
                             // move the stored value renders here as "unchanged", which is the case worth seeing.
                             //
                             // OUTSIDE the `if (deepData)` block on purpose. The commonest way to reach a disable run is
                             // flipping the switch OFF and confirming, which means the pref is already false while the
-                            // run is walking its plan — so nesting this inside that block hid the progress line and the
+                            // run is walking its plan â€” so nesting this inside that block hid the progress line and the
                             // whole read-back table for exactly the run a user is most likely to start. The report is
                             // about what is on the STRAP, which outlives the app's opt-in.
                             val disableReport = r22DisableReport
@@ -3248,7 +3086,7 @@ fun SettingsScreen(
                     blurb = "A read-only export of the decoded sensor streams NOOP already stores. Works on any strap. Nothing is written to your device, and nothing is uploaded.",
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // --- Sleep staging (V2) — the DEFAULT engine after the 44-subject benchmark; toggle off to
+                        // --- Sleep staging (V2) â€” the DEFAULT engine after the 44-subject benchmark; toggle off to
                         //     fall back to V1. Every model. (V7 Pillar 3b) ---
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -3286,7 +3124,7 @@ fun SettingsScreen(
                             color = Palette.textTertiary,
                         )
 
-                        // --- Motion-aware wake refinement (#364 follow-up) — OFF by default. ---
+                        // --- Motion-aware wake refinement (#364 follow-up) â€” OFF by default. ---
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -3323,9 +3161,9 @@ fun SettingsScreen(
                             color = Palette.textTertiary,
                         )
 
-                        // --- #103/queue-11a: Blood Oxygen strap estimate — OFF by default. ---
+                        // --- #103/queue-11a: Blood Oxygen strap estimate â€” OFF by default. ---
                         // Device-conditional (see IntelligenceEngine.nightlySpo2CeilingMean / .nightlySpo2CandidateMean):
-                        // a WHOOP 5/MG strap computes a nightly SpO₂ candidate at byte @82 of the V18Aux stream
+                        // a WHOOP 5/MG strap computes a nightly SpOâ‚‚ candidate at byte @82 of the V18Aux stream
                         // (cross-device evidence split, corr +0.99 on 8 nights but 2 nights moved opposite); an
                         // Oura ring's own decoded 0x6F SpO2 runs high on the wire, so this instead surfaces the
                         // ceiling@100 mean (each sample capped at 100% before averaging), which has matched the
@@ -3368,10 +3206,10 @@ fun SettingsScreen(
                             )
                         }
                         Text(
-                            "Surfaces your strap's nightly SpO₂ estimate in the Blood Oxygen tile when no " +
+                            "Surfaces your strap's nightly SpOâ‚‚ estimate in the Blood Oxygen tile when no " +
                                     "calibrated percentage is available: a WHOOP 5.0/MG's @82 candidate byte, or an " +
                                     "Oura ring's own reading with each sample capped at 100% first (the ring's raw " +
-                                    "reading runs high otherwise). This is an UNVERIFIED strap-computed value — the " +
+                                    "reading runs high otherwise). This is an UNVERIFIED strap-computed value â€” the " +
                                     "WHOOP candidate matched a reference device closely on most nights but moved " +
                                     "opposite on some; the Oura one has only been checked against a few nights so " +
                                     "far. Shown as an 'estimate' and never fed into recovery or illness scoring. Off " +
@@ -3380,9 +3218,9 @@ fun SettingsScreen(
                             color = Palette.textTertiary,
                         )
 
-                        // --- #463: Personal daytime-stress baseline — OFF by default. ---
+                        // --- #463: Personal daytime-stress baseline â€” OFF by default. ---
                         // Scores today's intraday stress timeline against a PERSONAL cross-day rolling baseline
-                        // (Oura-style) instead of the day's own calm hours. The validated r≈0.6 HR-only margin is
+                        // (Oura-style) instead of the day's own calm hours. The validated râ‰ˆ0.6 HR-only margin is
                         // single-subject so far, so it ships behind a default-off toggle per the derived-biosignal
                         // rule. Display-only: never fed into recovery/illness. Mirrors the iOS toggle.
                         SettingsRowDivider()
@@ -3496,19 +3334,19 @@ fun SettingsScreen(
                     },
                 )
                 SettingsRowDivider()
-                // #801 — not offered on a male profile (it would just sit at "Learning your pattern"). Hidden
+                // #801 â€” not offered on a male profile (it would just sit at "Learning your pattern"). Hidden
                 // when off for a male profile so it can't be enabled here; still shown when already on so it
-                // can be turned off — mirroring HealthScreen's cycle opt-in gate (cycleOptInApplies). The
+                // can be turned off â€” mirroring HealthScreen's cycle opt-in gate (cycleOptInApplies). The
                 // sister surfaces (Health opt-in, the card's off-control) were sex-gated in v7.3.2; this
                 // Settings toggle was the one surface that was missed, so a male profile could enable it here.
                 if (cycleTracking || cycleOptInApplies(profile.sex)) {
-                    // #hide-cycle — the master "not for me" opt-out. Offered to eligible profiles (and any
+                    // #hide-cycle â€” the master "not for me" opt-out. Offered to eligible profiles (and any
                     // profile that already has it on) so the card can be hidden entirely by choice, never by
                     // age. Turning it off hides the card AND stops tracking; it stays reversible right here.
                     // Twin of the iOS Automations "Show cycle awareness" toggle.
                     SettingsToggleRow(
                         title = uiString(R.string.l10n_settings_screen_show_cycle_awareness_59709019),
-                        detail = "Shows the cycle-awareness card on Today and in Health. Turn off to hide it entirely — a private choice, never based on your age. You can turn it back on here any time.",
+                        detail = "Shows the cycle-awareness card on Today and in Health. Turn off to hide it entirely â€” a private choice, never based on your age. You can turn it back on here any time.",
                         checked = !cycleHidden,
                         onCheckedChange = { show ->
                             cycleHidden = !show
@@ -3610,7 +3448,7 @@ fun SettingsScreen(
                 SettingsRowDivider()
                 SettingsToggleRow(
                     title = uiString(R.string.l10n_settings_screen_rhythm_experimental_12d357da),
-                    detail = "An experimental picture of your beat-to-beat timing: a Poincaré scatter and plain regularity stats from quiet resting windows. Not an ECG and not a diagnosis; you'll read a short disclaimer and accept before it turns on.",
+                    detail = "An experimental picture of your beat-to-beat timing: a PoincarÃ© scatter and plain regularity stats from quiet resting windows. Not an ECG and not a diagnosis; you'll read a short disclaimer and accept before it turns on.",
                     checked = rhythmEnabled,
                     onCheckedChange = {
                         // Enabling here just un-gates the experimental item; the screen itself still shows
@@ -3659,8 +3497,8 @@ fun SettingsScreen(
         }
 
         // --- Charge (Recovery) advanced ---
-        // A manual reset for the personal Charge baseline. If a bad first week poisons it — worn while
-        // sick, or the first few nights read high (a common cold-start artefact) — the baseline anchors
+        // A manual reset for the personal Charge baseline. If a bad first week poisons it â€” worn while
+        // sick, or the first few nights read high (a common cold-start artefact) â€” the baseline anchors
         // off and holds your Charge wrong for a couple of weeks while the rolling average catches up.
         // Recalibrate re-learns it from tonight onward. Writes now-seconds to BOTH noop.hrvBaselineEpoch
         // and noop.recoveryBaselineEpoch (so HRV plus resting HR / respiration / skin temp re-anchor);
@@ -3706,7 +3544,7 @@ fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { oversizeRestore = null },
                 containerColor = Palette.surfaceOverlay,
-                // The message is the sentence the refusal already carried — reused rather than replaced,
+                // The message is the sentence the refusal already carried â€” reused rather than replaced,
                 // so surfacing the override adds no untranslated copy. Buttons reuse existing keys.
                 text = {
                     Text(pendingMessage, style = NoopType.subhead, color = Palette.textSecondary)
@@ -3751,7 +3589,7 @@ fun SettingsScreen(
         }
 
         // #174: the switch going OFF is the moment to offer the undo. Declining leaves the flags set and
-        // says so — still an improvement on the old behaviour, where the same tap silently left them set
+        // says so â€” still an improvement on the old behaviour, where the same tap silently left them set
         // with no indication either way.
         if (confirmingDeepDataDisable) {
             AlertDialog(
@@ -3814,11 +3652,11 @@ fun SettingsScreen(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            // Re-anchor EVERY baseline that feeds Charge — HRV plus resting HR /
-                            // respiration / skin temp — by writing now-seconds to BOTH shared epoch keys
+                            // Re-anchor EVERY baseline that feeds Charge â€” HRV plus resting HR /
+                            // respiration / skin temp â€” by writing now-seconds to BOTH shared epoch keys
                             // (the EXACT same keys the iOS/Mac button + Baselines.foldHistory use), via
                             // the single cross-platform source of truth. Stored as whole epoch SECONDS in
-                            // a Long (SharedPreferences has no putDouble; the readers do getLong→toDouble),
+                            // a Long (SharedPreferences has no putDouble; the readers do getLongâ†’toDouble),
                             // matching the "epoch SECONDS" the keys document. No stored day is deleted.
                             val nowSeconds = System.currentTimeMillis() / 1000L
                             val editor = NoopPrefs.of(context).edit()
@@ -3889,7 +3727,7 @@ fun SettingsScreen(
                         Text("Data sources & provenance", style = NoopType.headline, color = Palette.textPrimary)
                         Text("Current day: ${latest?.day ?: "No daily row"}", style = NoopType.footnote, color = Palette.textSecondary)
                         Text("Oxygen: ${if (latest?.spo2Pct != null) "THOOP computed / calibrated" else "No data"}", style = NoopType.footnote, color = Palette.textSecondary)
-                        Text("Skin temperature: ${if (latest?.skinTempC != null) "${if (skinEstimated) "≙ " else ""}${latest.skinTempC} °C · ${skinSource ?: "resolved winner"}" else "No data"}", style = NoopType.footnote, color = Palette.textSecondary)
+                        Text("Skin temperature: ${if (latest?.skinTempC != null) "${if (skinEstimated) "â‰™ " else ""}${latest.skinTempC} Â°C Â· ${skinSource ?: "resolved winner"}" else "No data"}", style = NoopType.footnote, color = Palette.textSecondary)
                         Text(
                             "Imported measurements remain authoritative.",
                             style = NoopType.caption,
@@ -3907,7 +3745,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                // How your scores work — the honest explainer for Charge/Effort/Rest + the
+                // How your scores work â€” the honest explainer for Charge/Effort/Rest + the
                 // confidence labels, opened any time (macOS/iOS About parity).
                 val scoringGuideInteraction = remember { MutableInteractionSource() }
                 Box(
@@ -3950,11 +3788,11 @@ fun SettingsScreen(
                                 color = Palette.textSecondary,
                             )
                         }
-                        Text("›", style = NoopType.title2, color = Palette.accent)
+                        Text("â€º", style = NoopType.title2, color = Palette.accent)
                     }
                 }
 
-                // How THOOP works — the plain-English primer (COMPONENT 5 of the explainability layer):
+                // How THOOP works â€” the plain-English primer (COMPONENT 5 of the explainability layer):
                 // how sleep is sorted, how scores + calibration work, what recording means, and where
                 // each number comes from. The one "?" entry point into the primer (macOS/iOS parity).
                 val howNoopWorksInteraction = remember { MutableInteractionSource() }
@@ -3998,11 +3836,11 @@ fun SettingsScreen(
                                 color = Palette.textSecondary,
                             )
                         }
-                        Text("›", style = NoopType.title2, color = Palette.accent)
+                        Text("â€º", style = NoopType.title2, color = Palette.accent)
                     }
                 }
 
-                // Medical disclaimer — inset well with a warning-tinted hairline.
+                // Medical disclaimer â€” inset well with a warning-tinted hairline.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4045,7 +3883,7 @@ fun SettingsScreen(
 
                 SettingsRowDivider()
 
-                // Support link — opens the project's contact email (same address the
+                // Support link â€” opens the project's contact email (same address the
                 // Support screen lists). NOOP is anonymous, so email is the support channel.
                 val supportInteraction = remember { MutableInteractionSource() }
                 Box(
@@ -4100,7 +3938,7 @@ fun SettingsScreen(
                                 color = Palette.textSecondary,
                             )
                         }
-                        Text("›", style = NoopType.title2, color = Palette.accent)
+                        Text("â€º", style = NoopType.title2, color = Palette.accent)
                     }
                 }
             }
@@ -4162,7 +4000,7 @@ private const val SUPPORT_EMAIL = "thenoopapp@gmail.com"
 // MARK: - App icon swap (v3 "Titanium & Gold")
 
 /**
- * The two launcher-icon aliases declared in AndroidManifest.xml. Exactly one is ever enabled — the
+ * The two launcher-icon aliases declared in AndroidManifest.xml. Exactly one is ever enabled â€” the
  * enabled one is the app's home-screen entry point and supplies the launcher icon.
  */
 private const val ALIAS_DEFAULT = "com.noop.IconDefault" // machined titanium
@@ -4172,7 +4010,7 @@ private const val ALIAS_NAVY = "com.noop.IconNavy"       // blued / dark-blue ti
  * Persist the chosen launcher icon and flip the manifest aliases so exactly one is enabled:
  * [navy] true enables `.IconNavy` and disables `.IconDefault`, false does the inverse. We use
  * DONT_KILL_APP so the toggle doesn't tear down our own process. The home launcher may briefly hide
- * and redraw the icon (or take a few seconds) while it re-reads the component state — that's expected
+ * and redraw the icon (or take a few seconds) while it re-reads the component state â€” that's expected
  * and is the only user-visible side effect.
  */
 private fun setAppIcon(context: Context, navy: Boolean) {
@@ -4204,7 +4042,7 @@ private fun hsvColor(h: Float, s: Float, v: Float): Color =
         )
     )
 
-/** #accent: the CUSTOM chrome-accent picker — a standard HSV colour picker (a saturation × brightness square
+/** #accent: the CUSTOM chrome-accent picker â€” a standard HSV colour picker (a saturation Ã— brightness square
  *  plus a hue rail), the recognisable "colour picker" UX with no third-party dependency. iOS uses the native
  *  SwiftUI `ColorPicker`; this is its Compose counterpart (Material3 ships none). Emits `#RRGGBB` on every
  *  change; the Palette accent updates live via [AccentPrefs]. Shown only when the accent picker is Custom. */
@@ -4245,7 +4083,7 @@ private fun AccentCustomPicker(hex: String, onHexChange: (String) -> Unit) {
             .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Saturation (x) × brightness (y) square, tinted by the current hue.
+        // Saturation (x) Ã— brightness (y) square, tinted by the current hue.
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
@@ -4294,7 +4132,7 @@ private fun AccentCustomPicker(hex: String, onHexChange: (String) -> Unit) {
                     .border(2.dp, Color.White, CircleShape),
             )
         }
-        // Hue rail (0..360°).
+        // Hue rail (0..360Â°).
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
@@ -4332,47 +4170,7 @@ private fun AccentCustomPicker(hex: String, onHexChange: (String) -> Unit) {
     }
 }
 
-@Composable
-private fun BottomBarLockedRow() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(Destination.Today.icon, contentDescription = null, tint = Palette.accent)
-        Text(stringResource(Destination.Today.titleRes), style = NoopType.body, color = Palette.textPrimary, modifier = Modifier.weight(1f))
-        StatePill("Locked", tone = StrandTone.Neutral, showsDot = false)
-    }
-}
-
-@Composable
-private fun BottomBarSelectedRow(
-    destination: Destination,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onRemove: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(destination.icon, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(20.dp))
-        Text(stringResource(destination.titleRes), style = NoopType.body, color = Palette.textPrimary, modifier = Modifier.weight(1f))
-        StepperButton("↑", onMoveUp, "Move ${destination.route} up", enabled = canMoveUp)
-        StepperButton("↓", onMoveDown, "Move ${destination.route} down", enabled = canMoveDown)
-        Text(
-            "More",
-            style = NoopType.footnote,
-            color = Palette.accent,
-            modifier = Modifier.clickable(onClick = onRemove).padding(8.dp),
-        )
-    }
-}
-
-/** #theme: the theme-PRESET picker — a pill showing the current (derived) preset, opening a menu of the
+/** #theme: the theme-PRESET picker â€” a pill showing the current (derived) preset, opening a menu of the
  *  selectable presets. Picking one writes accent + chart world + backdrop + card opacity at once; the
  *  granular controls below stay available and flip this back to Custom when tweaked. */
 @Composable

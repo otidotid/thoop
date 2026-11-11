@@ -443,7 +443,7 @@ internal fun barCollapseFraction(hidden: Boolean, reduceMotion: Boolean): Float 
  */
 object BottomBarStyleStore {
     /** True = the overlay bar (glass over the screen's own backdrop). False = the reserved slot. */
-    var overlay by mutableStateOf(true)
+    var overlay by mutableStateOf(false)
         private set
 
     /**
@@ -535,7 +535,7 @@ object BottomBarStyleStore {
     }
 
     /** #1839: hide the overlay bar while scrolling down, bring it back on scrolling up. Default ON. */
-    var autoHide by mutableStateOf(true)
+    var autoHide by mutableStateOf(false)
         private set
 
     fun setAutoHide(ctx: Context, value: Boolean) {
@@ -582,15 +582,15 @@ object BottomBarStyleStore {
 
     fun load(ctx: Context) {
         val prefs = NoopPrefs.of(ctx.applicationContext)
-        overlay = prefs.getBoolean(NoopPrefs.KEY_OVERLAY_BOTTOM_BAR, true)
-        autoHide = prefs.getBoolean(NoopPrefs.KEY_BOTTOM_BAR_AUTO_HIDE, true)
+        overlay = false
+        autoHide = false
         coachEnabled = NoopPrefs.coachEnabled(ctx.applicationContext)
         // Both are read through the same clamps the setters use, so a hand-edited or downgraded pref
         // cannot put the bar in a state the UI has no way to leave.
         opacityStep = prefs.getInt(NoopPrefs.KEY_BOTTOM_BAR_OPACITY_STEP, DEFAULT_OPACITY_STEP)
             .coerceIn(MIN_OPACITY_STEP, MAX_OPACITY_STEP)
-        scale = nearestScale(prefs.getFloat(NoopPrefs.KEY_BOTTOM_BAR_SCALE, DEFAULT_SCALE))
-        BottomBarModuleStore.load(ctx)
+        scale = 1f
+        // Permanent dock: legacy module preference intentionally ignored.
     }
 
     fun set(ctx: Context, value: Boolean) {
@@ -1107,7 +1107,7 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
         // Mirror the iOS More page: each group is a tappable UPPERCASE overline header (with a disclosure
         // chevron) over a single grouped white NoopCard whose rows are tight (accent icon + title +
         // chevron) and separated by inset hairlines (NOT loose NavigationDrawerItems on the bare surface).
-        visibleMoreGroups(BottomBarModuleStore.selected).forEach { group ->
+        visibleMoreGroups(permanentBottomBarDestinations).forEach { group ->
             val isOpen = expanded[group.header] ?: group.defaultExpanded
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MoreGroupHeader(
@@ -1213,67 +1213,42 @@ private fun MoreRow(dest: Destination, onClick: () -> Unit) {
 /** A single bottom-bar nav slot: the destination it switches to, plus the bar-specific icon/label. */
 internal data class BarTab(val dest: Destination, val icon: ImageVector, @StringRes val labelRes: Int)
 
-internal fun barTabsFor(selected: List<Destination>): List<BarTab> =
-    listOf(BarTab(Destination.Today, Icons.Outlined.GridView, R.string.nav_today)) +
-        selected.distinct().take(BottomBarModuleStore.MAX_PINNED).map {
-            BarTab(it, it.icon, it.titleRes)
-        }
-
+internal val permanentBottomBarDestinations: List<Destination> = listOf(
+    Destination.Today,
+    Destination.Trends,
+    Destination.Workouts,
+    Destination.Coach,
+)
+internal fun barTabsFor(): List<BarTab> = permanentBottomBarDestinations.map { destination ->
+    val icon = if (destination == Destination.Today) Icons.Outlined.GridView else destination.icon
+    BarTab(destination, icon, destination.titleRes)
+}
 internal fun visibleBarDestinationsFor(
     selected: List<Destination>,
     coachEnabled: Boolean,
-): List<Destination> = selected.filterNot { it == Destination.Coach && !coachEnabled }
-
+): List<Destination> = permanentBottomBarDestinations
 @Composable
 private fun GlassBottomBar(
     current: Destination,
     onTabSelected: (Destination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // One binding, used by BOTH the slots and the More-lit predicate below. #2218's note applies here
-    // twice over: a second copy of "which tabs exist" is what let Coach light two slots at once, and a
-    // conditional tab makes that failure available again to anyone who filters in one place only.
-    val visibleTabs = barTabsFor(
-        visibleBarDestinationsFor(BottomBarModuleStore.selected, BottomBarStyleStore.coachEnabled),
-    )
-    val barShape = RoundedCornerShape(50)
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            // Clear the gesture-nav bar (home indicator) first, then add breathing room so the capsule
-            // floats free of the bottom edge rather than jamming against it — iOS clears the home-indicator
-            // safe area + 4pt; here navigationBarsPadding + 12dp gives the same lift.
-            .navigationBarsPadding()
-            .padding(horizontal = 22.dp)
-            .padding(top = 4.dp, bottom = Metrics.space12),
-        contentAlignment = Alignment.Center,
+    val visibleTabs = barTabsFor()
+    Surface(
+        color = Palette.surfaceBase,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = modifier.fillMaxWidth(),
     ) {
-        Surface(
-            shape = barShape,
-            // "Glass": a translucent raised surface — a frosted island, not a hard slab. Compose has no
-            // cheap blur, so translucency (≈0.80) + a hairline rim is the Liquid-Glass stand-in. A soft,
-            // low drop shadow reads as floating without a glow.
-            // The glass alpha is the user's transparency step; 0.80 was the shipped constant and remains
-            // the default (step 6), so an untouched install is unchanged.
-            color = Palette.surfaceRaised.copy(alpha = BottomBarStyleStore.barAlpha),
-            tonalElevation = 2.dp,
-            shadowElevation = 4.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                // Cap the width so the pill stays a centred floating island on tablets, not a full-bleed bar.
-                .widthIn(max = 480.dp)
-                .border(0.5.dp, Palette.hairline.copy(alpha = 0.6f), barShape),
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            HorizontalDivider(color = Palette.hairline.copy(alpha = 0.45f))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Scaling the PADDING and the slot contents grows the bar honestly - the touch
-                    // targets grow with it, and `barHeight` is measured afterwards so screens keep
-                    // clearing the bar at any size. A graphics scale would blur it and leave the hit
-                    // areas behind.
-                    .padding(horizontal = 8.dp, vertical = 7.dp * BottomBarStyleStore.scale),
+                    .navigationBarsPadding()
+                    .height(64.dp)
+                    .padding(horizontal = 4.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 visibleTabs.forEach { tab ->
                     BarSlot(
@@ -1287,13 +1262,6 @@ private fun GlassBottomBar(
                 BarSlot(
                     icon = Icons.Filled.MoreHoriz,
                     label = stringResource(R.string.nav_more),
-                    // Selected on the More page itself, and also kept lit whenever the current screen is
-                    // one reached THROUGH More (i.e. not one of the bar's own tabs) — so drilling into
-                    // any grouped destination still reads as "you're in More", never "nowhere".
-                    //
-                    // Derived from the bar's own lists rather than restated. Spelling the tabs out here
-                    // is what made adding Coach a two-part change: the slot alone would have lit Coach
-                    // AND More together, because this predicate had never heard of it. (#2218)
                     active = visibleTabs.none { it.dest == current },
                     modifier = Modifier.weight(1f),
                     onClick = { onTabSelected(Destination.More) },
@@ -1302,7 +1270,6 @@ private fun GlassBottomBar(
         }
     }
 }
-
 /** One nav slot: an icon over a small label. Active = gold accent (semibold), inactive = textSecondary.
  *  No selection pill, no glow — just the colour swap, matching the iOS bar. */
 @Composable
@@ -1316,13 +1283,12 @@ private fun BarSlot(
     val tint = if (active) Palette.accent else Palette.textSecondary
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
-            .padding(vertical = 3.dp * BottomBarStyleStore.scale)
+            .padding(vertical = 3.dp)
             .semantics { contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -1330,11 +1296,11 @@ private fun BarSlot(
         // Icon and label scale together with the padding above, so the slot grows as one piece rather
         // than a bigger box around the same small glyph.
         Icon(icon, contentDescription = null, tint = tint,
-             modifier = Modifier.size(Metrics.iconSmall * BottomBarStyleStore.scale))
+             modifier = Modifier.size(21.dp))
         Text(
             label,
             style = NoopType.footnote.copy(
-                fontSize = 10.sp * BottomBarStyleStore.scale,
+                fontSize = 10.sp,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             ),
             color = tint,
