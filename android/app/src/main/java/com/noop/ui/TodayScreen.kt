@@ -1472,7 +1472,6 @@ fun TodayScreen(
                 onRescan = if (liveSnap.connected) null else requestScan,
                 onPickDay = { offset -> selectedDayOffset = offset },
                 onOpenUpdates = onOpenUpdates,
-                onOpenSettings = onOpenSettings,
                 onOpenDevices = onOpenDevices,
             )
             // WORDMARK (iOS LiquidWordmark parity): a subtle centred "N O O P" @ ~50% opacity, with a
@@ -2645,7 +2644,6 @@ private fun LiquidTodayHeader(
     onRescan: (() -> Unit)? = null,
     onPickDay: (Int) -> Unit,
     onOpenUpdates: () -> Unit,
-    onOpenSettings: () -> Unit,
     onOpenDevices: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -2743,22 +2741,7 @@ private fun LiquidTodayHeader(
                 pagesBehind = pagesBehindAtConnect,
                 scanning = scanning, onRescan = onRescan,
             )
-            // (a) Profile avatar (the photo set in Settings, or the NOOP loop mark) → Settings. Mirrors iOS.
-            Box(
-                modifier = Modifier
-                    .size(HeaderClusterControl)
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onOpenSettings,
-                    )
-                    .semantics { contentDescription = uiString(R.string.l10n_today_screen_profile_and_settings_9b3d12f2) },
-                contentAlignment = Alignment.Center,
-            ) {
-                ProfileAvatar(size = HeaderClusterControl)
-            }
-            // (b) Full notifications inbox. This deliberately occupies the former quick-add slot so the
+            // Full notifications inbox. This deliberately occupies the former quick-add slot so the
             // legacy + is not composed, cannot overlap, and leaves no blank spacer in the trailing cluster.
             Box(
                 modifier = Modifier
@@ -3273,25 +3256,6 @@ private fun ScoreHeroRow(
                             }
                         }
                     }
-                    if (heroSourceLabel != null) {
-                        SourceBadge(
-                            text = heroSourceLabel,
-                            // #1160: the hero is theme-aware now, so its badge uses the flip-able text token.
-                            tint = Palette.textSecondary,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                // Measure the full label even when it is wider than the Rest ring, then
-                                // let it overflow left while preserving the ring-aligned trailing edge.
-                                .wrapContentWidth(unbounded = true, align = Alignment.End)
-                                // #1502: the box is now the shared column width rather than the ring's,
-                                // so inset by the slack to keep the badge's trailing edge on the RING —
-                                // the alignment this anchor exists for.
-                                .padding(end = ((col - ring) / 2).coerceAtLeast(0.dp))
-                                // Match iOS: centre the pill on the card border, aligned with the Rest ring.
-                                .offset(y = -(Metrics.space16 + Metrics.sourceBadgeHeight / 2))
-                                .semantics { contentDescription = uiString(R.string.l10n_today_screen_source_herosourcelabel_d3363687, heroSourceLabel) },
-                        )
-                    }
                 }
             }
         }
@@ -3546,39 +3510,12 @@ private fun SynthesisHeroCard(
     // as today's. today's own read wins the instant tonight is scored.
     val readDay = carriedDay ?: day
     val recovery = readDay?.recovery
+    val readinessLevel = remember(days) {
+        if (days.isEmpty()) ReadinessEngine.Level.INSUFFICIENT
+        else ReadinessEngine.evaluate(days, today = logicalDayKeyNow()).level
+    }
+    val todayRecovery = day?.recovery
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-        // The greeting + SOLID/CALIBRATING data-confidence pill ride in their OWN header row ABOVE the
-        // card, not as a top-end overlay over it (#527). The old overlay sat over the card's "SYNTHESIS"
-        // overline + big status word and, on a narrow phone, collided with them, and squeezing the
-        // status into the leftover width force-broke a single word ("Calibrating" → "Calibrati/ng").
-        // A separate row CAN'T overlap, and the card keeps its FULL width so the status stays one line.
-        // Mirrors the iOS Synthesis header-row layout (TodayView heroSection).
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // The greeting yields/ellipsises first; the pill keeps its full width (#527).
-            Spacer(Modifier.weight(1f))
-            // S4 (#205): the one-word readiness read kept on the hero now the full Readiness card folded
-            // into the Charge-ring tap. Push / Maintain / Rest; hidden when there isn't enough history.
-            // Tapping it opens the Charge breakdown, where the full Readiness card now lives.
-            val readinessLevel = remember(days) {
-                if (days.isEmpty()) ReadinessEngine.Level.INSUFFICIENT
-                else ReadinessEngine.evaluate(days, today = logicalDayKeyNow()).level
-            }
-            readinessWord(readinessLevel)?.let { wordRes ->
-                ReadinessHeroPill(word = uiString(wordRes), level = readinessLevel, onTap = onOpenReadiness)
-            }
-            // SOLID only when TODAY's own row carries a settled recovery, a carried prior-day read is
-            // honestly still CALIBRATING for today, matching the iOS pill (keyed on displayDay.recovery).
-            val todayRecovery = day?.recovery
-            StatePill(
-                title = if (todayRecovery != null) uiString(R.string.today_score_solid)
-                else uiString(R.string.score_state_title_calibrating).uppercase(),
-                tone = if (todayRecovery != null) StrandTone.Accent else StrandTone.Neutral,
-            )
-        }
         // S4: the Synthesis card collapses to a one-liner that expands on tap. The headline (the status) is
         // the SAME in both states, only the detail body and chrome fold, never the read (#506).
         val status = if (recoveryCalibration != null) uiString(R.string.score_state_title_calibrating)
@@ -3642,6 +3579,26 @@ private fun SynthesisHeroCard(
                     // headline alone. tint = null routes to the neutral FLAT surfaceRaised + hairline path.
                     tint = null,
                 )
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = Metrics.space14, end = Metrics.space16),
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space6),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    readinessWord(readinessLevel)?.let { wordRes ->
+                        ReadinessHeroPill(
+                            word = uiString(wordRes),
+                            level = readinessLevel,
+                            onTap = onOpenReadiness,
+                        )
+                    }
+                    StatePill(
+                        title = if (todayRecovery != null) uiString(R.string.today_score_solid)
+                        else uiString(R.string.score_state_title_calibrating).uppercase(),
+                        tone = if (todayRecovery != null) StrandTone.Accent else StrandTone.Neutral,
+                    )
+                }
             }
         } else {
             // Collapsed: a one-liner with the SYNTHESIS overline, the status headline and a down-chevron.
@@ -6696,7 +6653,6 @@ private fun HeartRateTrendCard(
     // too-narrow rolling window (say 1h with no recent offload) is never a dead end — the user widens it
     // or steps back to Today, and the message says which window came up empty.
     if (winBuckets.size < 2) {
-        SectionHeader(uiString(R.string.today_section_heart_rate), overline = selectedLabel)
         NoopCard {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Overline(uiString(R.string.today_hr_beats_per_minute))
@@ -6759,7 +6715,6 @@ private fun HeartRateTrendCard(
     }
     val visTimestamps = remember(visBuckets) { visBuckets.map { it.bucket } }
 
-    SectionHeader(uiString(R.string.today_section_heart_rate), overline = selectedLabel)
     NoopCard {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Header, mirrors the macOS ChartCard (title + subtitle, trailing read-out).
@@ -6780,7 +6735,7 @@ private fun HeartRateTrendCard(
                         color = Palette.textTertiary,
                     )
                 }
-                Text(uiString(R.string.l10n_today_screen_latest_bpm_e7bec767, latest), style = NoopType.chartValueLarge, color = Palette.metricRose)
+                Text(uiString(R.string.l10n_today_screen_latest_bpm_e7bec767, latest), style = NoopType.chartValueLarge, color = Palette.accent)
             }
             // #985: the window selector, current day only — Today (since midnight, the default) or a
             // rolling last-N-hours cut of the same loaded buckets. A past day has no "now" → no selector.
@@ -7168,7 +7123,7 @@ private fun OverviewHRChart(
                     val right = xFor(workout.endTs)?.coerceIn(0f, plotW) ?: return@forEach
                     if (right > left) {
                         drawRect(
-                            color = hrEventVisual(workout.sport).color.copy(alpha = 0.16f),
+                            color = hrEventVisual(workout.sport).color.copy(alpha = 0.08f),
                             topLeft = Offset(left, 0f),
                             size = Size(right - left, plotH),
                         )
@@ -7193,7 +7148,7 @@ private fun OverviewHRChart(
                     val frac = timestampFraction(bucketTimestamps, ts) ?: return@forEach
                     val x = frac * size.width
                     drawLine(
-                        color = Palette.hairline,
+                        color = Palette.hairline.copy(alpha = 0.55f),
                         start = Offset(x, 0f),
                         end = Offset(x, size.height),
                         strokeWidth = 1f,
@@ -7206,7 +7161,7 @@ private fun OverviewHRChart(
             sleepStartX != null && sleepEndX != null && sleepEndX > sleepStartX) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawRect(
-                    color = Palette.sleepDeep.copy(alpha = 0.30f),
+                    color = Palette.sleepDeep.copy(alpha = 0.09f),
                     topLeft = Offset(sleepStartX, 0f),
                     size = Size(sleepEndX - sleepStartX, size.height),
                 )
@@ -7255,9 +7210,9 @@ private fun OverviewHRChart(
                     val lastX = size.width
                     val lastY = yForBpm(displayBpm.last())
                     val end = Offset(lastX.coerceIn(0f, size.width), lastY)
-                    drawCircle(color = Palette.accent.copy(alpha = 0.28f), radius = 9f, center = end)
-                    drawCircle(color = Palette.accent.copy(alpha = 0.68f), radius = 5.5f, center = end)
-                    drawCircle(color = Palette.tipCore, radius = 2.4f, center = end)
+                    drawCircle(color = Palette.accent.copy(alpha = 0.18f), radius = 8f, center = end)
+                    drawCircle(color = Palette.accent.copy(alpha = 0.82f), radius = 4.8f, center = end)
+                    drawCircle(color = Palette.tipCore, radius = 2.0f, center = end)
                 }
             }
 
@@ -7326,11 +7281,21 @@ private fun HrEventTimelineStrip(
     }.sortedBy { it.startTs }
     if (events.isEmpty()) return
 
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        events.forEach { event -> HrTimelineEventChip(event) }
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(36.dp)) {
+        val widthDp = maxWidth.value.coerceAtLeast(1f)
+        val spanSec = (windowEnd - windowStart).coerceAtLeast(1L).toFloat()
+        val positioned = remember(events, windowStart, windowEnd, widthDp) {
+            events.map { event ->
+                val x = ((event.startTs.coerceIn(windowStart, windowEnd) - windowStart) / spanSec) * widthDp
+                event to x
+            }
+        }
+        val groups = remember(positioned) { clusterHrTimelineEvents(positioned) }
+        groups.forEachIndexed { index, group ->
+            val y = if (group.staggered && index % 2 == 1) 8.dp else 0.dp
+            val x = (group.anchorDp.dp - 14.dp).coerceIn(0.dp, (maxWidth - 28.dp).coerceAtLeast(0.dp))
+            HrTimelineEventMarker(group = group, modifier = Modifier.offset(x = x, y = y))
+        }
     }
 }
 
@@ -7343,41 +7308,87 @@ private data class HrTimelineEvent(
     val iconRotationDegrees: Float = 0f,
 )
 
-@Composable
-private fun HrTimelineEventChip(event: HrTimelineEvent) {
-    val zone = remember { ZoneId.systemDefault() }
-    val formatter = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm") }
-    val start = remember(event.startTs, zone) { java.time.Instant.ofEpochSecond(event.startTs).atZone(zone).format(formatter) }
-    val end = remember(event.endTs, zone) { java.time.Instant.ofEpochSecond(event.endTs).atZone(zone).format(formatter) }
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(event.color.copy(alpha = 0.11f))
-            .padding(horizontal = 8.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(event.color.copy(alpha = 0.18f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                event.icon,
-                contentDescription = null,
-                tint = event.color,
-                modifier = Modifier.size(15.dp).rotate(event.iconRotationDegrees),
-            )
+private data class HrTimelineEventGroup(
+    val events: List<HrTimelineEvent>,
+    val anchorDp: Float,
+    val staggered: Boolean,
+)
+
+private fun clusterHrTimelineEvents(
+    positioned: List<Pair<HrTimelineEvent, Float>>,
+): List<HrTimelineEventGroup> {
+    if (positioned.isEmpty()) return emptyList()
+    val groups = mutableListOf<HrTimelineEventGroup>()
+    var pending = mutableListOf(positioned.first())
+
+    fun flush() {
+        val anchor = pending.map { it.second }.average().toFloat()
+        val closeToPrevious = groups.lastOrNull()?.let { anchor - it.anchorDp < 48f } == true
+        groups += HrTimelineEventGroup(
+            events = pending.map { it.first },
+            anchorDp = anchor,
+            staggered = pending.size == 1 && closeToPrevious,
+        )
+    }
+
+    positioned.drop(1).forEach { next ->
+        val gap = next.second - pending.last().second
+        if (gap < 28f) {
+            pending += next
+        } else {
+            flush()
+            pending = mutableListOf(next)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(event.label, style = NoopType.footnote, color = Palette.textPrimary, maxLines = 1)
-            Text("$start-$end", style = NoopType.caption, color = Palette.textTertiary, maxLines = 1)
+    }
+    flush()
+    return groups
+}
+
+@Composable
+private fun HrTimelineEventMarker(
+    group: HrTimelineEventGroup,
+    modifier: Modifier = Modifier,
+) {
+    val dominant = group.events.maxWithOrNull(
+        compareBy<HrTimelineEvent> { it.endTs - it.startTs }
+            .thenBy { if (it.label == "Sleep") 0 else 1 }
+    ) ?: return
+    Box(
+        modifier = modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(dominant.color.copy(alpha = 0.14f))
+            .semantics {
+                contentDescription = if (group.events.size == 1) dominant.label
+                else "${group.events.size} activities"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            dominant.icon,
+            contentDescription = null,
+            tint = dominant.color,
+            modifier = Modifier.size(16.dp).rotate(dominant.iconRotationDegrees),
+        )
+        if (group.events.size > 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(Palette.surfaceOverlay),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    group.events.size.toString(),
+                    style = NoopType.caption,
+                    color = Palette.textPrimary,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
-
 @Composable
 private fun HrStatTile(
     label: String,
