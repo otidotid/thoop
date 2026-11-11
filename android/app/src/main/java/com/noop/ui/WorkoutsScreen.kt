@@ -1,4 +1,4 @@
-﻿package com.noop.ui
+package com.noop.ui
 
 import android.widget.Toast
 
@@ -1443,16 +1443,25 @@ private fun SessionRow(
         Cell(durationLabel(row.durationS), Modifier.weight(1f))
         val resolvedAvgHr = resolvedWorkoutAverageHr(row)
         val resolvedCalories = resolvedWorkoutCalories(row)
-        Cell(
-            if (row.avgHr != null) resolvedAvgHr.toString() else "~$resolvedAvgHr",
-            Modifier.weight(1.1f),
-            color = Palette.metricRose,
-        )
-        Cell(
-            if (row.energyKcal != null) grouped(resolvedCalories) else "~${grouped(resolvedCalories)}",
-            Modifier.weight(1f),
-            color = Palette.metricAmber,
-        )
+          val healthConnectPending = row.source.equals("health-connect", ignoreCase = true)
+          Cell(
+              when {
+                  row.avgHr != null -> resolvedAvgHr.toString()
+                  healthConnectPending -> "Pending"
+                  else -> "~$resolvedAvgHr"
+              },
+              Modifier.weight(1.1f),
+              color = Palette.metricRose,
+          )
+          Cell(
+              when {
+                  row.energyKcal != null -> grouped(resolvedCalories)
+                  healthConnectPending -> "Pending"
+                  else -> "~${grouped(resolvedCalories)}"
+              },
+              Modifier.weight(1f),
+              color = Palette.metricAmber,
+          )
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
             val (srcLabel, srcTint) = row.sourceBadge
             SourceBadge(srcLabel, tint = srcTint)

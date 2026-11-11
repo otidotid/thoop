@@ -2112,10 +2112,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 strainSex = profileStore.sex,
                 effortMethod = NoopPrefs.effortMethod(appContext),
             )
+            // Health Connect contributes session identity, time, sport, distance and route only.
+            // Re-resolve HR, calories and Effort from the THOOP strap window every time workouts load.
+            // This self-heals old imports, including impossible external kcal, after HR offload/sync.
+            val locallyReconciled = filled.map { row ->
+                if (!row.source.equals(
+                        com.noop.analytics.HealthConnectWorkoutReconciler.sourceId,
+                        ignoreCase = true,
+                    )
+                ) {
+                    row
+                } else {
+                    val ids = WhoopRepository.workoutHrDeviceIds(row.source, row.deviceId, deviceId)
+                    val samples = runCatching {
+                        repository.hrSamplesFor(ids, row.startTs, row.endTs, limit = 8_000)
+                    }.getOrDefault(emptyList())
+                    com.noop.analytics.HealthConnectWorkoutReconciler.reconcile(
+                        row = row,
+                        samples = samples,
+                        profile = currentProfile(),
+                        maxHr = profileStore.hrMax.toDouble(),
+                        restingHr = _today.value?.restingHr?.toDouble(),
+                        effortMethod = NoopPrefs.effortMethod(appContext),
+                        sex = profileStore.sex,
+                    )
+                }
+            }
             // #687: collapse the SAME activity tracked live under the strap AND imported from Health
             // Connect / Apple Health into one richer entry — they sit under different sources so without
             // this they show as two sessions. Dedup runs on the dismissed-filtered set, before the sort.
-            val filteredRows = WorkoutEditing.filterDismissed(filled + lifting, markers)
+            val filteredRows = WorkoutEditing.filterDismissed(locallyReconciled + lifting, markers)
             // Workouts & GPS test mode: when on, run the dedup twin which returns the BYTE-IDENTICAL kept list
             // plus a trace line per collapsed cross-source pair, tagged .workouts. Zero-cost when off (the gate
             // is one SharedPreferences bool read), and the kept list equals dedupCrossSource exactly, so the
