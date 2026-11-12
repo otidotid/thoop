@@ -159,6 +159,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.ai.AiKeyStore
+import com.noop.ai.ChatMsg
+import com.noop.ai.AiCoach
 import com.noop.analytics.Baselines
 import com.noop.analytics.TotalCaloriesEngine
 import com.noop.analytics.ChargeBaselines
@@ -1805,10 +1807,13 @@ fun TodayScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 SynthesisHeroCard(
+                                    viewModel = viewModel,
                                     day = displayMetric,
                                     recoveryCalibration = recoveryCalibration,
                                     carriedDay = lastScoredRecoveryDay,
                                     days = days,
+                                    effort = effortForDay,
+                                    rest = restScoreForDay,
                                     synthesisExpanded = synthesisExpanded,
                                     onToggleSynthesis = {
                                         synthesisExpanded = !synthesisExpanded
@@ -1818,55 +1823,7 @@ fun TodayScreen(
                                     },
                                 )
 
-                                oxygenSummary?.let { oxygen ->
-                                    val oxygenDetail = buildList {
-                                        if (oxygen.isEstimated) {
-                                            oxygen.confidence?.let {
-                                                val confidenceLabel = it
-                                                    .lowercase()
-                                                    .replaceFirstChar { char -> char.uppercase() }
-
-                                                add("Confidence $confidenceLabel")
-                                            }
-
-                                            oxygen.stabilityScore?.let {
-                                                add("Stability $it/100")
-                                            }
-
-                                            if (oxygen.sampleCount > 0) {
-                                                add("${oxygen.sampleCount} calibration days")
-                                            }
-                                        } else {
-                                            oxygen.p10Pct?.let {
-                                                add("P10 ${it}%")
-                                            }
-
-                                            oxygen.minimumPct?.let {
-                                                add("Low ${it}%")
-                                            }
-
-                                            if (oxygen.sampleCount > 0) {
-                                                add("${oxygen.sampleCount} samples")
-                                            }
-                                        }
-
-                                        add(oxygen.sourceLabel)
-                                    }.joinToString(" • ")
-
-                                    InsightCard(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        category = if (oxygen.isEstimated) {
-                                            "Estimated Oxygen"
-                                        } else {
-                                            "Oxygen Calibration"
-                                        },
-                                        status = "${oxygen.averagePct}%",
-                                        detail = oxygenDetail,
-                                        statusColor = Palette.textPrimary,
-                                        tint = null,
-                                    )
-                                }
-                        }
+}
                         }
                         // METRICS: header + Edit affordance (#251) + the tile grid. Previously two
                         // LazyColumn items; merged into ONE (a section must be a single keyed item for the
@@ -3493,6 +3450,7 @@ private fun HeroScoreVessel(
  */
 @Composable
 private fun SynthesisHeroCard(
+    viewModel: AppViewModel,
     day: DailyMetric?,
     recoveryCalibration: Int?,
     carriedDay: DailyMetric? = null,
@@ -3500,6 +3458,8 @@ private fun SynthesisHeroCard(
     // taps to toggle it / open the Charge breakdown (where the full Readiness card lives). Defaults keep old
     // call sites compiling; the Today call site supplies them.
     days: List<DailyMetric> = emptyList(),
+    effort: Double? = null,
+    rest: Double? = null,
     synthesisExpanded: Boolean = true,
     onToggleSynthesis: () -> Unit = {},
     onOpenReadiness: () -> Unit = {},

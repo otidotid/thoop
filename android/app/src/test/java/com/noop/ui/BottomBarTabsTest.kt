@@ -1,4 +1,4 @@
-package com.noop.ui
+﻿package com.noop.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -6,21 +6,30 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BottomBarTabsTest {
-    @Test fun todayIsAlwaysFirstAndOnlyOptionalSlotsFollow() {
-        val tabs = barTabsFor(listOf(Destination.Coach, Destination.Health, Destination.Sleep))
-        assertEquals(Destination.Today, tabs.first().dest)
-        assertEquals(listOf(Destination.Coach, Destination.Health, Destination.Sleep), tabs.drop(1).map { it.dest })
-        assertEquals(4, tabs.size)
+    @Test fun permanentBottomBarUsesFixedDestinationOrder() {
+        val tabs = barTabsFor()
+        assertEquals(
+            listOf(
+                Destination.Today,
+                Destination.Trends,
+                Destination.Workouts,
+                Destination.Coach,
+            ),
+            tabs.map { it.dest },
+        )
     }
 
-    @Test fun duplicateSelectionsCannotCreateDuplicateSlots() {
-        val tabs = barTabsFor(listOf(Destination.Health, Destination.Health, Destination.Sleep))
+    @Test fun permanentBottomBarContainsNoDuplicateDestinations() {
+        val tabs = barTabsFor()
         assertEquals(tabs.map { it.dest }.distinct(), tabs.map { it.dest })
     }
 
     @Test fun pinnedModulesAreRemovedFromMoreButUnpinnedModulesRemain() {
-        val groups = visibleMoreGroups(listOf(Destination.Coach, Destination.Sleep, Destination.Health))
+        val groups = visibleMoreGroups(
+            listOf(Destination.Coach, Destination.Sleep, Destination.Health)
+        )
         val modules = groups.flatMap { it.items }
+
         assertFalse(Destination.Coach in modules)
         assertFalse(Destination.Sleep in modules)
         assertFalse(Destination.Health in modules)

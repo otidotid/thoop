@@ -97,12 +97,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -1168,64 +1170,113 @@ private fun SessionsSection(
     onDelete: (WorkoutRow) -> Unit,
 ) {
     var selectedRow by remember { mutableStateOf<WorkoutRow?>(null) }
-
-    // #797: paginate the All-Sessions list. This card lives inside ONE LazyColumn item, so every session
-    // row composes eagerly: a years-deep WHOOP/Apple import (hundreds to thousands of bouts) built the
-    // whole table in one pass, a real jank/OOM contributor. Render a bounded page and grow it on demand,
-    // so a heavy history opens fast and the user pages in the rest. Reset when the windowed range changes
-    // (the row set changes identity), so switching range never leaves a stale "shown" count.
+    var allSessionsExpanded by rememberSaveable { mutableStateOf(true) }
     var shownCount by remember(rows) { mutableStateOf(SESSIONS_PAGE_SIZE) }
     val visible = if (rows.size <= shownCount) rows else rows.take(shownCount)
     val remaining = rows.size - visible.size
-
-    // #64: only MANUAL / DETECTED rows are selectable - a pure-imported list has nothing to merge/delete.
     val anySelectable = rows.any { WorkoutMerge.isMergeable(it) }
     val chosen = rows.filter { sessionSelectionKey(it) in selectedKeys }
+    val grouped = remember(visible) {
+        visible.groupBy { row ->
+            Instant.ofEpochSecond(row.startTs).atZone(ZoneId.systemDefault()).toLocalDate()
+        }.toSortedMap(compareByDescending { it })
+    }
+    val newestDay = grouped.keys.firstOrNull()
+    var expandedDays by remember(rows) { mutableStateOf(newestDay?.let(::setOf) ?: emptySet()) }
 
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.weight(1f)) {
-                SectionHeader(title = uiString(R.string.l10n_workouts_screen_all_sessions_03bc4eb4), overline = "Log", trailing = "${rows.size} total")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(Metrics.cardRadius))
+                .background(Palette.surfaceInset.copy(alpha = 0.35f))
+                .clickable { allSessionsExpanded = !allSessionsExpanded }
+                .padding(horizontal = Metrics.cardPadding, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                uiString(R.string.l10n_workouts_screen_all_sessions_03bc4eb4),
+                style = NoopType.headline,
+                color = Palette.textPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            if (anySelectable) {
+                SelectPill(selectionMode, onToggleSelectMode)
+                Spacer(Modifier.width(8.dp))
             }
-            if (anySelectable) SelectPill(selectionMode, onToggleSelectMode)
+            Icon(
+                Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (allSessionsExpanded) "Collapse All Sessions" else "Expand All Sessions",
+                tint = Palette.textSecondary,
+                modifier = Modifier.size(20.dp).rotate(if (allSessionsExpanded) 180f else 0f),
+            )
         }
-        if (selectionMode) SelectionToolbar(chosen, onMerge, onBulkDelete, onCancelSelect)
-        NoopCard(padding = 0.dp) {
-            Column {
-                SessionHeaderRow(selectionMode)
-                FullDivider()
-                visible.forEachIndexed { idx, row ->
-                    SessionRow(
-                        row = row,
-                        background = if (idx % 2 == 1) Palette.surfaceInset.copy(alpha = 0.4f) else Color.Transparent,
-                        selectionMode = selectionMode,
-                        selected = sessionSelectionKey(row) in selectedKeys,
-                        onToggleRow = onToggleRow,
-                        onEdit = onEdit,
-                        onRelabel = onRelabel,
-                        onDismiss = onDismiss,
-                        onDelete = onDelete,
-                        onClick = { selectedRow = it },
-                    )
-                    if (idx != visible.lastIndex) FullDivider(alpha = 0.5f)
-                }
-                // "Show more" pages in the next [SESSIONS_PAGE_SIZE] bouts. Hidden once everything is shown.
-                if (remaining > 0) {
-                    FullDivider(alpha = 0.5f)
-                    val more = minOf(remaining, SESSIONS_PAGE_SIZE)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { shownCount += SESSIONS_PAGE_SIZE }
-                            .semantics { contentDescription = uiString(R.string.l10n_workouts_screen_show_more_more_sessions_25bce755, more) }
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            uiString(R.string.l10n_workouts_screen_show_more_more_remaining_remaining_d1662e67, more, remaining),
-                            style = NoopType.subhead,
-                            color = Palette.accent,
-                        )
+        if (allSessionsExpanded) {
+            if (selectionMode) SelectionToolbar(chosen, onMerge, onBulkDelete, onCancelSelect)
+            NoopCard(padding = 0.dp) {
+                Column {
+                    grouped.forEach { (day, dayRows) ->
+                        val dayExpanded = day in expandedDays
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    expandedDays = if (dayExpanded) expandedDays - day else expandedDays + day
+                                }
+                                .padding(horizontal = Metrics.cardPadding, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
+                                style = NoopType.subhead,
+                                color = Palette.textPrimary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                Icons.Filled.KeyboardArrowDown,
+                                contentDescription = if (dayExpanded) "Collapse date" else "Expand date",
+                                tint = Palette.textTertiary,
+                                modifier = Modifier.size(18.dp).rotate(if (dayExpanded) 180f else 0f),
+                            )
+                        }
+                        if (dayExpanded) {
+                            FullDivider()
+                            SessionHeaderRow(selectionMode)
+                            FullDivider()
+                            dayRows.forEachIndexed { idx, row ->
+                                SessionRow(
+                                    row = row,
+                                    background = if (idx % 2 == 1) Palette.surfaceInset.copy(alpha = 0.4f) else Color.Transparent,
+                                    selectionMode = selectionMode,
+                                    selected = sessionSelectionKey(row) in selectedKeys,
+                                    onToggleRow = onToggleRow,
+                                    onEdit = onEdit,
+                                    onRelabel = onRelabel,
+                                    onDismiss = onDismiss,
+                                    onDelete = onDelete,
+                                    onClick = { selectedRow = it },
+                                )
+                                if (idx != dayRows.lastIndex) FullDivider(alpha = 0.5f)
+                            }
+                        }
+                        FullDivider(alpha = 0.5f)
+                    }
+                    if (remaining > 0) {
+                        val more = minOf(remaining, SESSIONS_PAGE_SIZE)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { shownCount += SESSIONS_PAGE_SIZE }
+                                .semantics { contentDescription = uiString(R.string.l10n_workouts_screen_show_more_more_sessions_25bce755, more) }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                uiString(R.string.l10n_workouts_screen_show_more_more_remaining_remaining_d1662e67, more, remaining),
+                                style = NoopType.subhead,
+                                color = Palette.accent,
+                            )
+                        }
                     }
                 }
             }
