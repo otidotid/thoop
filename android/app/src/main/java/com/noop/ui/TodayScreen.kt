@@ -3454,14 +3454,266 @@ private fun SynthesisHeroCard(
     day: DailyMetric?,
     recoveryCalibration: Int?,
     carriedDay: DailyMetric? = null,
-    // S4: the day history (for the one-word readiness read), whether the Synthesis card is expanded, and the
-    // taps to toggle it / open the Charge breakdown (where the full Readiness card lives). Defaults keep old
-    // call sites compiling; the Today call site supplies them.
     days: List<DailyMetric> = emptyList(),
     effort: Double? = null,
     rest: Double? = null,
     synthesisExpanded: Boolean = true,
     onToggleSynthesis: () -> Unit = {},
+    onOpenReadiness: () -> Unit = {},
+) {
+    val readDay = carriedDay ?: day
+    val recovery = readDay?.recovery
+    val todayRecovery = day?.recovery
+    val readinessLevel = remember(days) {
+        if (days.isEmpty()) ReadinessEngine.Level.INSUFFICIENT
+        else ReadinessEngine.evaluate(days, today = logicalDayKeyNow()).level
+    }
+
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        context.applicationContext.getSharedPreferences(
+            "thoop_synthesis_ai",
+            Context.MODE_PRIVATE,
+        )
+    }
+
+    var aiInsight by remember {
+        mutableStateOf(prefs.getString("last_valid", null))
+    }
+
+    val triggerCharge = recovery?.takeIf { it.isFinite() }
+    val triggerEffort = effort?.takeIf { it.isFinite() }
+    val triggerRest = rest?.takeIf { it.isFinite() }
+
+    fun cleanInsight(source: String): String {
+        return source
+            .replace(Regex("""[*_#`>]"""), "")
+            .replace(
+                Regex("""(?i)THOOP AI Coach is not a doctor[^.]*\."""),
+                "",
+            )
+            .replace(
+                Regex("""(?i)this advice is informational[^.]*\."""),
+                "",
+            )
+            .replace(
+                Regex("""(?i)this is not medical advice[^.]*\."""),
+                "",
+            )
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+    }
+
+    LaunchedEffect(triggerCharge, triggerEffort, triggerRest) {
+        if (
+            triggerCharge == null &&
+            triggerEffort == null &&
+            triggerRest == null
+        ) {
+            return@LaunchedEffect
+        }
+
+        // Coalesce closely timed Charge and/or Effort and/or Rest updates.
+        delay(1_500)
+
+        if (!AiKeyStore.readConsent(context)) {
+            return@LaunchedEffect
+        }
+
+        val prompt = buildString {
+            append("Create one concise THOOP Synthesis insight from the latest health recap. ")
+            append("Charge=")
+            append(triggerCharge?.roundToInt() ?: "unavailable")
+            append(", Effort=")
+            append(
+                triggerEffort?.let {
+                    String.format(Locale.US, "%.1f", it)
+                } ?: "unavailable"
+            )
+            append(", Rest=")
+            append(triggerRest?.roundToInt() ?: "unavailable")
+            append(". Read the complete current THOOP context supplied with this request. ")
+            append("Return 2 to 4 short sentences and never more than 5. ")
+            append("Choose the single most relevant insight and one practical recommendation. ")
+            append("Do not diagnose. Do not use headings, bullets, Markdown, or disclaimers.")
+        }
+
+        runCatching {
+            AiCoach(
+                viewModel.repo,
+                activeStrapId = { viewModel.activeStrapId },
+            ).chatCloud(
+                ctx = context,
+                history = listOf(
+                    ChatMsg(role = "user", text = prompt),
+                ),
+                conversationId = null,
+                consent = true,
+                includeSignals = true,
+            ).answer
+        }.getOrNull()
+            ?.let(::cleanInsight)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { validInsight ->
+                aiInsight = validInsight
+                prefs.edit()
+                    .putString("last_valid", validInsight)
+                    .apply()
+            }
+    }
+
+    val fallbackInsight = when {
+        recoveryCalibration != null ->
+            "THOOP is still learning your baseline. Keep wearing the strap consistently so the next insight can use a stable Charge, Effort, and Rest profile."
+
+        triggerCharge == null &&
+            triggerEffort == null &&
+            triggerRest == null ->
+            "There is not enough current data for a reliable insight yet. THOOP will update this card when Charge, Effort, or Rest changes."
+
+        else ->
+            "Your latest Charge, Effort, and Rest are ready. THOOP will refresh this insight whenever any one of those values changes."
+    }
+
+    val insight = remember(aiInsight, fallbackInsight) {
+        val cleaned = cleanInsight(
+            aiInsight?.takeIf { it.isNotBlank() } ?: fallbackInsight
+        )
+
+        Regex("""(?<=[.!?])\s+""")
+            .split(cleaned)
+            .filter { it.isNotBlank() }
+            .take(5)
+            .joinToString(" ")
+    }
+
+    val collapsedInsight = remember(insight) {
+        Regex("""(?<=[.!?])\s+""")
+            .split(insight)
+            .filter { it.isNotBlank() }
+            .take(2)
+            .joinToString(" ")
+    }
+
+    if (synthesisExpanded) {
+        val interaction = remember { MutableInteractionSource() }
+
+        NoopCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .liquidPress(interaction)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClickLabel = uiString(R.string.today_action_collapse),
+                    onClick = onToggleSynthesis,
+                ),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        uiString(R.string.today_section_synthesis),
+                        style = NoopType.overline,
+                        color = Palette.textTertiary,
+                        modifier = Modifier.weight(1f),
+                    )
+
+                    Row(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(Metrics.space6),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        readinessWord(readinessLevel)?.let { wordRes ->
+                            ReadinessHeroPill(
+                                word = uiString(wordRes),
+                                level = readinessLevel,
+                                onTap = onOpenReadiness,
+                            )
+                        }
+
+                        StatePill(
+                            title = if (todayRecovery != null) {
+                                uiString(R.string.today_score_solid)
+                            } else {
+                                uiString(
+                                    R.string.score_state_title_calibrating
+                                ).uppercase()
+                            },
+                            tone = if (todayRecovery != null) {
+                                StrandTone.Accent
+                            } else {
+                                StrandTone.Neutral
+                            },
+                        )
+                    }
+                }
+
+                Text(
+                    text = insight,
+                    style = NoopType.body.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 23.sp,
+                    ),
+                    color = Palette.textPrimary,
+                )
+            }
+        }
+    } else {
+        val interaction = remember { MutableInteractionSource() }
+
+        NoopCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .liquidPress(interaction)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClickLabel =
+                        uiString(R.string.today_action_expand_full_read),
+                    onClick = onToggleSynthesis,
+                ),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        uiString(
+                            R.string.l10n_today_screen_synthesis_876bc749
+                        ),
+                        style = NoopType.overline,
+                        color = Palette.textTertiary,
+                    )
+
+                    Text(
+                        text = collapsedInsight,
+                        style = NoopType.body.copy(
+                            fontSize = 16.sp,
+                            lineHeight = 23.sp,
+                        ),
+                        color = Palette.textPrimary,
+                    )
+                }
+
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = Palette.textTertiary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+},
     onOpenReadiness: () -> Unit = {},
 ) {
     // The row the synthesis reads from: today's own when it carries recovery, else the carried-over last
