@@ -1,0 +1,3 @@
+﻿?? THOOP-hr-chart-current/
+?? THOOP-more-hub-multi-open-hotfix.patch.txt
+?? THOOP-v12.5.4-sleep-processing-7d-full-validated-hotfix-a877a9f1.apk.sha256

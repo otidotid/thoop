@@ -1,0 +1,1592 @@
+﻿===== TODAY IMPORTS =====
+package com.noop.ui
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.TrackChanges
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.automirrored.filled.BatteryUnknown
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.app.DatePickerDialog
+import android.content.Context
+import android.view.HapticFeedbackConstants
+import android.widget.Toast
+import androidx.compose.runtime.produceState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.noop.R
+import com.noop.ai.AiKeyStore
+import com.noop.analytics.Baselines
+import com.noop.analytics.TotalCaloriesEngine
+import com.noop.analytics.ChargeBaselines
+import com.noop.analytics.BatteryEstimator
+import com.noop.analytics.ChargeDriver
+import com.noop.analytics.ChargeDriverLabel
+import com.noop.analytics.ChargeDriverUnit
+import com.noop.analytics.RecoveryDrivers
+import com.noop.analytics.ChargeDriverVerdict
+import com.noop.analytics.DayCycleMode
+import com.noop.analytics.DayCycleIntelligenceIntegration
+import com.noop.analytics.HydrationGoal
+import com.noop.analytics.HydrationStore
+import com.noop.analytics.ReadinessEngine
+import com.noop.analytics.ScoreConfidence
+import com.noop.analytics.SleepMark
+import com.noop.analytics.SleepMarkType
+import com.noop.analytics.StepsEstimateEngine
+import com.noop.analytics.StrainScorer
+import com.noop.ble.WhoopModel
+import com.noop.data.DailyMetric
+import com.noop.protocol.Whoop5RR
+import com.noop.widget.StressPoint
+import com.noop.widget.StressWidgetProducer
+import com.noop.widget.WidgetSnapshotStore
+import com.noop.data.HrBucket
+import com.noop.data.SleepSession
+import com.noop.data.WhoopRepository
+import com.noop.data.WorkoutRow
+import com.noop.ingest.HealthConnectImporter
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.time.temporal.ChronoUnit
+import java.util.Calendar
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+@Composable
+private fun DisplayText.localized(): String = when (this) {
+    is DisplayText.Resource -> uiString(id, *args.toTypedArray())
+    is DisplayText.Dynamic -> value
+}
+
+@Composable
+private fun List<DisplayText>.localizedSourceList(): String {
+    val labels = ArrayList<String>(size)
+    for (label in this) labels += label.localized()
+    return labels.joinToString(uiString(R.string.today_source_joiner))
+}
+
+/**
+ * Control Center, the home dashboard. A recovery ring + plain-English synthesis
+ * hero, an illness banner when the watch fires, and a tile grid of the day's key
+ * metrics, each tile carrying a 14-day sparkline. Ports the macOS TodayView
+ * composition (Strand/Screens/TodayView.swift) with the same locked components.
+
+===== SYNTHESIS EXACT =====
+                color = Color.White,
+                modifier = Modifier.clearAndSetSemantics {},
+            )
+        }
+    }
+}
+
+/**
+ * The plain-English Synthesis card, the Charge-tinted [InsightCard] read-out under the ring hero, with a
+ * WHITE headline (the key iOS Design-Reset change, `statusColor: textPrimary`, not the recovery/charge
+ * colour), carrying the greeting + the SOLID / CALIBRATING data-confidence pill in its top-right. Mirrors
+ * the iOS Synthesis InsightCard (which moved here when the big RecoveryRing hero that owned the pill went).
+ */
+@Composable
+private fun SynthesisHeroCard(
+    day: DailyMetric?,
+    recoveryCalibration: Int?,
+    carriedDay: DailyMetric? = null,
+    // S4: the day history (for the one-word readiness read), whether the Synthesis card is expanded, and the
+    // taps to toggle it / open the Charge breakdown (where the full Readiness card lives). Defaults keep old
+    // call sites compiling; the Today call site supplies them.
+    days: List<DailyMetric> = emptyList(),
+    synthesisExpanded: Boolean = true,
+    onToggleSynthesis: () -> Unit = {},
+    onOpenReadiness: () -> Unit = {},
+) {
+    // The row the synthesis reads from: today's own when it carries recovery, else the carried-over last
+    // scored day (#543) so the card mirrors the carried Charge ring instead of blanking to "No Data". When
+    // carrying, the detail line gets a "Last night Â· <date>" provenance so the prior read isn't passed off
+    // as today's. today's own read wins the instant tonight is scored.
+    val readDay = carriedDay ?: day
+    val recovery = readDay?.recovery
+    val readinessLevel = remember(days) {
+        if (days.isEmpty()) ReadinessEngine.Level.INSUFFICIENT
+        else ReadinessEngine.evaluate(days, today = logicalDayKeyNow()).level
+    }
+    val todayRecovery = day?.recovery
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
+        // S4: the Synthesis card collapses to a one-liner that expands on tap. The headline (the status) is
+        // the SAME in both states, only the detail body and chrome fold, never the read (#506).
+        val status = if (recoveryCalibration != null) uiString(R.string.score_state_title_calibrating)
+        else synthesisWord(recovery)
+        val detail = if (recoveryCalibration != null) {
+            // #612: if the baseline aged out silently â€” connected, but no new night for > staleDays â€” say WHY
+            // it's calibrating instead of only "learning your baseline". `stale` is always > staleDays (14).
+            val stale = Baselines.nightsSinceNewestValidNight(days.map { it.day }, days.map { it.avgHrv }, logicalDayKeyNow())
+            if (stale != null && stale > Baselines.staleDays) {
+                uiString(R.string.l10n_today_screen_no_new_nights_from_your_strap_for_stale_days_8863bcfe, stale)
+            } else {
+                // Comma (not the old em-dash) to match the Swift canonical synthesis copy VERBATIM
+                // (TodayView "Learning your baseline, N of M nights.") and the no-em-dash standing rule.
+                // #612 above covers a TOTAL drought. The common shape is the other one: nights arriving,
+                // most of them empty. Five days in with three HRV-less nights sits at "2 of 4" with no
+                // reason given, which reads as a stuck counter rather than as missing data. Name the
+                // missing nights so a wearer has something to act on instead of something to wait for.
+                // Swift twin: TodayView.calibrationDetail.
+                val cov = Baselines.recentHrvCoverage(
+                    days.map { it.day }, days.map { it.avgHrv }, logicalDayKeyNow(),
+                )
+                val base = uiString(
+                    R.string.today_synthesis_learning_baseline, recoveryCalibration, Baselines.minNightsSeed,
+                )
+                if (cov.missing > 0 && cov.observed > 0) {
+                    base + " " + uiString(R.string.today_synthesis_nights_without_hrv, cov.missing, cov.observed)
+                } else {
+                    base
+                }
+            }
+        } else if (carriedDay != null) {
+            // Carried prior-day read, summarise that day + stamp it so it isn't passed off as today's.
+            uiString(
+                R.string.today_synthesis_carried_detail,
+                synthesisDetail(carriedDay), carriedCaption(carriedDay.day).localized(),
+            )
+        } else {
+            synthesisDetail(day)
+        }
+        if (synthesisExpanded) {
+            val expandedInteraction = remember { MutableInteractionSource() }
+            Box(
+                modifier = Modifier
+                    .liquidPress(expandedInteraction)
+                    .clickable(
+                        interactionSource = expandedInteraction,
+                        indication = null,
+                        onClickLabel = uiString(R.string.today_action_collapse),
+                        onClick = onToggleSynthesis,
+                    ),
+            ) {
+                InsightCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    category = uiString(R.string.today_section_synthesis),
+                    status = status,
+                    detail = detail,
+                    // The SYNTHESIS headline reads WHITE (textPrimary), not the recovery/charge colour, the
+                    // key iOS Design-Reset change (TodayView.synthesisSection passes statusColor textPrimary).
+                    statusColor = Palette.textPrimary,
+                    // FLAT card to match iOS (no navy-bevel gradient / border): identity comes from the white
+                    // headline alone. tint = null routes to the neutral FLAT surfaceRaised + hairline path.
+                    tint = null,
+                )
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = Metrics.space14, end = Metrics.space16),
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space6),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    readinessWord(readinessLevel)?.let { wordRes ->
+                        ReadinessHeroPill(
+                            word = uiString(wordRes),
+                            level = readinessLevel,
+                            onTap = onOpenReadiness,
+                        )
+                    }
+                    StatePill(
+                        title = if (todayRecovery != null) uiString(R.string.today_score_solid)
+                        else uiString(R.string.score_state_title_calibrating).uppercase(),
+                        tone = if (todayRecovery != null) StrandTone.Accent else StrandTone.Neutral,
+                    )
+                }
+            }
+        } else {
+            // Collapsed: a one-liner with the SYNTHESIS overline, the status headline and a down-chevron.
+            val collapsedInteraction = remember { MutableInteractionSource() }
+            NoopCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .liquidPress(collapsedInteraction)
+                    .clickable(
+                        interactionSource = collapsedInteraction,
+                        indication = null,
+                        onClickLabel = uiString(R.string.today_action_expand_full_read),
+                        onClick = onToggleSynthesis,
+                    ),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(uiString(R.string.l10n_today_screen_synthesis_876bc749), style = NoopType.overline, color = Palette.textTertiary)
+                        Text(
+                            status,
+                            style = NoopType.headline,
+                            color = Palette.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        // While calibrating, the detail carries the progress AND, when nights are arriving
+                        // empty, the reason. Collapsed used to show only "Calibrating", which is the state
+                        // the field report was taken in: the explanation existed one tap away and the
+                        // wearer had no way to know it was there. iOS never gated this line; matching it.
+                        if (recoveryCalibration != null) {
+                            Text(
+                                detail,
+                                style = NoopType.caption,
+                                color = Palette.textSecondary,
+                            )
+                        }
+                    }
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = Palette.textTertiary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * S4 (#205): the one-word readiness pill on the hero (Push / Maintain / Rest). A small tinted capsule
+ * matching the score-pill chrome, coloured by the readiness level; tapping opens the Charge breakdown sheet
+ * where the full Readiness card lives. Mirrors the iOS readinessHeroPill.
+ */
+@Composable
+private fun ReadinessHeroPill(word: String, level: ReadinessEngine.Level, onTap: () -> Unit) {
+    val tone = readinessColor(level)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(tone.copy(alpha = 0.12f))
+            .border(1.dp, tone.copy(alpha = 0.32f), RoundedCornerShape(50))
+            .clickable(onClickLabel = uiString(R.string.today_action_full_readiness), onClick = onTap)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .semantics { contentDescription = uiString(R.string.l10n_today_screen_readiness_word_749b3330, word) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(word.uppercase(), style = NoopType.overline, color = tone)
+    }
+
+===== WORKOUTS IMPORTS AND STATE =====
+package com.noop.ui
+
+import android.widget.Toast
+
+import com.noop.R
+import com.noop.data.HrBucket
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Accessible
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import androidx.compose.material.icons.filled.Hiking
+import androidx.compose.material.icons.filled.IceSkating
+import androidx.compose.material.icons.filled.Kayaking
+import androidx.compose.material.icons.filled.Sailing
+import androidx.compose.material.icons.filled.ScubaDiving
+import androidx.compose.material.icons.filled.Skateboarding
+import androidx.compose.material.icons.filled.Snowshoeing
+import androidx.compose.material.icons.filled.SportsCricket
+import androidx.compose.material.icons.filled.SportsFootball
+import androidx.compose.material.icons.filled.SportsHandball
+import androidx.compose.material.icons.filled.SportsHockey
+import androidx.compose.material.icons.filled.SportsRugby
+import androidx.compose.material.icons.filled.Surfing
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.SportsMotorsports
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pool
+import androidx.compose.material.icons.filled.Rowing
+import androidx.compose.material.icons.filled.SelfImprovement
+import androidx.compose.material.icons.filled.DownhillSkiing
+import androidx.compose.material.icons.filled.Snowboarding
+import androidx.compose.material.icons.filled.SportsBaseball
+import androidx.compose.material.icons.filled.SportsBasketball
+import androidx.compose.material.icons.filled.SportsGolf
+import androidx.compose.material.icons.filled.SportsGymnastics
+import androidx.compose.material.icons.filled.SportsMartialArts
+import androidx.compose.material.icons.filled.SportsVolleyball
+import androidx.compose.material.icons.filled.Terrain
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.material.icons.filled.SportsTennis
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import com.noop.analytics.ActivityHeatmap
+import com.noop.analytics.RouteMath
+import com.noop.ingest.RouteExport
+import kotlinx.coroutines.launch
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.noop.analytics.WorkoutSport
+import com.noop.analytics.HeartRateRecovery
+import com.noop.data.WorkoutRow
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import kotlin.math.roundToInt
+
+/**
+ * Workouts - the activity log, instrument-grade and uniform. Ports the macOS
+ * WorkoutsView (Strand/Screens/WorkoutsView.swift) onto the locked Android component
+ * system (NoopCard / StatTile / SectionHeader / SegmentedPillControl / SourceBadge)
+ * so every card, tile and row lines up:
+ *
+ *   - a range pill (7D / 30D / 90D / 1Y / All) that filters the loaded sessions,
+ *   - a grid of summary StatTiles (count / time / calories / distance / most-active),
+ *   - an "Activity Breakdown" of per-sport NoopCards with an identical internal layout,
+ *   - an "All Sessions" NoopCard of fixed-height rows (date | sport | dur | HR | kcal |
+ *     dist | source).
+ *
+ * Sessions are loaded by the ViewModel from EVERY cached source - strap ("my-whoop": imported +
+ * manual), Apple Health / Health Connect, and the on-device DETECTED bouts under "my-whoop-noop" -
+ * merged newest first, with dismissed detected bouts filtered out (#107). Each row carries a source
+ * badge (Whoop / Apple / HC / Detected / Manual) and an overflow menu to edit, re-label, dismiss or
+ * delete. The windowing is anchored to the LATEST session (not "now"), so an old log still resolves;
+ * an empty window auto-widens to the next larger range, exactly like the macOS screen.
+ */
+@Composable
+fun WorkoutsScreen(vm: AppViewModel) {
+    // The ViewModel owns the loaded rows now (ALL sources incl. detected, dismissed-filtered) so a
+    // mutation (add / edit / relabel / dismiss / delete) republishes the list and the screen updates.
+    val allRows by vm.workouts.collectAsState()
+    val lastHistorySyncAt by vm.lastHistorySyncAt.collectAsStateWithLifecycle()
+    // Cached daily metrics - the Charge side of the post-log activity-cost note (#439).
+    val recentDays by vm.recentDays.collectAsStateWithLifecycle()
+    var range by remember { mutableStateOf(WorkoutRange.All) }
+    // Pick the default range ONCE on first non-empty load; later mutations must not fight a range the
+    // user chose. Mirrors macOS, which sets the default only in `.task` / first onAppear.
+    var didPickDefaultRange by remember { mutableStateOf(false) }
+
+    // The manual add/edit dialog target: Some(null) = add, Some(row) = edit, null = closed.
+    var dialog by remember { mutableStateOf<DialogTarget?>(null) }
+
+    // #64: filters beyond the time range - sport (null = all), source class (null = all), free-text
+    // search over the displayed sport. The pure WorkoutFilter applies them AFTER the window cut.
+    var sportFilter by remember { mutableStateOf<String?>(null) }
+    var sourceFilter by remember { mutableStateOf<WorkoutSource?>(null) }
+    var searchText by remember { mutableStateOf("") }
+    val filter = WorkoutFilter(sportFilter, sourceFilter, searchText)
+
+    // #64: multi-select + merge. `selectionMode` toggles the leading checkmarks + the toolbar strip;
+    // `selectedKeys` holds the natural keys ("startTs|sport") of the chosen rows. Only MANUAL / DETECTED
+    // rows are selectable (imported history is read-only). `mergeSportPrompt` names an all-detected merge.
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var mergeSportPrompt by remember { mutableStateOf<List<WorkoutRow>?>(null) }
+
+    // #64: displayed-sport names across ALL loaded rows, most-frequent first, for the sport-filter menu.
+    // Computed here (a @Composable scope) since the LazyScreenScaffold content lambda is a LazyListScope.
+    val availableSports = remember(allRows) {
+        allRows.groupingBy { WorkoutEditing.displaySport(it.sport) }.eachCount()
+            .entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { it.key }
+    }
+
+    // A transient one-line note shown after a manual save / relabel for a sport that already has a
+    // solid/building ActivityCost entry - "Sessions like this usually ..." (#439). Auto-clears.
+    var postLogNote by remember { mutableStateOf<String?>(null) }
+    var recoveryTrend by remember { mutableStateOf<List<WorkoutRecoveryTrendPoint>>(emptyList()) }
+    // The sport whose recovery-cost note to surface once the reloaded sessions land. saveManualWorkout
+    // / relabelDetected reload `vm.workouts` asynchronously, so we wait for `allRows` to update before
+    // computing the note (otherwise it would read the pre-save list). Cleared once consumed.
+    var pendingNoteSport by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(allRows, recentDays, pendingNoteSport) {
+        val sport = pendingNoteSport ?: return@LaunchedEffect
+        // Only a solid/building entry (n >= minSessions) clears the engine's gate, so this stays silent
+        // until there's an honest personal pattern to show.
+        val match = computeActivityCosts(allRows, recentDays).firstOrNull { it.sport == sport }
+        pendingNoteSport = null
+        if (match != null) {
+            postLogNote = match.sentence()
+            kotlinx.coroutines.delay(7_000)
+            postLogNote = null
+        }
+    }
+
+    // #516: use the same active filter/range as the workout page, capped to 90 days. The cap keeps a deep
+    // imported history from launching hundreds of raw-HR reads; 7D/30D/90D are the promised trend views.
+    val recoveryRange = run {
+        val resolved = effectiveRange(allRows, range, filter)
+        if (resolved.days == null || resolved.days > 90) WorkoutRange.Quarter else resolved
+    }
+    val recoveryRows = filter.apply(sessions(allRows, recoveryRange)).sortedBy { it.startTs }
+    val recoveryInputKey = buildString {
+        append(recoveryRange.name)
+        recoveryRows.forEach { append('|').append(it.startTs).append(':').append(it.endTs) }
+    }
+    LaunchedEffect(recoveryInputKey, vm.activeStrapId, lastHistorySyncAt) {
+        val built = ArrayList<WorkoutRecoveryTrendPoint>()
+        for (row in recoveryRows) {
+            val result = vm.workoutHeartRateRecovery(row.startTs, row.endTs, row.source, row.deviceId) ?: continue
+            built += WorkoutRecoveryTrendPoint(row.startTs, result)
+        }
+        recoveryTrend = built
+    }
+
+===== ALL SESSIONS EXACT =====
+        Text(
+            value,
+            style = NoopType.number(15f),
+            color = tint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+// MARK: - HR zones (imported per-workout zone split, one card)
+
+@Composable
+private fun ZonesSection(rows: List<WorkoutRow>) {
+    val z = remember(rows) { zoneSummary(rows) } ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
+        SectionHeader(
+            title = uiString(R.string.l10n_workouts_screen_hr_zones_293d7175),
+            overline = "Whoop import",
+            trailing = "${z.sessionsWithZones} of ${rows.size} session${if (rows.size == 1) "" else "s"}",
+        )
+        NoopCard(tint = Palette.effortColor) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Proportional stacked bar - the Hypnogram geometry with zone colors.
+                SegmentBar(
+                    segments = z.minutes.mapIndexed { i, m ->
+                        Palette.hrZoneColor(i + 1) to (m / z.totalMinutes).toFloat()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 24.dp,
+                )
+                CardDivider()
+                // 5-up stat strip, identical rhythm to the sport cards' MiniStat row.
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    z.minutes.forEachIndexed { i, m ->
+                        ZoneStat(i + 1, m, z.totalMinutes, Modifier.weight(1f))
+                    }
+                }
+                Text(
+                    uiString(R.string.l10n_workouts_screen_share_of_imported_zone_time_duration_b0985680),
+                    style = NoopType.footnote,
+                    color = Palette.textTertiary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoneStat(zone: Int, minutes: Double, total: Double, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(9.dp)
+                    .background(Palette.hrZoneColor(zone), RoundedCornerShape(2.dp)),
+            )
+            Spacer(Modifier.width(5.dp))
+            Overline("Z$zone")
+        }
+        Text(
+            uiString(R.string.l10n_workouts_screen_minutes_total_100_roundtoint_5bb7c6d8, (minutes / total * 100).roundToInt()),
+            style = NoopType.number(15f),
+            color = Palette.textPrimary,
+            maxLines = 1,
+        )
+        Text(durationLabel(minutes * 60), style = NoopType.footnote, color = Palette.textTertiary, maxLines = 1)
+    }
+}
+
+// MARK: - All sessions (one NoopCard, uniform fixed-height rows)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionsSection(
+    vm: AppViewModel,
+    rows: List<WorkoutRow>,
+    selectionMode: Boolean,
+    selectedKeys: Set<String>,
+    onToggleSelectMode: () -> Unit,
+    onToggleRow: (WorkoutRow) -> Unit,
+    onMerge: (List<WorkoutRow>) -> Unit,
+    onBulkDelete: (List<WorkoutRow>) -> Unit,
+    onCancelSelect: () -> Unit,
+    onEdit: (WorkoutRow, Boolean) -> Unit,
+    onRelabel: (WorkoutRow, String) -> Unit,
+    onDismiss: (WorkoutRow) -> Unit,
+    onDelete: (WorkoutRow) -> Unit,
+) {
+    var selectedRow by remember { mutableStateOf<WorkoutRow?>(null) }
+
+    // #797: paginate the All-Sessions list. This card lives inside ONE LazyColumn item, so every session
+    // row composes eagerly: a years-deep WHOOP/Apple import (hundreds to thousands of bouts) built the
+    // whole table in one pass, a real jank/OOM contributor. Render a bounded page and grow it on demand,
+    // so a heavy history opens fast and the user pages in the rest. Reset when the windowed range changes
+    // (the row set changes identity), so switching range never leaves a stale "shown" count.
+    var shownCount by remember(rows) { mutableStateOf(SESSIONS_PAGE_SIZE) }
+    val visible = if (rows.size <= shownCount) rows else rows.take(shownCount)
+    val remaining = rows.size - visible.size
+
+    // #64: only MANUAL / DETECTED rows are selectable - a pure-imported list has nothing to merge/delete.
+    val anySelectable = rows.any { WorkoutMerge.isMergeable(it) }
+    val chosen = rows.filter { sessionSelectionKey(it) in selectedKeys }
+
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                SectionHeader(title = uiString(R.string.l10n_workouts_screen_all_sessions_03bc4eb4), overline = "Log", trailing = "${rows.size} total")
+            }
+            if (anySelectable) SelectPill(selectionMode, onToggleSelectMode)
+        }
+        if (selectionMode) SelectionToolbar(chosen, onMerge, onBulkDelete, onCancelSelect)
+        NoopCard(padding = 0.dp) {
+            Column {
+                SessionHeaderRow(selectionMode)
+                FullDivider()
+                visible.forEachIndexed { idx, row ->
+                    SessionRow(
+                        row = row,
+                        background = if (idx % 2 == 1) Palette.surfaceInset.copy(alpha = 0.4f) else Color.Transparent,
+                        selectionMode = selectionMode,
+                        selected = sessionSelectionKey(row) in selectedKeys,
+                        onToggleRow = onToggleRow,
+                        onEdit = onEdit,
+                        onRelabel = onRelabel,
+                        onDismiss = onDismiss,
+                        onDelete = onDelete,
+                        onClick = { selectedRow = it },
+                    )
+                    if (idx != visible.lastIndex) FullDivider(alpha = 0.5f)
+                }
+                // "Show more" pages in the next [SESSIONS_PAGE_SIZE] bouts. Hidden once everything is shown.
+                if (remaining > 0) {
+                    FullDivider(alpha = 0.5f)
+                    val more = minOf(remaining, SESSIONS_PAGE_SIZE)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { shownCount += SESSIONS_PAGE_SIZE }
+                            .semantics { contentDescription = uiString(R.string.l10n_workouts_screen_show_more_more_sessions_25bce755, more) }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            uiString(R.string.l10n_workouts_screen_show_more_more_remaining_remaining_d1662e67, more, remaining),
+                            style = NoopType.subhead,
+                            color = Palette.accent,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    selectedRow?.let { row ->
+        WorkoutDetailSheet(vm = vm, row = row, onDismiss = { selectedRow = null })
+    }
+}
+
+/** #64: the "Select" pill in the All-Sessions header - toggles multi-select mode. */
+@Composable
+private fun SelectPill(selectionMode: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selectionMode) Palette.effortColor.copy(alpha = 0.14f) else Palette.surfaceInset.copy(alpha = 0.6f))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .semantics {
+                contentDescription = if (selectionMode) "Finish selecting" else "Select sessions to merge or delete"
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (selectionMode) "Done" else "Select",
+            style = NoopType.footnote,
+            color = if (selectionMode) Palette.effortColor else Palette.accent,
+        )
+    }
+}
+
+/** #64: the Merge / Delete / Cancel strip shown above the card in selection mode. Merge needs 2+ eligible
+ *  rows; Delete needs 1+. Imported rows are never selectable, so the chosen set is always mergeable. */
+@Composable
+private fun SelectionToolbar(
+    chosen: List<WorkoutRow>,
+    onMerge: (List<WorkoutRow>) -> Unit,
+    onBulkDelete: (List<WorkoutRow>) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val canMerge = WorkoutMerge.canMerge(chosen)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Metrics.cardRadius))
+            .background(Palette.effortColor.copy(alpha = 0.08f))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ToolbarAction(
+            "Merge (${chosen.size})", Icons.AutoMirrored.Filled.MergeType,
+            tint = if (canMerge) Palette.effortColor else Palette.textTertiary,
+            enabled = canMerge, onClick = { onMerge(chosen) },
+        )
+        ToolbarAction(
+            "Delete (${chosen.size})", Icons.Filled.Delete,
+            tint = if (chosen.isEmpty()) Palette.textTertiary else Palette.metricRose,
+            enabled = chosen.isNotEmpty(), onClick = { onBulkDelete(chosen) },
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            uiString(R.string.l10n_workouts_screen_cancel_77dfd213),
+            style = NoopType.subhead,
+            color = Palette.textSecondary,
+            modifier = Modifier.clickable(onClick = onCancel).padding(4.dp),
+        )
+    }
+}
+
+@Composable
+private fun ToolbarAction(label: String, icon: ImageVector, tint: Color, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+            .semantics { contentDescription = label },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = NoopType.subhead, color = tint)
+    }
+}
+
+/** #797: the All-Sessions list renders in pages of this size and grows on "Show more", so a years-deep
+ *  workout history doesn't compose every row in one pass inside the single enclosing card. */
+private const val SESSIONS_PAGE_SIZE = 50
+
+@Composable
+private fun SessionHeaderRow(selectionMode: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(34.dp)
+            .padding(horizontal = Metrics.cardPadding),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // #64: a leading spacer over the per-row selection glyph, so the columns stay aligned in select mode.
+        if (selectionMode) Spacer(Modifier.width(30.dp))
+        // Weights mirror SessionRow (#157: Date widened for the time range, taken from Sport).
+        ColHeader("Date", Modifier.weight(1.7f), TextAlign.Start)
+        ColHeader("Sport", Modifier.weight(1.3f), TextAlign.Start)
+        ColHeader("Dur", Modifier.weight(1f), TextAlign.End)
+        ColHeader("HR", Modifier.weight(1.1f), TextAlign.End)
+        ColHeader("Kcal", Modifier.weight(1f), TextAlign.End)
+        ColHeader("Src", Modifier.weight(1f), TextAlign.End)
+        // Trailing spacer column over the per-row overflow menu, so headers line up with the cells.
+        Spacer(Modifier.width(32.dp))
+    }
+}
+
+@Composable
+private fun ColHeader(text: String, modifier: Modifier, align: TextAlign) {
+    // Built from the overline style directly (not the Overline composable) so the
+    // numeric columns can right-align their headers over the right-aligned cells.
+    Text(
+        text = text.uppercase(),
+        style = NoopType.overline,
+        color = Palette.textSecondary,
+        textAlign = align,
+        maxLines = 1,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun SessionRow(
+    row: WorkoutRow,
+    background: Color,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onToggleRow: (WorkoutRow) -> Unit,
+    onEdit: (WorkoutRow, Boolean) -> Unit,
+    onRelabel: (WorkoutRow, String) -> Unit,
+    onDismiss: (WorkoutRow) -> Unit,
+    onDelete: (WorkoutRow) -> Unit,
+    onClick: (WorkoutRow) -> Unit,
+) {
+    // #64: only MANUAL / DETECTED rows are selectable - imported history is read-only.
+    val selectable = WorkoutMerge.isMergeable(row)
+    val rowLabel = "${WorkoutEditing.displaySport(row.sport)}, ${dateLabel(row.startTs)}" +
+        if (selectionMode) {
+            when {
+                !selectable -> ". Imported, can't be merged."
+                selected -> ". Selected."
+                else -> ". Not selected."
+            }
+        } else ""
+    // liquidPress on the whole tappable row - it settles inward on press (the iOS LiquidPressStyle feel).
+    // The SAME interactionSource drives the clickable + the press. The edit/delete overflow menu and the
+    // selection glyph stay their own hit targets on top.
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .liquidPress(interaction)
+            .background(background)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+            ) {
+                if (selectionMode) { if (selectable) onToggleRow(row) } else onClick(row)
+            }
+            .height(56.dp)
+            .padding(start = Metrics.cardPadding)
+            .semantics { contentDescription = rowLabel },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // #64: leading selection glyph - filled/hollow check for a mergeable row, or a lock for imported.
+        if (selectionMode) {
+            if (selectable) {
+                Icon(
+                    if (selected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (selected) Palette.effortColor else Palette.textTertiary,
+                    modifier = Modifier.size(22.dp),
+                )
+            } else {
+                Icon(
+                    Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = Palette.textTertiary.copy(alpha = 0.6f),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+        }
+        // Date + time range (#157). The 0.3f comes out of Sport: "HH:mm-HH:mm" clips at footnote
+        // size in the old 1.4f, while sport names already ellipsize gracefully.
+        Column(modifier = Modifier.weight(1.7f)) {
+            Text(dateLabel(row.startTs), style = NoopType.subhead, color = Palette.textPrimary, maxLines = 1)
+            Text(timeRangeLabel(row.startTs, row.endTs), style = NoopType.footnote, color = Palette.textTertiary, maxLines = 1)
+        }
+        // Sport ("detected" reads as "Activity").
+        Row(modifier = Modifier.weight(1.3f), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                sportIcon(row.sport),
+                contentDescription = null,
+                tint = Palette.textSecondary,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                row.manualTitle() ?: WorkoutEditing.displaySport(row.sport),
+                style = NoopType.subhead,
+                color = Palette.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Cell(durationLabel(row.durationS), Modifier.weight(1f))
+        val resolvedAvgHr = resolvedWorkoutAverageHr(row)
+        val resolvedCalories = resolvedWorkoutCalories(row)
+          val healthConnectPending = row.source.equals("health-connect", ignoreCase = true)
+          Cell(
+              when {
+                  row.avgHr != null -> resolvedAvgHr.toString()
+                  healthConnectPending -> "Pending"
+                  else -> "~$resolvedAvgHr"
+              },
+              Modifier.weight(1.1f),
+              color = Palette.metricRose,
+          )
+          Cell(
+              when {
+                  row.energyKcal != null -> grouped(resolvedCalories)
+                  healthConnectPending -> "Pending"
+                  else -> "~${grouped(resolvedCalories)}"
+              },
+              Modifier.weight(1f),
+              color = Palette.metricAmber,
+          )
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            val (srcLabel, srcTint) = row.sourceBadge
+            SourceBadge(srcLabel, tint = srcTint)
+        }
+        // #64: hide the per-row *** menu in selection mode (the toolbar owns the actions there); keep a
+        // 32dp spacer so the Src column stays aligned with the header.
+        if (selectionMode) Spacer(Modifier.width(32.dp)) else RowActionsMenu(row, onEdit, onRelabel, onDismiss, onDelete)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Per-window reads (#410): the HR curve (downsampled bucket means) and the HR-zone split. Zones
+    // prefer the imported per-workout percentages (a WHOOP-computed split); only when the row carries
+    // none do we derive zone-minutes from the strap's own raw HR - so we never overwrite a real
+    // imported split with an on-device approximation.
+    var hrCurve by remember(row.startTs) { mutableStateOf<List<HrBucket>>(emptyList()) }
+    var zoneColorsEnabled by remember(row.startTs) { mutableStateOf(false) }
+    var zoneMinutes by remember(row.startTs) { mutableStateOf<List<Double>?>(null) }
+    var zonesFromImport by remember(row.startTs) { mutableStateOf(false) }
+    var heartRateRecovery by remember(row.startTs) { mutableStateOf<HeartRateRecovery.Result?>(null) }
+    // Steps for an on-foot sport (#398): the strap's own counter over the window, computed at display time
+    // so it "fills in after sync". null for non-foot sports or when no strap counter covers the window.
+    var steps by remember(row.startTs) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(row.startTs, row.endTs) {
+        hrCurve = vm.workoutHrBuckets(row.startTs, row.endTs, row.source, row.deviceId)
+        steps = if (WorkoutSport.isOnFoot(row.sport)) vm.workoutSteps(row.startTs, row.endTs) else null
+        val imported = parseZonePercents(row.zonesJSON)
+        if (imported != null) {
+            val durMin = (row.durationS ?: (row.endTs - row.startTs).toDouble()) / 60.0
+            if (durMin > 0.0) {
+                zoneMinutes = imported.map { durMin * it / 100.0 }
+                zonesFromImport = true
+            }
+        }
+        if (zoneMinutes == null) {
+            zoneMinutes = vm.workoutZoneMinutes(row.startTs, row.endTs, row.source, row.deviceId)
+            zonesFromImport = false
+        }
+        heartRateRecovery = vm.workoutHeartRateRecovery(row.startTs, row.endTs, row.source, row.deviceId)
+    }
+
+    ModalBottomSheet(
+
+===== APP VIEWMODEL AI CONSTRUCTION =====
+
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:39: * Privacy posture: this is an opt-in networked feature, independent of the default-off Experimental
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:40: * self-hosted push. Nothing leaves through the Coach until the user has saved their own API key (see
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:41: * [AiKeyStore]) and asked a question. Only a compact plain-text summary of their metrics plus their
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:42: * question is sent to the provider the user picked. No raw samples, no identifiers.
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:43: *
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:44: * Anonymous: the only branding is the provider name the user selected. The system prompt does
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:45: * not name any app author or model vendor.
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:46: */
+> android\app\src\main\java\com\noop\ai\AiCoach.kt:47:class AiCoach(
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:48:    private val repo: WhoopRepository,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:49:    /** #1304/#512: resolves the ACTIVE strap id. A lambda (not a plain `String`) so it is read at
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:50:     *  call time rather than frozen when `AiCoach` is constructed — the app's active id resolves lazily
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:51:     *  at startup, and the coach may be built first. The strap-telemetry reads below
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:52:     *  ([WhoopRepository.daysMerged] / [WhoopRepository.rrIntervals] / Lab markers) union the active strap
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:53:     *  with the canonical "my-whoop"; a live-BLE strap banks under "whoop-<uuid>", so a raw "my-whoop"
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:54:     *  read would leave the coach reasoning off the wrong strap. Defaults to canonical so an import-only
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:55:     *  install (and any test) is byte-identical to the old behaviour. */
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:56:    private val activeStrapId: () -> String = { WhoopRepository.WHOOP_SOURCE },
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:57:) {
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:58:
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:59:    /** The canonical bucket the imported journal answers ([WhoopRepository.journal]) live under — the app
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:60:     *  keys journal to "my-whoop" everywhere (it is user-global, not strap telemetry), matching Swift
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:61:     *  `AICoach.journalEntries()`. Daily metrics, R-R and Lab Book markers read the active strap via
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:62:     *  [activeStrapId]. */
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:63:    private val deviceId = "my-whoop"
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:64:
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:65:    // K13: cached summary of the dropped middle turns, regenerated when the dropped set changes.
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:83:     * FIRST user turn so the model is grounded in real numbers. The system prompt is passed
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:84:     * out-of-band (top-level field for Anthropic, a system message for OpenAI).
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:85:     *
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:86:     * Runs on [Dispatchers.IO]. Throws a clear [Exception] on any failure (missing key, bad
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:87:     * key, network, rate limit, malformed response); the ViewModel maps that to a visible
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:88:     * error message and the app never crashes.
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:89:     */
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:90:    /** Cloud-only Coach path. Existing THOOP health context remains authoritative. */
+> android\app\src\main\java\com\noop\ai\AiCoach.kt:91:    suspend fun chatCloud(
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:92:        ctx: Context,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:93:        history: List<ChatMsg>,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:94:        conversationId: String?,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:95:        consent: Boolean,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:96:        includeSignals: Boolean = true,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:97:    ): CloudCoachClient.Reply = withContext(Dispatchers.IO) {
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:98:        require(history.isNotEmpty()) { "Ask a question first." }
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:99:        require(history.last().role == "user") { "The last message must be your question." }
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:100:
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:101:        val todayNutrition = if (consent) {
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:102:            runCatching { buildTodayNutritionContext(ctx) }.getOrNull()
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:103:        } else null
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:104:
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:105:        val healthContext = if (consent) {
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:106:            val days = runCatching { repo.daysMerged(activeStrapId()) }.getOrDefault(emptyList())
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:107:            val stress = runCatching { stressLineToday() }.getOrNull()
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:108:            val signals = if (includeSignals) runCatching { buildSignalsContext() }.getOrNull() else null
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:109:            val workouts = runCatching { recentWorkoutsBlock(ctx) }.getOrNull()
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:113:                if (!stress.isNullOrBlank()) append("\n\n").append(stress)
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:114:                if (!signals.isNullOrBlank()) append("\n\n").append(signals)
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:115:                if (!todayNutrition.isNullOrBlank()) append("\n\n").append(todayNutrition)
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:116:            }
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:117:        } else {
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:118:            NO_CONSENT_NOTE
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:119:        }
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:120:
+> android\app\src\main\java\com\noop\ai\AiCoach.kt:121:        CloudCoachClient().ask(
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:122:            context = ctx,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:123:            conversationId = conversationId,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:124:            question = history.last().text,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:125:            recentMessages = history.dropLast(1),
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:126:            healthContext = healthContext,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:127:            systemPrompt = resolveSystemPrompt(ctx),
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:128:        )
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:129:    }
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:130:
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:131:    suspend fun chat(
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:132:        ctx: Context,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:133:        history: List<ChatMsg>,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:134:        provider: AiProvider,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:135:        model: String,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:136:        consent: Boolean = false,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:137:        customBaseUrl: String = "",
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:138:        customAuthHeader: CustomAiAuthHeader = CustomAiAuthHeader.BEARER,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:139:        includeSignals: Boolean = false,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:402:        customAuthHeader: CustomAiAuthHeader = CustomAiAuthHeader.BEARER,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:403:        includeSignals: Boolean = false,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:404:    ): String? {
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:405:        // Morning Brief follows the same Cloud Coach route as interactive chat. The provider/model
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:406:        // parameters remain for source compatibility with existing scheduler call sites, but are no
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:407:        // longer used to require a legacy direct-provider API key.
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:408:        if (!consent) return null
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:409:        return runCatching {
+> android\app\src\main\java\com\noop\ai\AiCoach.kt:410:            chatCloud(
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:411:                ctx = ctx,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:412:                history = listOf(ChatMsg(role = "user", text = BRIEF_INSTRUCTION)),
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:413:                conversationId = null,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:414:                consent = true,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:415:                includeSignals = includeSignals,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:416:            ).answer.trim().ifBlank { null }
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:417:        }.getOrNull()
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:418:    }
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:419:
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:420:    // ---------------------------------------------------------------------------------------
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:421:    // Contextual suggestion chips
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:422:    // ---------------------------------------------------------------------------------------
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:423:
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:424:    /**
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:425:     * Contextual suggestion chips for the composer, derived from today's bands via
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:426:     * [CoachSuggestions]. Reads only on-device `daysMerged` (the same merged read the context
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:427:     * builder uses, so a live strap's scores under "my-whoop-noop" are not missed); pure,
+  android\app\src\main\java\com\noop\ai\AiCoach.kt:428:     * byte-identical to the Swift twin `AICoachEngine.suggestions`. Returns the stable generic
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:10:import okhttp3.Request
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:11:import okhttp3.RequestBody.Companion.toRequestBody
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:12:import org.json.JSONArray
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:13:import org.json.JSONObject
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:14:import java.util.UUID
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:15:import java.util.concurrent.TimeUnit
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:16:
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:17:/** Single transport for THOOP Cloud Coach. Memory and conversation summaries stay server-side. */
+> android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:18:class CloudCoachClient(
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:19:    private val client: OkHttpClient = OkHttpClient.Builder()
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:20:        .connectTimeout(20, TimeUnit.SECONDS)
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:21:        .readTimeout(90, TimeUnit.SECONDS)
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:22:        .writeTimeout(30, TimeUnit.SECONDS)
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:23:        .build(),
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:24:    private val baseUrl: String = BuildConfig.CLOUD_COACH_BASE_URL.trim().trimEnd('/'),
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:25:) {
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:26:    data class NutritionEstimate(
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:27:        val mealType: String,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:28:        val foodName: String,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:29:        val servingDescription: String,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:30:        val servingGrams: Double?,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:31:        val caloriesKcal: Double,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:32:        val minimumCaloriesKcal: Double?,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:33:        val maximumCaloriesKcal: Double?,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:34:        val proteinGrams: Double?,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:35:        val carbohydrateGrams: Double?,
+  android\app\src\main\java\com\noop\ai\CloudCoachClient.kt:36:        val fatGrams: Double?,
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:122:        val provider = AiKeyStore.readProvider(ctx)
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:123:        val model = AiKeyStore.readModel(ctx, provider)
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:124:        val consent = AiKeyStore.readConsent(ctx)
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:125:        val customUrl = AiKeyStore.readCustomBaseUrl(ctx)
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:126:        val customHeader = AiKeyStore.readCustomAuthHeader(ctx)
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:127:        val includeSignals = consent && NoopPrefs.coachSignals(ctx)
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:128:        // #1304/#512 parity with CoachViewModel: thread the ACTIVE strap id so a headless generation
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:129:        // reasons off the same strap the user sees in the app, not a hardcoded canonical fallback.
+> android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:130:        val aiCoach = AiCoach(
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:131:            WhoopRepository(WhoopDatabase.get(ctx)),
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:132:            activeStrapId = { (ctx as? com.noop.NoopApplication)?.activeDeviceId ?: WhoopRepository.WHOOP_SOURCE },
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:133:        )
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:134:        return aiCoach.generateBrief(ctx, provider, model, consent, customUrl, customHeader, includeSignals)
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:135:    }
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:136:
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:137:    /** yyyy-MM-dd local-day key for the once-per-day dedup. Locale-fixed so the key is stable. */
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:138:    private fun dayKey(date: Long = System.currentTimeMillis()): String =
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:139:        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date(date))
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:140:
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:141:    /**
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:142:     * Pure: the notification body is the brief's first non-empty line, trimmed and length-capped so
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:143:     * it fits a notification banner. Byte-identical shape to the Swift twin's `oneLineSummary`.
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:144:     */
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:145:    fun oneLineSummary(brief: String, maxLength: Int = 120): String {
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:146:        val firstLine = brief.split("\n").firstOrNull { it.isNotBlank() }?.trim() ?: brief.trim()
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:147:        if (firstLine.length <= maxLength) return firstLine
+  android\app\src\main\java\com\noop\ui\CoachBriefScheduler.kt:148:        return firstLine.take(maxLength).trimEnd() + "…"
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:41: * Privacy posture mirrors the engine: nothing is sent until the user has saved a key and asked
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:42: * a question, and only a compact text summary of their own metrics plus their question leaves
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:43: * the device. Errors never crash, they surface in [error].
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:44: */
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:45:class CoachViewModel(app: Application) : AndroidViewModel(app) {
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:46:
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:47:    // The networked coach, over the local store. No key is held here; the engine reads it from
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:48:    // the encrypted store at call time.
+> android\app\src\main\java\com\noop\ui\CoachViewModel.kt:49:    private val aiCoach = AiCoach(
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:50:        WhoopRepository(WhoopDatabase.get(app.applicationContext)),
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:51:        // #1304/#512: thread the active strap id (resolved lazily by NoopApplication) so the coach reasons
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:52:        // off the active strap's data — daysMerged/R-R/Lab markers union active ∪ canonical — instead of a
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:53:        // hardcoded "my-whoop" that misses a strap banked under "whoop-<uuid>".
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:54:        activeStrapId = { (app as NoopApplication).activeDeviceId },
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:55:    )
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:56:
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:57:    // PRD-K2: persisted conversation history (Room `coachMessage` table).
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:58:    private val coachDao = WhoopDatabase.get(app.applicationContext).whoopDao()
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:59:    private var didLoadPersistedMessages = false
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:60:    private var cloudConversationId: String? = null
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:61:
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:62:    // MARK: - Transcript
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:63:
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:64:    private val _messages = MutableStateFlow<List<ChatMsg>>(emptyList())
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:65:    /** The conversation so far (user/assistant turns), oldest first. */
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:66:    val messages: StateFlow<List<ChatMsg>> = _messages.asStateFlow()
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:67:
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:481:        viewModelScope.launch {
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:482:            try {
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:483:                // Re-read the stored grant rather than trusting the copy this instance was built
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:484:                // with. Consent is editable from CoachSettingsScreen, and the system prompt already
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:485:                // works this way (`resolveSystemPrompt` is read fresh per send); a revoked grant
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:486:                // must not be able to survive in memory on the one call that egresses data.
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:487:                val consentNow = AiKeyStore.readConsent(appCtx)
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:488:                _consent.value = consentNow
+> android\app\src\main\java\com\noop\ui\CoachViewModel.kt:489:                val cloudReply = aiCoach.chatCloud(
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:490:                    ctx = appCtx,
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:491:                    history = _messages.value.dropLast(1), // exclude the placeholder
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:492:                    conversationId = cloudConversationId,
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:493:                    consent = consentNow,
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:494:                    includeSignals = consentNow && NoopPrefs.coachSignals(appCtx),
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:495:                )
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:496:                cloudConversationId = cloudReply.conversationId
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:497:                _pendingNutrition.value = cloudReply.nutrition.takeIf { cloudReply.intent == "food_log" }
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:498:                accumulated = cloudReply.answer
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:499:                _messages.value = _messages.value.map { msg ->
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:500:                    if (msg.id == placeholderId) ChatMsg(id = placeholderId, role = "assistant", text = accumulated)
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:501:                    else msg
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:502:                }
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:503:                // Finalize: trim whitespace. If the stream produced nothing, show "(no reply)".
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:504:                val clean = accumulated.trim()
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:505:                _messages.value = _messages.value.map { msg ->
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:506:                    if (msg.id == placeholderId) {
+  android\app\src\main\java\com\noop\ui\CoachViewModel.kt:507:                        ChatMsg(id = placeholderId, role = "assistant",
+
+===== ARCHIVE UI AND CALL SITES =====
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:63:        val temp = File(file.parentFile, "${file.name}.tmp")
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:64:        temp.writeText(array.toString(), Charsets.UTF_8)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:65:        if (!temp.renameTo(file)) { temp.copyTo(file, overwrite = true); temp.delete() }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:66:    }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:67:    companion object { private const val FILE_NAME = "google-drive-archive-manifest.json" }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:68:}
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:69:
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:70:/** Verified monthly cold storage. No local row is deleted before every required month is verified. */
+> android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:71:internal class GoogleDriveArchiveManager(
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:72:    context: Context,
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:73:    private val driveClient: GoogleDriveBackupClient = GoogleDriveBackupClient(),
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:74:) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:75:    private val appContext = context.applicationContext
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:76:    private val manifest = GoogleDriveArchiveManifest(appContext)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:77:
+> android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:78:    suspend fun createAndVerifyArchives(
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:79:        accessToken: String,
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:80:        ownerId: String,
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:81:        today: LocalDate = LocalDate.now(),
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:82:    ): List<GoogleDriveArchiveRecord> = withContext(Dispatchers.IO) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:83:        val firstRetainedDay = today.minusDays(89)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:84:        val lastArchiveMonth = lastEligibleArchiveMonth(today)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:85:        val existing = manifest.read().associateBy { it.month }.toMutableMap()
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:86:        val oldest = oldestLocalMonth() ?: return@withContext emptyList()
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:87:        val created = mutableListOf<GoogleDriveArchiveRecord>()
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:88:        var month = oldest
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:89:        while (!month.isAfter(lastArchiveMonth)) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:90:            if (existing[month.toString()] == null) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:91:                buildUploadVerify(month, accessToken, ownerId).also {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:92:                    manifest.put(it); existing[it.month] = it; created += it
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:93:                }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:94:            }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:95:            month = month.plusMonths(1)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:96:        }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:97:        val required = generateSequence(oldest) { it.plusMonths(1) }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:98:            .takeWhile { !it.isAfter(lastArchiveMonth) }.map(YearMonth::toString).toList()
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:99:        check(required.all(existing::containsKey)) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:100:            "THOOP archive verification stopped because one or more monthly archives are not verified."
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:101:        }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:102:        // Deliberately archive-only. Local deletion is a separate future retention gate and may not
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:103:        // run until an archive has also been reopened through History Browser.
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:104:        created
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:105:    }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:106:
+> android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:107:    suspend fun openMonthOnline(accessToken: String, month: YearMonth): SQLiteDatabase =
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:108:        withContext(Dispatchers.IO) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:109:            val record = manifest.read().firstOrNull { it.month == month.toString() }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:110:                ?: error("Archived history requires Google Drive and is not available for $month.")
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:111:            val cache = File(appContext.cacheDir, "drive-archive-cache").apply { mkdirs() }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:112:            val blob = File(cache, "${record.month}.nooparc")
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:113:            val dbFile = File(cache, "${record.month}.sqlite")
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:114:            if (!blob.isFile || driveClient.sha256(blob) != record.sha256) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:115:                blob.delete(); driveClient.download(accessToken, record.driveFileId, blob)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:116:            }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:117:            check(blob.length() == record.sizeBytes)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:118:            check(driveClient.sha256(blob) == record.sha256)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:119:            extractDatabase(blob, dbFile)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:120:            val opened = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:121:            check(opened.version == record.schemaVersion)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:122:            check(countRows(opened) == record.recordCount)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:123:            cache.listFiles()?.filterNot { it.name.startsWith(record.month) }?.forEach(File::delete)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:124:            opened
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:125:        }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:126:
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:127:    data class ArchivePreview(
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:128:        val record: GoogleDriveArchiveRecord,
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:129:        val tableCounts: Map<String, Long>,
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:130:        val totalRecords: Long,
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:131:    )
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:132:
+> android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:133:    suspend fun previewMonthOnline(accessToken: String, month: YearMonth): ArchivePreview =
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:134:        withContext(Dispatchers.IO) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:135:            val record = manifest.read().firstOrNull { it.month == month.toString() }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:136:                ?: error("No verified archive is registered for $month.")
+> android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:137:            val opened = openMonthOnline(accessToken, month)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:138:            try {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:139:                val counts = linkedMapOf<String, Long>()
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:140:                opened.rawQuery(
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:141:                    "SELECT name FROM sqlite_master WHERE type='table' " +
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:142:                        "AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'room_%' ORDER BY name",
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:143:                    null,
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:144:                ).use { tables ->
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:145:                    while (tables.moveToNext()) {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:146:                        val table = tables.getString(0)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:147:                        opened.rawQuery("SELECT COUNT(*) FROM ${q(table)}", null).use { count ->
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:148:                            if (count.moveToFirst()) counts[table] = count.getLong(0)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:149:                        }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:150:                    }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:151:                }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:152:                ArchivePreview(record, counts, counts.values.sum())
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:153:            } finally {
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:154:                opened.close()
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:155:                clearTemporaryCache(month)
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:156:            }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:157:        }
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:158:
+  android\app\src\main\java\com\noop\data\GoogleDriveArchive.kt:159:    fun clearTemporaryCache(month: YearMonth? = null) {
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:21: * for a single flush/backfill chunk. All `ts` values are wall-clock unix seconds (Long).
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:22: *
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:23: * The protocol/decoder layer builds one of these (deviceId stamped at insert time, not
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:24: * stored on the per-row sample models , it is supplied to [WhoopRepository.insert]).
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:25: */
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:26:/**
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:27: * Hybrid online-first working set. Normal repository reads never scan beyond the newest 90 local
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:28: * calendar days. Older rows remain untouched on disk as a safety copy and are opened read-only through
+> android\app\src\main\java\com\noop\data\WhoopRepository.kt:29: * GoogleDriveArchiveManager instead of the live Room query path.
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:30: */
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:31:internal object OnlineFirstWindow {
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:32:    const val LOCAL_DAYS = 90
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:33:
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:34:    fun firstLocalDay(today: LocalDate = LocalDate.now()): String =
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:35:        today.minusDays((LOCAL_DAYS - 1).toLong()).toString()
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:36:
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:37:    fun firstLocalSecond(
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:38:        today: LocalDate = LocalDate.now(),
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:39:        zoneId: ZoneId = ZoneId.systemDefault(),
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:40:    ): Long = today.minusDays((LOCAL_DAYS - 1).toLong()).atStartOfDay(zoneId).toEpochSecond()
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:41:
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:42:    fun clampDay(from: String, today: LocalDate = LocalDate.now()): String =
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:43:        maxOf(from, firstLocalDay(today))
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:44:
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:45:    fun clampSecond(from: Long, today: LocalDate = LocalDate.now()): Long =
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:46:        maxOf(from, firstLocalSecond(today))
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:47:}
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:48:
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:49:data class StreamBatch(
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:50:    val hr: List<HrRow> = emptyList(),
+  android\app\src\main\java\com\noop\data\WhoopRepository.kt:51:    val rr: List<RrRow> = emptyList(),
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:15:import androidx.compose.runtime.getValue
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:16:import androidx.compose.runtime.mutableStateOf
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:17:import androidx.compose.runtime.remember
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:18:import androidx.compose.runtime.rememberCoroutineScope
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:19:import androidx.compose.runtime.setValue
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:20:import androidx.compose.ui.platform.LocalContext
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:21:import com.noop.data.GoogleDriveBackupClient
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:22:import com.noop.data.GoogleDriveBackupCoordinator
+> android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:23:import com.noop.data.GoogleDriveArchiveManager
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:24:import com.noop.data.DataBackup
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:25:import com.noop.data.CloudBackupCadence
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:26:import com.noop.data.CloudBackupSchedule
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:27:import com.noop.data.GoogleCloudBackupPreferences
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:28:import com.noop.data.GoogleCloudBackupScheduler
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:29:import kotlinx.coroutines.launch
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:30:import java.text.DateFormat
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:31:import java.util.Date
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:32:import java.time.YearMonth
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:33:import androidx.activity.compose.rememberLauncherForActivityResult
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:34:import androidx.activity.result.IntentSenderRequest
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:35:import androidx.activity.result.contract.ActivityResultContracts
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:36:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:37:@Composable
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:38:internal fun GoogleAccountCard() {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:39:    val context = LocalContext.current
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:40:    val controller = remember(context) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:41:        GoogleSignInController(context.applicationContext)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:42:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:43:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:44:    val driveController = remember(context) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:45:        GoogleDriveAuthorizationController(context.applicationContext)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:46:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:47:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:48:    val backupCoordinator = remember(context) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:49:        GoogleDriveBackupCoordinator(context.applicationContext)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:50:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:51:    val archiveManager = remember(context) {
+> android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:52:        GoogleDriveArchiveManager(context.applicationContext)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:53:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:54:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:55:    val scope = rememberCoroutineScope()
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:56:    val drivePrefs = remember(context) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:57:        context.applicationContext.getSharedPreferences(
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:58:            "thoop_google_drive", android.content.Context.MODE_PRIVATE,
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:59:        )
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:60:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:61:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:62:    var account by remember {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:63:        mutableStateOf(controller.storedAccount())
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:64:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:65:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:66:    var busy by remember {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:67:        mutableStateOf(false)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:68:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:69:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:70:    var errorMessage by remember {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:71:        mutableStateOf<String?>(null)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:72:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:73:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:74:    var driveAuthorized by remember(account?.accountId) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:102:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:103:    var postLoginBackups by remember {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:104:        mutableStateOf<List<GoogleDriveBackupClient.RemoteBackup>>(emptyList())
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:105:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:106:    var showPostLoginRestorePrompt by remember {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:107:        mutableStateOf(false)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:108:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:109:    var archiveRecords by remember { mutableStateOf(archiveManager.archives()) }
+> android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:110:    var archivePreview by remember { mutableStateOf<GoogleDriveArchiveManager.ArchivePreview?>(null) }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:111:    var showArchiveBrowser by remember { mutableStateOf(false) }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:112:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:113:    val cloudSchedulePreferences = remember(context) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:114:        GoogleCloudBackupPreferences(context.applicationContext)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:115:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:116:    var cloudSchedule by remember {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:117:        mutableStateOf(cloudSchedulePreferences.read())
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:118:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:119:    var cloudScheduleStatus by remember {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:120:        mutableStateOf(cloudSchedulePreferences.status())
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:121:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:122:
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:123:    fun updateCloudSchedule(value: CloudBackupSchedule) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:124:        cloudSchedule = value
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:125:        cloudSchedulePreferences.write(value)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:126:        GoogleCloudBackupScheduler.apply(context.applicationContext, value)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:127:        cloudScheduleStatus = if (value.enabled) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:128:            "Automatic backup scheduled: ${value.cadence.label}."
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:129:        } else {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:130:            "Automatic backup is off."
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:131:        }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:132:    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:379:                    onClick = {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:380:                        val token = driveAccessToken
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:381:                        if (token == null) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:382:                            errorMessage = "Google Drive authorization expired. Connect Google Drive again."
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:383:                        } else {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:384:                            driveBusy = true
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:385:                            errorMessage = null
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:386:                            scope.launch {
+> android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:387:                                runCatching { archiveManager.createAndVerifyArchives(token, currentAccount.accountId) }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:388:                                    .onSuccess { created ->
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:389:                                        archiveRecords = archiveManager.archives()
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:390:                                        backupStatus = if (created.isEmpty()) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:391:                                            "All eligible monthly archives are already verified. Local data was kept."
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:392:                                        } else {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:393:                                            "Created and verified ${created.size} monthly archive(s). Local data was kept."
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:394:                                        }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:395:                                    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:396:                                    .onFailure { failure ->
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:397:                                        errorMessage = "Archive verification could not finish. Local data was kept. " +
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:398:                                            (failure.message?.substringBefore("/data/")?.trim()?.take(160)
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:399:                                                ?: "Try again after restarting THOOP.")
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:400:                                    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:401:                                driveBusy = false
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:402:                            }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:403:                        }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:404:                    },
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:405:                )
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:406:                NoopButton(
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:407:                    text = "Browse Archived History",
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:408:                    kind = NoopButtonKind.Secondary,
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:409:                    fullWidth = true,
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:422:                                enabled = !driveBusy,
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:423:                                onClick = {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:424:                                    val token = driveAccessToken
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:425:                                    if (token == null) {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:426:                                        errorMessage = "Internet connection and Google Drive authorization are required."
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:427:                                    } else {
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:428:                                        driveBusy = true
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:429:                                        scope.launch {
+> android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:430:                                            runCatching { archiveManager.previewMonthOnline(token, YearMonth.parse(archive.month)) }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:431:                                                .onSuccess { archivePreview = it }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:432:                                                .onFailure { failure ->
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:433:                                                    errorMessage = "Archived history could not be opened. Check the internet connection and try again."
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:434:                                                }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:435:                                            driveBusy = false
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:436:                                        }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:437:                                    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:438:                                },
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:439:                            )
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:440:                        }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:441:                    }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:442:                }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:443:                Text(
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:444:                    "The latest 90 days stay offline. Create & Verify never deletes local data. Older archives open read-only from private Google Drive app 
+data.",
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:445:                    style = NoopType.footnote,
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:446:                    color = Palette.textSecondary,
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:447:                )
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:448:            }
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:449:            errorMessage?.let { message ->
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:450:                Text(
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:451:                    text = message,
+  android\app\src\main\java\com\noop\ui\GoogleAccountCard.kt:452:                    style = NoopType.footnote,
+
+

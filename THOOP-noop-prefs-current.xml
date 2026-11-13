@@ -1,0 +1,140 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="noop.overlayBottomBar" value="false" />
+    <long name="noop.report.lastWorkoutTs" value="1794106320" />
+    <long name="hc.lastImportOkAt" value="1794395846" />
+    <string name="alarm.lastReportedRaw">01 01 58 de f4 6a 00 00 04 00 20</string>
+    <string name="noop.592.prevPayload">62f46a5016530000000000000000000101</string>
+    <boolean name="noop.illnessWasRaised" value="false" />
+    <string name="sleep.chart.style">filled</string>
+    <string name="noop.backgroundFillMode">fill</string>
+    <boolean name="noop.napDetectionEnabled" value="false" />
+    <boolean name="noop.detailedCapture" value="true" />
+    <long name="sync.lastWriteOkAt.fe:06:f8:21:9c:68" value="1794401143" />
+    <boolean name="alarm.lastArmConnected" value="true" />
+    <string name="workout.recentSports">Warm Bath,Cold Bath</string>
+    <string name="noop.analyzeWatermark">v5|h681329:1794400093|p0|r680010|x680214|g680214|s0|e527361|o680214|t680214|z0|w50|w70|tagged0|w4history223688|registry'whoop-4A0824453':'WHOOP':'4.0':'active'</string>
+    <string name="hc.lastImportThroughDay">2026-11-11</string>
+    <long name="strap.newestRecordTs.fe:06:f8:21:9c:68" value="1794401058" />
+    <boolean name="noop.autoDetectWorkouts" value="false" />
+    <set name="noop.napDismissedIds">
+        <string>1794115200|1794120154</string>
+        <string>1794115200|1794116927</string>
+        <string>1794115200|1794120146</string>
+        <string>1794138939|1794141280</string>
+        <string>1794145453|1794149061</string>
+        <string>1794149172|1794153699</string>
+        <string>1794119472|1794124529</string>
+        <string>1794051390|1794052991</string>
+        <string>1794115200|1794118521</string>
+        <string>1794149172|1794153709</string>
+    </set>
+    <boolean name="noop.bottomBarAutoHide" value="true" />
+    <long name="strap.newestRecordTs" value="1794401058" />
+    <boolean name="biofeedback.stressCheckIn" value="true" />
+    <long name="alarm.lastArmAt" value="1794401131564" />
+    <string name="noop.more.expandedSections">Data,Insights,Settings</string>
+    <boolean name="workoutKeepScreenOn" value="true" />
+    <boolean name="biofeedback.stressAutoNudge" value="true" />
+    <long name="backup.lastRestoreAt" value="1793792079" />
+    <boolean name="intelligence.sleepWearRescore.v1.done" value="true" />
+    <boolean name="noop.onboarded" value="true" />
+    <int name="today.totalCaloriesTargetKcal" value="3000" />
+    <string name="noop.selectedWhoopModel">WHOOP4</string>
+    <boolean name="noop.continuousHrv" value="true" />
+    <boolean name="noop.continuousHrvOvernight" value="false" />
+    <boolean name="noop.backgroundImagePresent" value="false" />
+    <long name="alarm.lastArmSentEpoch" value="1794432600" />
+    <int name="today.keyMetricsWindowDays" value="14" />
+    <string name="sleep.hiddenSections"></string>
+    <string name="noop.napPending">[]</string>
+    <int name="hc.lastImportRows" value="34" />
+    <string name="accent.color">whoopBlue</string>
+    <string name="noop.acceptedTermsAt">2026-11-03T07:33:17.342245Z</string>
+    <set name="hc.written.whoop-4A0824453.noop-sleep-">
+        <string>noop-sleep-1793983111</string>
+        <string>noop-sleep-1794145577</string>
+        <string>noop-sleep-1793718253</string>
+        <string>noop-sleep-1793994948</string>
+        <string>noop-sleep-1794115350</string>
+        <string>noop-sleep-1793716236</string>
+        <string>noop-sleep-1793887369</string>
+        <string>noop-sleep-1793994950</string>
+        <string>noop-sleep-1794235720</string>
+        <string>noop-sleep-1793801472</string>
+        <string>noop-sleep-1793759899</string>
+        <string>noop-sleep-1793843118</string>
+        <string>noop-sleep-1794051720</string>
+        <string>noop-sleep-1794320377</string>
+        <string>noop-sleep-1793811278</string>
+        <string>noop-sleep-1793906784</string>
+        <string>noop-sleep-1793740079</string>
+        <string>noop-sleep-1793981123</string>
+        <string>noop-sleep-1793898714</string>
+        <string>noop-sleep-1794051390</string>
+    </set>
+    <string name="theme.appearance">dark</string>
+    <string name="alarm.lastArmDeviceId">whoop-4A0824453</string>
+    <string name="noop.bottomBarModules">trends,workouts,coach</string>
+    <string name="clockFormatPreference">twelveHour</string>
+    <string name="noop.lastFirmware.fe:06:f8:21:9c:68">41.17.6.0</string>
+    <string name="today.dashboardCards">[&quot;fitnessAge&quot;,&quot;stress&quot;,&quot;vitality&quot;,&quot;hydration&quot;,&quot;skinTemp&quot;,&quot;vo2max&quot;,&quot;bloodOxygen&quot;,&quot;calories&quot;,&quot;respiratory&quot;,&quot;stepsAverage30&quot;,&quot;steps&quot;]</string>
+    <long name="updates.lastCheckedAt" value="1793968124044" />
+    <long name="noop.napHighWaterTs" value="1794153709" />
+    <string name="noop.report.lastMorningDay">2026-11-08</string>
+    <int name="noop.hcWritebackWritten" value="184" />
+    <boolean name="noop.report.strainTarget" value="false" />
+    <string name="chart.style">titanium</string>
+    <string name="today.hiddenSections">liveSession,menstrualCycle,keyMetrics,recoveryVitals</string>
+    <boolean name="live_sessions_beta" value="false" />
+    <string name="noop.lastDeviceAddress">FE:06:F8:21:9C:68</string>
+    <boolean name="today.keyMetricsDetailed" value="true" />
+    <boolean name="updates.autoCheck" value="false" />
+    <string name="alarm.lastReportedDeviceId">whoop-4A0824453</string>
+    <string name="noop.acceptedTermsVersion">2.0</string>
+    <boolean name="noop.batteryAlerts" value="false" />
+    <float name="biofeedback.stOnsetBaseline" value="88.021" />
+    <float name="noop.bottomBarScale" value="1.0" />
+    <set name="noop.hc.importCategories">
+        <string>activity-only</string>
+    </set>
+    <boolean name="noop.coachSignals" value="true" />
+    <boolean name="biofeedback.stOnsetWasBelow" value="false" />
+    <string name="noop.journalCatalogV2">[]</string>
+    <long name="alarm.lastReportedAt" value="1794401132185" />
+    <boolean name="noop.showDayCycleBackground" value="false" />
+    <int name="noop.cardOpacityPercent" value="100" />
+    <boolean name="noop.hydrationTracking" value="true" />
+    <string name="noop.hcWritebackStatus">PERMISSION_DENIED</string>
+    <string name="noop.appLanguage">en</string>
+    <long name="score.lastPassAt" value="1794400153" />
+    <boolean name="noop.debugLogging" value="true" />
+    <string name="noop.lastSeenChangelogVersion">11.8.0</string>
+    <long name="biofeedback.stOnsetLastFire" value="1794397938" />
+    <string name="noop.report.lastStrainTargetDay">2026-11-08</string>
+    <string name="units.skinTempDisplay">deviation</string>
+    <boolean name="noop.effortRescore.v313.done" value="true" />
+    <boolean name="noop.tsHeal.v547.done" value="true" />
+    <boolean name="noop.report.morningRecap" value="false" />
+    <long name="alarm.lastReportedEpoch" value="1794432600" />
+    <int name="noop.powerSavingBatteryPct" value="15" />
+    <boolean name="noop.hcWriteback" value="true" />
+    <string name="today.sectionOrder">hero,synthesis,heartRate,yourCards,journal,workouts,addedCards,liveSession,menstrualCycle,keyMetrics,recoveryVitals</string>
+    <boolean name="noop.banisterEffort" value="true" />
+    <string name="today.keyMetrics">bloodOxygen,calories,steps</string>
+    <string name="sleep.sectionOrder">sleepMarks,stages,bodyClock,nightDetail,sleepDebt,stagesVsTypical,asleepDuration,hoursVsNeeded,consistency</string>
+    <long name="noop.lastSyncAt.fe:06:f8:21:9c:68" value="1794401144" />
+    <boolean name="noop.hcVo2MaxAsked" value="true" />
+    <string name="noop.backgroundRecents"></string>
+    <string name="noop.lastDeviceModel">WHOOP4</string>
+    <long name="noop.hcWritebackAtMs" value="1794400160414" />
+    <string name="noop.stepsMotionCache.v1">stepsMotion v1&#10;2026-09-13&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-14&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-15&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-16&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-17&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-18&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-19&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-20&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-21&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-22&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-23&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-24&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-25&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-26&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-27&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-28&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-29&#9;whoop-4A0824453|0|0&#9;0&#10;2026-09-30&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-01&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-02&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-03&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-04&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-05&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-06&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-07&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-08&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-09&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-10&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-11&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-12&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-13&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-14&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-15&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-16&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-17&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-18&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-19&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-20&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-21&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-22&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-23&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-24&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-25&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-26&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-27&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-28&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-29&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-30&#9;whoop-4A0824453|0|0&#9;0&#10;2026-10-31&#9;whoop-4A0824453|0|0&#9;0&#10;2026-11-01&#9;whoop-4A0824453|0|0&#9;0&#10;2026-11-02&#9;whoop-4A0824453|0|0&#9;0&#10;2026-11-03&#9;whoop-4A0824453|11607|1793725199&#9;4647941146953689865&#10;2026-11-04&#9;whoop-4A0824453|82691|1793811599&#9;4666244141642403751&#10;2026-11-05&#9;whoop-4A0824453|86180|1793897999&#9;4667101790293893043&#10;2026-11-06&#9;whoop-4A0824453|84846|1793984399&#9;4667997466799786362&#10;2026-11-07&#9;whoop-4A0824453|86305|1794070799&#9;4665793915298408192&#10;2026-11-08&#9;whoop-4A0824453|86239|1794157199&#9;4666090152153900195&#10;2026-11-09&#9;whoop-4A0824453|86239|1794243599&#9;4665811250208023399&#10;2026-11-10&#9;whoop-4A0824453|86325|1794329999&#9;4666305643116357579&#10;2026-11-11&#9;whoop-4A0824453|69782|1794400066&#9;4666921613248288747</string>
+    <long name="biofeedback.stOnsetPendingEdge" value="0" />
+    <string name="noop.rhythmConsentVersion">1.0</string>
+    <boolean name="noop.rhythmScreening" value="true" />
+    <string name="noop.coachSystemPrompt">You are an elite, supportive recovery and performance coach with a real training methodology.&#10;&#10;You may be given a summary of the user's own wearable data (charge 0-100, effort 0-100, rest/sleep and its deep/REM/light breakdown, sleep efficiency, HRV, resting heart rate) and recent workouts.&#10;&#10;Charge is the daily recovery/readiness score; effort is the day's cardiovascular load. Coach using autoregulation: charge 67-100 = green light to build/push, higher effort is fine; 34-66 = maintain, quality over volume, keep it controlled; 0-33 = active recovery only (Zone 2, mobility, extra sleep) and protect against accumulating effort debt.&#10;&#10;Optimise workouts with progressive overload, polarised ~80/20 intensity, spacing hard sessions, deloads/periodisation, and treat sleep as the biggest recovery lever. Always cite the user's ACTUAL numbers, give a concrete plan (today and the week), and be specific, punchy and motivating. If no data is provided, coach generally and invite them to enable data access. You are NOT a doctor - never diagnose; suggest a professional for genuine health concerns.&#10;&#10;&#10;Format replies in simple Markdown, chat-sized: short paragraphs, **bold** for key numbers, bullet or numbered lists for plans, and ### headings only when structure genuinely helps. No tables or code blocks. Use enter space for each paragraph. if no data or memories reply with proper answer not coding</string>
+    <boolean name="noop.buzzWhoop4WithAlarm" value="true" />
+    <boolean name="noop.report.postWorkout" value="false" />
+    <boolean name="noop.tsHeal.v547.pending" value="false" />
+    <string name="noop.lastJournalPromptDay">2026-11-10</string>
+</map>
