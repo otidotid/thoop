@@ -223,3 +223,101 @@ test('optional rate limiter refuses excess calls before AI and hashes the edge I
   assert.equal(key.length, 64);
   assert.ok(!key.includes('203.0.113.45'));
 });
+
+
+// Regression contract: Android only exposes Nutrition Review when intent === "food_log"
+// AND nutrition is a valid object. The Worker never writes to the phone's Calories Intake DB.
+test('natural meal list yields Android Nutrition Review and never falsely claims save', async () => {
+  let calls = 0;
+  const env = {
+    AI: { run: async () => {
+      calls++;
+      return { response: calls === 1
+        ? "I've already saved your breakfast entry, no need to log it again."
+        : JSON.stringify({ foodName: 'chicken, bananas, sweet bread, siomay, sosis solo', servingDescription: 'Breakfast meal', caloriesKcal: 2770, proteinGrams: 80, carbohydrateGrams: 380, fatGrams: 80 }) };
+    } },
+    DISABLE_EXTERNAL_REFERENCES: 'true',
+  };
+  const question = '1 breast of chicken 120g, 2 bananas, 500 g sweet bread, 1 portion siomay, 2 sosis solo';
+  const { status, body } = await reply(post({ ...base, question, localHour: 9 }), env);
+  assert.equal(status, 200);
+  assert.equal(body.intent, 'food_log');
+  assert.equal(body.nutrition.caloriesKcal, 2770);
+  assert.equal(body.nutrition.mealType, 'breakfast');
+  assert.equal(calls, 2);
+  assert.doesNotMatch(body.answer, /already saved your breakfast/i);
+  assert.match(body.answer, /Nothing has been saved/i);
+  assert.match(body.answer, /SAVE TO CALORIES INTAKE/i);
+});
+
+test('implicit consumed-food statement with today is a food log, not a daily summary', async () => {
+  let count = 0;
+  const env = {
+    AI: { run: async () => ({ response: ++count === 1 ? 'Estimated meal.' : '{"foodName":"chicken and banana","caloriesKcal":300}' }) },
+    DISABLE_EXTERNAL_REFERENCES: 'true',
+  };
+  const result = await reply(post({ ...base, question: 'I ate chicken and bananas today' }), env);
+  assert.equal(result.body.intent, 'food_log');
+  assert.ok(result.body.nutrition);
+  assert.equal(count, 2);
+});
+
+test('food-log follow-up recovers prior user meal instead of estimating the complaint', async () => {
+  const originalMeal = 'I ate 500g sweet bread, chicken breast and 2 bananas';
+  let estimatePrompt = '';
+  let count = 0;
+  const env = {
+    AI: { run: async (_model, params) => {
+      count++;
+      if (count === 1) return { response: "I’ve already saved that breakfast." };
+      estimatePrompt = params.messages[1].content;
+      return { response: '{"foodName":"sweet bread, chicken, bananas","caloriesKcal":1600}' };
+    } },
+    DISABLE_EXTERNAL_REFERENCES: 'true',
+  };
+  const result = await reply(post({
+    ...base,
+    question: 'I just told you what I ate, why are you asking again?',
+    recentMessages: [
+      { role: 'user', text: originalMeal },
+      { role: 'assistant', text: 'Please tell me what you ate.' },
+    ],
+  }), env);
+  assert.equal(result.body.intent, 'food_log');
+  assert.equal(result.body.nutrition.caloriesKcal, 1600);
+  assert.ok(estimatePrompt.includes(originalMeal));
+  assert.doesNotMatch(result.body.answer, /already saved/i);
+  assert.match(result.body.answer, /SAVE TO CALORIES INTAKE/i);
+});
+
+test('no-food-logged-today status question remains a summary, never a fabricated save', async () => {
+  const result = await reply(post({ ...base, question: 'It states no food logged today' }), {
+    AI: ai("I’ve already saved your breakfast entry."),
+    DISABLE_EXTERNAL_REFERENCES: 'true',
+  });
+  assert.equal(result.body.intent, 'nutrition_summary');
+  assert.equal(result.body.nutrition, null);
+  assert.doesNotMatch(result.body.answer, /already saved/i);
+  assert.match(result.body.answer, /only confirmed entries/i);
+});
+
+test('unavailable food estimate does not claim food was saved', async () => {
+  let count = 0;
+  const result = await reply(post({ ...base, question: 'I ate an egg' }), {
+    AI: { run: async () => ({ response: ++count === 1 ? "I have logged your meal." : '{}' }) },
+    DISABLE_EXTERNAL_REFERENCES: 'true',
+  });
+  assert.equal(result.body.intent, 'food_log');
+  assert.equal(result.body.nutrition, null);
+  assert.match(result.body.answer, /Nothing was saved/i);
+  assert.doesNotMatch(result.body.answer, /I have logged/i);
+});
+
+test('daily nutrition summary never silently becomes an unconfirmed food entry', async () => {
+  const result = await reply(post({ ...base, question: 'What did I eat today?' }), {
+    AI: ai('No entries are confirmed in the local food log.'),
+    DISABLE_EXTERNAL_REFERENCES: 'true',
+  });
+  assert.equal(result.body.intent, 'nutrition_summary');
+  assert.equal(result.body.nutrition, null);
+});
