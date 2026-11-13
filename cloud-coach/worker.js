@@ -486,7 +486,7 @@ function foodStatementForReview(question, recentMessages) {
 
 // Explicitly distinguish an AI answer from a locally committed nutrition entry.
 function finalizeCoachAnswer(rawAnswer, intent, nutrition) {
-  const falseSavedClaim = /\b(?:i(?:'ve| have)?|we(?:'ve| have)?)\s+(?:already\s+)?(?:saved|logged|recorded|added)\b|\b(?:your|the|this|that)\s+(?:meal|breakfast|lunch|dinner|food|entry)\s+(?:has been|is|was)\s+(?:saved|logged|added|recorded)\b/i;
+  const falseSavedClaim = /\b(?:i(?:['’]ve| have)?|we(?:['’]ve| have)?)\s+(?:already\s+)?(?:saved|logged|recorded|added)\b|\b(?:your|the|this|that)\s+(?:meal|breakfast|lunch|dinner|food|entry)\s+(?:has been|is|was)\s+(?:saved|logged|added|recorded)\b/i;
   if (intent === "food_log") {
     if (!nutrition) {
       return "I understood that you shared food, but I couldn't prepare a valid Nutrition Review entry. Nothing was saved to Calories Intake. Please try again with the foods and amounts, or enter them directly in Calories Intake.";
