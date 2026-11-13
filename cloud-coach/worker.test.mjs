@@ -321,3 +321,23 @@ test('daily nutrition summary never silently becomes an unconfirmed food entry',
   assert.equal(result.body.intent, 'nutrition_summary');
   assert.equal(result.body.nutrition, null);
 });
+
+
+test('malformed first nutrition JSON gets one compact structured retry', async () => {
+  let count = 0;
+  const result = await reply(post({ ...base, question: 'I ate 2 bananas and chicken', localHour: 12 }), {
+    AI: { run: async () => {
+      count++;
+      if (count === 1) return { response: 'Your lunch has been saved.' };
+      if (count === 2) return { response: 'Here are the estimated calories but no JSON.' };
+      return { response: '{"foodName":"chicken and bananas","caloriesKcal":350,"confidence":"low"}' };
+    } },
+    DISABLE_EXTERNAL_REFERENCES: 'true',
+  });
+  assert.equal(count, 3);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.intent, 'food_log');
+  assert.equal(result.body.nutrition.caloriesKcal, 350);
+  assert.match(result.body.answer, /SAVE TO CALORIES INTAKE/i);
+  assert.doesNotMatch(result.body.answer, /saved\./i);
+});
