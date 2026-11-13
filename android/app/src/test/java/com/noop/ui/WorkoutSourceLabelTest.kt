@@ -8,7 +8,7 @@ import org.junit.Test
  * workouts showed the "Apple" pill because the badge was a binary `isWhoop ? "Whoop" : "Apple"`.
  * These cases mirror exactly what the importers write:
  *   - WhoopCsvImporter      → deviceId/source "my-whoop"
- *   - AppleHealthImporter   → deviceId "apple-health", source "Apple Health"
+ *   - Legacy Apple Health rows → deviceId "apple-health", source "Apple Health"
  *   - HealthConnectImporter → deviceId/source "health-connect"
  */
 class WorkoutSourceLabelTest {

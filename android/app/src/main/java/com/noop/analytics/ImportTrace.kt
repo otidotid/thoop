@@ -199,7 +199,7 @@ object ImportTrace {
             "workout" -> "workouts"
             else -> rawKey   // journal, metricSeries: no Swift category, keep the raw key
         }
-        // Apple Health (AppleHealthImporter SOURCE_LABEL): align with AppleHealthImport.swift categories.
+        // Legacy Apple Health source label: preserve compatible table names in historical import traces.
         "Apple Health" -> when (rawKey) {
             "workout" -> "workouts"
             else -> rawKey   // appleDaily, dailyMetric, metricSeries already match Swift / have no twin

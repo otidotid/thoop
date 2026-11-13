@@ -42,7 +42,6 @@
     <string name="nav_vital_signs">Vital Signs</string>
     <string name="nav_lab_book">Lab Book</string>
     <string name="nav_rhythm">Rhythm</string>
-    <string name="nav_apple_health">Apple Health</string>
     <string name="nav_automations">Automations</string>
     <string name="nav_alarms">Alarms</string>
     <string name="nav_devices">Devices</string>
@@ -329,10 +328,6 @@
     <string name="l10n_add_device_wizard_whoop_is_noop_s_primary_fully_ac6fa33b">WHOOP is NOOP\'s primary, fully-supported band. Other heart-rate straps stream live heart rate and HRV, but not WHOOP\'s deeper sleep and recovery data.</string>
     <string name="l10n_app_root_more_4bab2d8f">More</string>
     <string name="l10n_app_root_moregroupchevron_b2b36ec6">moreGroupChevron</string>
-    <string name="l10n_apple_health_screen_apple_health_b19b87da">Apple Health</string>
-    <string name="l10n_apple_health_screen_no_readings_recorded_05018b26">No readings recorded.</string>
-    <string name="l10n_apple_health_screen_nothing_imported_yet_f457cdbe">Nothing imported yet</string>
-    <string name="l10n_apple_health_screen_reading_your_apple_health_history_1a3bf76d">Reading your Apple Health history…</string>
     <string name="l10n_auto_workout_nudge_dismiss_this_workout_suggestion_52ace8f3">Dismiss this workout suggestion</string>
     <string name="l10n_auto_workout_nudge_looks_like_a_workout_e745e403">Looks like a workout</string>
     <string name="l10n_auto_workout_nudge_not_a_workout_15c5f784">Not a workout</string>
@@ -496,13 +491,11 @@
     <string name="l10n_coupled_screen_recovery_b668d988">RECOVERY</string>
     <string name="l10n_coupled_screen_sleep_performance_4611539f">SLEEP PERFORMANCE</string>
     <string name="l10n_data_sources_screen_acts_as_a_standard_bluetooth_heart_f8d13439">Acts as a standard Bluetooth heart-rate strap. Pair NOOP from your treadmill, bike or app to see your strap\'s heart rate there.</string>
-    <string name="l10n_data_sources_screen_apple_health_b19b87da">Apple Health</string>
     <string name="l10n_data_sources_screen_auto_sync_health_connect_periodically_6f3f4d92">Auto-sync Health Connect periodically</string>
     <string name="l10n_data_sources_screen_auto_sync_periodically_5f3041e8">Auto-sync periodically</string>
     <string name="l10n_data_sources_screen_broadcast_heart_rate_as_a_bluetooth_6a44fdb4">Broadcast heart rate as a Bluetooth sensor</string>
     <string name="l10n_data_sources_screen_broadcast_hr_from_this_phone_10e5605c">Broadcast HR from this phone</string>
     <string name="l10n_data_sources_screen_broadcast_hr_is_on_your_strap_0ad5368a">Broadcast HR is ON. This phone is advertising heart rate continuously, which keeps its Bluetooth radio active and drains the battery faster. Turn it off when you\'re not using it with another device.</string>
-    <string name="l10n_data_sources_screen_cancel_77dfd213">Cancel</string>
     <string name="l10n_data_sources_screen_data_sources_5e43d6bb">Data Sources</string>
     <string name="l10n_data_sources_screen_every_3560d90b">Every</string>
     <string name="l10n_data_sources_screen_health_connect_be6bca3e">Health Connect</string>
@@ -514,7 +507,6 @@
     <string name="health_connect_category_activity_detail">Steps, calories, workouts, distance, and VO₂ max</string>
     <string name="health_connect_category_body_composition">Body composition</string>
     <string name="health_connect_category_body_composition_detail">Weight, body fat, and lean mass</string>
-    <string name="l10n_data_sources_screen_import_apple_health_export_533fca27">Import Apple Health export…</string>
     <string name="l10n_data_sources_screen_import_from_health_connect_35d55e21">Import from Health Connect</string>
     <string name="l10n_data_sources_screen_import_lifting_log_8fac7b68">Import lifting log…</string>
     <string name="l10n_data_sources_screen_import_mi_band_export_e587801c">Import Mi Band export…</string>
@@ -529,12 +521,8 @@
     <string name="l10n_data_sources_screen_off_e3de5ab0">Off</string>
     <string name="l10n_data_sources_screen_oura_fitbit_garmin_export_7b21682f">Oura / Fitbit / Garmin export</string>
     <string name="l10n_data_sources_screen_re_pull_new_health_connect_data_3e9c3914">Re-pull new Health Connect data (e.g. Samsung Health → Health Connect) each time you open NOOP, if it\'s been longer than the interval below. Read-only; never overwrites strap data.</string>
-    <string name="l10n_data_sources_screen_remove_apple_health_imported_data_5f878502">Remove Apple Health imported data?</string>
-    <string name="l10n_data_sources_screen_remove_e963907d">Remove</string>
-    <string name="l10n_data_sources_screen_remove_imported_data_813e4695">Remove imported data</string>
     <string name="l10n_data_sources_screen_share_back_to_health_connect_1d578f4a">Share back to Health Connect</string>
     <string name="l10n_data_sources_screen_share_computed_metrics_back_to_health_c11f5d70">Share computed metrics back to Health Connect</string>
-    <string name="l10n_data_sources_screen_this_permanently_deletes_everything_imported_from_f42e760e">This permanently deletes everything imported from Apple Health: heart rate, HRV, sleep, steps, workouts and more. Your live strap data is untouched. This can\'t be undone.</string>
     <string name="l10n_data_sources_screen_whoop_history_db101974">WHOOP History</string>
     <string name="l10n_data_sources_screen_whoop_strap_live_ble_217f7df6">WHOOP Strap (Live BLE)</string>
     <string name="l10n_data_sources_screen_workout_file_gpx_tcx_fit_5469c068">Workout file (GPX / TCX / FIT)</string>
@@ -856,7 +844,6 @@
     <string name="l10n_onboarding_screen_health_connect_is_not_available_on_0336b16d">Health Connect is not available on this device.</string>
     <string name="l10n_onboarding_screen_height_3f608b49">Height</string>
     <string name="l10n_onboarding_screen_history_fills_the_dashboard_immediately_9728dde5">History fills the dashboard immediately</string>
-    <string name="l10n_onboarding_screen_import_apple_health_export_077b5624">Import Apple Health export</string>
     <string name="l10n_onboarding_screen_import_from_health_connect_35d55e21">Import from Health Connect</string>
     <string name="l10n_onboarding_screen_import_whoop_export_zip_16f4176b">Import WHOOP export (.zip)</string>
     <string name="l10n_onboarding_screen_light_a36ef8ab">Light</string>
@@ -2030,7 +2017,7 @@
     <string name="onboarding_cta_enter">Enter NOOP</string>
     <string name="onboarding_three_promises">Three quiet promises.</string>
     <string name="onboarding_recovery_body">A calm ring rolls HRV, resting heart rate and sleep into one read on whether to push or rest.</string>
-    <string name="onboarding_live_hr_body">Connect a WHOOP, a heart-rate strap or a gym machine and watch each beat in real time, with zones that match your profile. Already have history elsewhere? Import it from WHOOP, Apple Health, Oura, Fitbit or Garmin.</string>
+    <string name="onboarding_live_hr_body">Connect a WHOOP, a heart-rate strap or a gym machine and watch each beat in real time, with zones that match your profile.</string>
     <string name="onboarding_local_data_body">Everything lives on this phone. No account, no sync, no cloud.</string>
     <string name="onboarding_expectations_subtitle">A few honest words, so nothing is a surprise.</string>
     <string name="onboarding_expectation_independent_body">NOOP is a personal, open project - not the WHOOP app, and not affiliated with WHOOP. It reads a strap you own, on your own device. Treat it as a capable work-in-progress rather than a finished product.</string>

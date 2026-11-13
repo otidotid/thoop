@@ -816,7 +816,7 @@ object WearableExportImporter {
     }
 
     /** The zip-entry collection loop, extracted so a unit test can drive it from an in-memory zip without a
-     *  ContentResolver (the same seam pattern as [AppleHealthImporter.parseStreamForTest]). Retains wellness
+     *  ContentResolver (the same injectable pull-parser testing pattern used by the XML importers). Retains wellness
      *  JSON/CSV first-wins, per-entry + per-count capped, and STOPS once the next retained entry would push
      *  past [maxTotalBytes] — returning `truncated = true` so the caller can say so instead of silently
      *  importing a partial set. ZipInputStream yields entries in archive order, so it's deterministic. (#70) */

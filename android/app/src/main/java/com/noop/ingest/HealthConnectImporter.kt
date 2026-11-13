@@ -740,9 +740,9 @@ object HealthConnectImporter {
         val appleRows = ArrayList<AppleDaily>(acc.size)
         val dailyRows = ArrayList<DailyMetric>(acc.size)
         // Flattened (day, "weight", kg) points so the cross-source resolver Compare reads can SEE a
-        // Health-Connect-only weight history — previously only the Apple-Health *file* importer emitted
-        // these, so HC weight showed on Today but was invisible in Compare (#443). Mirrors
-        // AppleHealthImporter's metricSeries emission; HC_DEVICE source is treated as apple-equivalent
+        // Health-Connect-only weight history — previously only the legacy imported-data path emitted
+        // these, so HC weight showed on Today but was invisible in Compare (#443). Uses the existing
+        // metricSeries storage shape; HC_DEVICE source is treated as compatible with legacy daily aggregates
         // in WhoopRepository.sourceCandidates.
         val metricSeriesRows = ArrayList<MetricSeriesRow>(acc.size)
 

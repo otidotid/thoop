@@ -10,7 +10,8 @@ import org.junit.Test
  * night from an imported one. The badge now derives from the merged DailyMetric's WINNING deviceId:
  *   - computed "<id>-noop"        → "On-device"
  *   - imported WHOOP export        → "Whoop"
- *   - apple-health / health-connect → "Apple Health"
+ *   - apple-health                → "Apple Health"
+ *   - health-connect              → "Health Connect"
  * Brand wording matches macOS IntelligenceEngine.DaySource.badge. Mirrors WorkoutSourceLabelTest.
  */
 class IntelligenceDaySourceBadgeTest {
@@ -38,9 +39,8 @@ class IntelligenceDaySourceBadgeTest {
     }
 
     @Test
-    fun healthConnectRow_isAppleHealth() {
-        // Health Connect is the Android twin of Apple Health — same badge, not a Whoop fall-through.
-        assertEquals("Apple Health", daySourceBadge(WhoopRepository.HEALTH_CONNECT_SOURCE).first)
+    fun healthConnectRow_isHealthConnect() {
+        assertEquals("Health Connect", daySourceBadge(WhoopRepository.HEALTH_CONNECT_SOURCE).first)
     }
 
     @Test

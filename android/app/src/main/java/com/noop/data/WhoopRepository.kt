@@ -2124,6 +2124,12 @@ class WhoopRepository(
         )
     }
 
+    /** Count the same merged day set as [daysMerged] using SQL, without loading every DailyMetric. */
+    suspend fun daysMergedCount(deviceId: String): Int {
+        val sourceIds = (importedSourceIds(deviceId) + computedSourceIds(deviceId) + ACTIVITY_FILE_SOURCE).distinct()
+        return dao.distinctDailyDaysCount(sourceIds)
+    }
+
     /**
      * Union ([unionByDay]) of one daily flow per source id, emitting whenever any source changes. For the
      * common single-source (single-WHOOP) case it is the plain source flow (no extra operator). SPINE /
@@ -2282,6 +2288,10 @@ class WhoopRepository(
      *  them (#28). Exact-duplicate rows are dropped on the (startTs, sport) natural key, active-strap-first. */
     suspend fun workoutsUnion(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT): List<WorkoutRow> =
         dedupWorkoutsByKey(rawWhoopSourceIds(deviceId).flatMap { dao.workouts(it, from, to, limit) })
+
+    /** Count the WHOOP workout union in SQL; avoids loading every WorkoutRow just to display a total. */
+    suspend fun workoutsUnionCount(deviceId: String, from: Long, to: Long): Int =
+        dao.workoutsUnionCount(rawWhoopSourceIds(deviceId), from, to)
 
     /** The COMPUTED ("-noop") twin of [workoutsUnion], including grandfathered detected sessions retained
      *  under "<importedDeviceId>-noop", across the computed union ids. */

@@ -290,9 +290,6 @@
     <string name="l10n_add_device_wizard_whoop_5_0_mg_support_is_e452e686">Поддержка WHOOP 5.0 / MG в NOOP новее и всё ещё экспериментальна.</string>
     <string name="l10n_add_device_wizard_whoop_is_noop_s_primary_fully_ac6fa33b">WHOOP — основной, полностью поддерживаемый браслет NOOP. Другие пульсометры передают живой пульс и ВСР, но не более глубокие данные WHOOP о сне и восстановлении.</string>
     <string name="l10n_app_root_more_4bab2d8f">Ещё</string>
-    <string name="l10n_apple_health_screen_no_readings_recorded_05018b26">Пока нет записанных измерений.</string>
-    <string name="l10n_apple_health_screen_nothing_imported_yet_f457cdbe">Пока ничего не импортировано</string>
-    <string name="l10n_apple_health_screen_reading_your_apple_health_history_1a3bf76d">Загружаю историю из Apple Health…</string>
     <string name="l10n_auto_workout_nudge_dismiss_this_workout_suggestion_52ace8f3">Отклонить это предложение тренировки</string>
     <string name="l10n_auto_workout_nudge_looks_like_a_workout_e745e403">Похоже на тренировку</string>
     <string name="l10n_auto_workout_nudge_not_a_workout_15c5f784">Не тренировка</string>
@@ -453,7 +450,6 @@
     <string name="l10n_data_sources_screen_broadcast_heart_rate_as_a_bluetooth_6a44fdb4">Транслировать пульс как Bluetooth-датчик</string>
     <string name="l10n_data_sources_screen_broadcast_hr_from_this_phone_10e5605c">Транслировать пульс с этого телефона</string>
     <string name="l10n_data_sources_screen_broadcast_hr_is_on_your_strap_0ad5368a">Трансляция пульса ВКЛЮЧЕНА. Этот телефон непрерывно передаёт пульс, из-за чего его радиомодуль Bluetooth остаётся активным и батарея садится быстрее. Выключайте, когда не используете с другим устройством.</string>
-    <string name="l10n_data_sources_screen_cancel_77dfd213">Отмена</string>
     <string name="l10n_data_sources_screen_data_sources_5e43d6bb">Источники данных</string>
     <string name="l10n_data_sources_screen_every_3560d90b">Каждые</string>
     <string name="health_connect_categories_title">Выберите, что может читать NOOP</string>
@@ -464,7 +460,6 @@
     <string name="health_connect_category_activity_detail">Шаги, калории, тренировки, дистанция и VO₂ max</string>
     <string name="health_connect_category_body_composition">Состав тела</string>
     <string name="health_connect_category_body_composition_detail">Вес, жировая и сухая масса</string>
-    <string name="l10n_data_sources_screen_import_apple_health_export_533fca27">Импорт выгрузки Apple Health…</string>
     <string name="l10n_data_sources_screen_import_from_health_connect_35d55e21">Импорт из Health Connect</string>
     <string name="l10n_data_sources_screen_import_lifting_log_8fac7b68">Импорт журнала силовых…</string>
     <string name="l10n_data_sources_screen_import_mi_band_export_e587801c">Импорт выгрузки Mi Band…</string>
@@ -479,12 +474,8 @@
     <string name="l10n_data_sources_screen_off_e3de5ab0">Выкл.</string>
     <string name="l10n_data_sources_screen_oura_fitbit_garmin_export_7b21682f">Экспорт Oura / Fitbit / Garmin</string>
     <string name="l10n_data_sources_screen_re_pull_new_health_connect_data_3e9c3914">Повторно забирать новые данные Health Connect (например, Samsung Health → Health Connect) каждые time you open NOOP, if it\'s been longer than the interval below. Read-only; never overwrites strap data.</string>
-    <string name="l10n_data_sources_screen_remove_apple_health_imported_data_5f878502">Удалить данные, импортированные из Apple Health?</string>
-    <string name="l10n_data_sources_screen_remove_e963907d">Удалить</string>
-    <string name="l10n_data_sources_screen_remove_imported_data_813e4695">Удалить импортированные данные</string>
     <string name="l10n_data_sources_screen_share_back_to_health_connect_1d578f4a">Обратная выгрузка в Health Connect</string>
     <string name="l10n_data_sources_screen_share_computed_metrics_back_to_health_c11f5d70">Выгружать вычисленные метрики обратно в Health Connect</string>
-    <string name="l10n_data_sources_screen_this_permanently_deletes_everything_imported_from_f42e760e">Это безвозвратно удалит всё, импортированное из Apple Health: пульс, ВСР, сон, шаги, тренировки и другое. Живые данные с браслета не затрагиваются. Отменить нельзя.</string>
     <string name="l10n_data_sources_screen_whoop_history_db101974">История WHOOP</string>
     <string name="l10n_data_sources_screen_whoop_strap_live_ble_217f7df6">Браслет WHOOP (Live BLE)</string>
     <string name="l10n_data_sources_screen_workout_file_gpx_tcx_fit_5469c068">Файл тренировки (GPX / TCX / FIT)</string>
@@ -774,7 +765,6 @@
     <string name="l10n_onboarding_screen_health_connect_is_not_available_on_0336b16d">Health Connect недоступен на этом устройстве.</string>
     <string name="l10n_onboarding_screen_height_3f608b49">Рост</string>
     <string name="l10n_onboarding_screen_history_fills_the_dashboard_immediately_9728dde5">История сразу же заполняет панель</string>
-    <string name="l10n_onboarding_screen_import_apple_health_export_077b5624">Импорт экспорта Apple Health</string>
     <string name="l10n_onboarding_screen_import_from_health_connect_35d55e21">Импорт из Health Connect</string>
     <string name="l10n_onboarding_screen_import_whoop_export_zip_16f4176b">Импорт выгрузки WHOOP (.zip)</string>
     <string name="l10n_onboarding_screen_light_a36ef8ab">Светлая</string>
@@ -1883,7 +1873,7 @@
     <string name="onboarding_cta_enter">Войти в NOOP</string>
     <string name="onboarding_three_promises">Три негромких обещания.</string>
     <string name="onboarding_recovery_body">Спокойное кольцо объединяет ВСР, пульс в покое и сон в один ответ: нажимать или отдыхать.</string>
-    <string name="onboarding_live_hr_body">Подключите WHOOP, пульсометр или тренажёр и следите за каждым ударом в реальном времени, с зонами под ваш профиль. Уже есть история в другом месте? Импортируйте её из WHOOP, Apple Health, Oura, Fitbit или Garmin.</string>
+    <string name="onboarding_live_hr_body">Подключите WHOOP, пульсометр или тренажёр и следите за каждым ударом в реальном времени, с зонами под ваш профиль.</string>
     <string name="onboarding_local_data_body">Всё хранится на этом телефоне. Без аккаунта, без синхронизации, без облака.</string>
     <string name="onboarding_expectations_subtitle">Несколько честных слов, чтобы ничто не стало сюрпризом.</string>
     <string name="onboarding_expectation_independent_body">NOOP — личный открытый проект, а не приложение WHOOP, и он не связан с WHOOP. Он читает браслет, которым вы владеете, на вашем собственном устройстве. Относитесь к нему как к работающей, но незавершённой разработке, а не к готовому продукту.</string>

@@ -2158,9 +2158,9 @@ object IntelligenceEngine {
         val stepsCalDays = 60
         val calOldest = AnalyticsEngine.dayString(
             nowLocalMidnight - (stepsCalDays - 1) * SECONDS_PER_DAY, tzOffsetSeconds)
-        // Phone reference steps per day, from the apple-health daily rows (steps > 0 only). On Android the
-        // Apple-Health importer banks `steps` in AppleDaily (DailyMetric holds only sleep/HR/HRV , see
-        // AppleHealthImporter), so read appleDaily here, not dailyMetrics, or the reference is always empty
+        // Phone reference steps per day, from legacy Apple Health daily rows (steps > 0 only).
+        // These rows bank `steps` in AppleDaily (DailyMetric holds only sleep/HR/HRV),
+        // so read appleDaily here, not dailyMetrics, or the reference is always empty
         // and NO phone-step calibration ever fits (the cause of the "Not calibrated" reports on #37).
         val appleRows = repo.appleDaily(WhoopRepository.APPLE_HEALTH_SOURCE, calOldest, newestDay)
         val refStepsByDay = HashMap<String, Double>()

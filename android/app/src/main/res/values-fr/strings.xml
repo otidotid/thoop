@@ -49,10 +49,6 @@
     <string name="l10n_add_device_wizard_whoop_is_noop_s_primary_fully_ac6fa33b">WHOOP est le bracelet principal et entièrement pris en charge par NOOP. Les autres bracelets de fréquence cardiaque diffusent la fréquence cardiaque et la VFC en direct, mais pas les données plus poussées de sommeil et de récupération de WHOOP.</string>
     <string name="l10n_app_root_more_4bab2d8f">Plus</string>
     <string name="l10n_app_root_moregroupchevron_b2b36ec6">plus de GroupeChevron</string>
-    <string name="l10n_apple_health_screen_apple_health_b19b87da">Apple Santé</string>
-    <string name="l10n_apple_health_screen_no_readings_recorded_05018b26">Aucune lecture enregistrée.</string>
-    <string name="l10n_apple_health_screen_nothing_imported_yet_f457cdbe">Rien encore importé</string>
-    <string name="l10n_apple_health_screen_reading_your_apple_health_history_1a3bf76d">Lecture de votre historique Apple Santé…</string>
     <string name="l10n_auto_workout_nudge_dismiss_this_workout_suggestion_52ace8f3">Ignorer cette suggestion d\'entraînement</string>
     <string name="l10n_auto_workout_nudge_looks_like_a_workout_e745e403">Ressemble à un entraînement</string>
     <string name="l10n_auto_workout_nudge_not_a_workout_15c5f784">Pas un entraînement</string>
@@ -216,13 +212,11 @@
     <string name="l10n_coupled_screen_recovery_b668d988">RÉCUPÉRATION</string>
     <string name="l10n_coupled_screen_sleep_performance_4611539f">PERFORMANCE DOUCE</string>
     <string name="l10n_data_sources_screen_acts_as_a_standard_bluetooth_heart_f8d13439">Se comporte comme un capteur de fréquence cardiaque Bluetooth standard. Associez NOOP depuis votre tapis de course, vélo ou application pour y voir la fréquence cardiaque de votre bracelet.</string>
-    <string name="l10n_data_sources_screen_apple_health_b19b87da">Apple Santé</string>
     <string name="l10n_data_sources_screen_auto_sync_health_connect_periodically_6f3f4d92">Auto-sync Health Connect périodiquement</string>
     <string name="l10n_data_sources_screen_auto_sync_periodically_5f3041e8">Auto-sync périodiquement</string>
     <string name="l10n_data_sources_screen_broadcast_heart_rate_as_a_bluetooth_6a44fdb4">Diffuser la fréquence cardiaque comme capteur Bluetooth</string>
     <string name="l10n_data_sources_screen_broadcast_hr_from_this_phone_10e5605c">Diffusion de la fréquence cardiaque depuis ce téléphone</string>
     <string name="l10n_data_sources_screen_broadcast_hr_is_on_your_strap_0ad5368a">La diffusion de la fréquence cardiaque est ACTIVÉE. Ce téléphone diffuse la fréquence cardiaque en continu, ce qui maintient le Bluetooth actif et décharge plus vite la batterie. Désactivez-la lorsque vous ne l\'utilisez pas avec un autre appareil.</string>
-    <string name="l10n_data_sources_screen_cancel_77dfd213">Annuler</string>
     <string name="l10n_data_sources_screen_data_sources_5e43d6bb">Sources de données</string>
     <string name="l10n_data_sources_screen_every_3560d90b">Chaque</string>
     <string name="l10n_data_sources_screen_health_connect_be6bca3e">Connexion santé</string>
@@ -234,7 +228,6 @@
     <string name="health_connect_category_activity_detail">Pas, calories, entraînements, distance et VO₂ max</string>
     <string name="health_connect_category_body_composition">Composition corporelle</string>
     <string name="health_connect_category_body_composition_detail">Poids, masse grasse et masse maigre</string>
-    <string name="l10n_data_sources_screen_import_apple_health_export_533fca27">Importation Apple Health exportation...</string>
     <string name="l10n_data_sources_screen_import_from_health_connect_35d55e21">Importation depuis Health Connect</string>
     <string name="l10n_data_sources_screen_import_lifting_log_8fac7b68">Importer le log...</string>
     <string name="l10n_data_sources_screen_import_mi_band_export_e587801c">Importer Mi Band export...</string>
@@ -249,12 +242,8 @@
     <string name="l10n_data_sources_screen_off_e3de5ab0">Désactivé</string>
     <string name="l10n_data_sources_screen_oura_fitbit_garmin_export_7b21682f">Export Oura / Fitbit / Garmin</string>
     <string name="l10n_data_sources_screen_re_pull_new_health_connect_data_3e9c3914">Récupérer les nouvelles données de Health Connect (par exemple Samsung Health → Health Connect) time you open NOOP, if it\'s been longer than the interval below. Read-only; never overwrites strap data.</string>
-    <string name="l10n_data_sources_screen_remove_apple_health_imported_data_5f878502">Supprimer les données importées d\'Apple Santé ?</string>
-    <string name="l10n_data_sources_screen_remove_e963907d">Supprimer</string>
-    <string name="l10n_data_sources_screen_remove_imported_data_813e4695">Supprimer les données importées</string>
     <string name="l10n_data_sources_screen_share_back_to_health_connect_1d578f4a">Partager dans Health Connect</string>
     <string name="l10n_data_sources_screen_share_computed_metrics_back_to_health_c11f5d70">Partager les mesures calculées retour à Health Connect</string>
-    <string name="l10n_data_sources_screen_this_permanently_deletes_everything_imported_from_f42e760e">Cela supprime définitivement tout ce qui a été importé depuis Apple Santé : fréquence cardiaque, VFC, sommeil, pas, entraînements et plus encore. Les données en direct de votre bracelet restent intactes. Cette action est irréversible.</string>
     <string name="l10n_data_sources_screen_whoop_history_db101974">WHOOP Historique</string>
     <string name="l10n_data_sources_screen_whoop_strap_live_ble_217f7df6">Bracelet WHOOP (BLE en direct)</string>
     <string name="l10n_data_sources_screen_workout_file_gpx_tcx_fit_5469c068">Fichier d\'entraînement (GPX / TCX / FIT)</string>
@@ -582,7 +571,6 @@
     <string name="l10n_onboarding_screen_health_connect_is_not_available_on_0336b16d">Health Connect n\'est pas disponible sur cet appareil.</string>
     <string name="l10n_onboarding_screen_height_3f608b49">Taille</string>
     <string name="l10n_onboarding_screen_history_fills_the_dashboard_immediately_9728dde5">L\'historique remplit immédiatement le tableau de bord</string>
-    <string name="l10n_onboarding_screen_import_apple_health_export_077b5624">Importer un export Apple Santé</string>
     <string name="l10n_onboarding_screen_import_from_health_connect_35d55e21">Importation depuis Health Connect</string>
     <string name="l10n_onboarding_screen_import_whoop_export_zip_16f4176b">Importation d\'exportation WHOOP (.zip)</string>
     <string name="l10n_onboarding_screen_light_a36ef8ab">Clair</string>
@@ -1617,7 +1605,6 @@
     <string name="nav_vital_signs">Signes vitaux</string>
     <string name="nav_lab_book">Carnet de laboratoire</string>
     <string name="nav_rhythm">Rythme</string>
-    <string name="nav_apple_health">Apple Santé</string>
     <string name="nav_automations">Automatisations</string>
     <string name="nav_alarms">Alarmes</string>
     <string name="nav_devices">Appareils</string>
@@ -1909,7 +1896,7 @@
     <string name="onboarding_cta_enter">Entrer dans NOOP</string>
     <string name="onboarding_three_promises">Trois promesses discrètes.</string>
     <string name="onboarding_recovery_body">Un anneau épuré réunit la VFC, la fréquence cardiaque au repos et le sommeil en une seule indication pour savoir s\'il vaut mieux faire un effort ou se reposer.</string>
-    <string name="onboarding_live_hr_body">Connectez un WHOOP, une ceinture cardio ou une machine de sport et suivez chaque battement en temps réel, avec des zones adaptées à votre profil. Vous avez déjà un historique ailleurs ? Importez-le depuis WHOOP, Apple Santé, Oura, Fitbit ou Garmin.</string>
+    <string name="onboarding_live_hr_body">Connectez un WHOOP, une ceinture cardio ou une machine de sport et suivez chaque battement en temps réel, avec des zones adaptées à votre profil.</string>
     <string name="onboarding_local_data_body">Tout reste sur ce téléphone. Pas de compte, pas de synchronisation, pas de cloud.</string>
     <string name="onboarding_expectations_subtitle">Quelques mots honnêtes, pour éviter toute surprise.</string>
     <string name="onboarding_expectation_independent_body">NOOP est un projet personnel et ouvert : ce n\'est pas l\'application WHOOP et il n\'est pas affilié à WHOOP. Il lit un bracelet qui vous appartient sur votre propre appareil. Considérez-le comme un projet performant encore en développement, et non comme un produit fini.</string>

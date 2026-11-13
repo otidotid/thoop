@@ -190,8 +190,8 @@ class Issue547ImportInflationRepro {
     @Test
     fun mergeDaily_appleRowInjectsAsleep414_neverInBed721() {
         val day = "2026-06-21"
-        // The Apple importer writes DailyMetric(totalSleepMin = asleepMin) under "apple-health" — the REAL
-        // asleep, 414 (AppleHealthImporter.kt: totalSleepMin = d.asleepMin). It NEVER writes the in-bed 721.
+        // Legacy Apple Health DailyMetric rows store totalSleepMin = asleepMin under "apple-health" — the REAL
+        // asleep, 414. They NEVER store the in-bed 721 in this field.
         val appleDaily = DailyMetric(deviceId = "apple-health", day = day, totalSleepMin = asleepMin)
         // A computed strap row that (per the #547 bad-clock theory) holds the inflated 721 in-bed total.
         val computedDaily = DailyMetric(deviceId = "my-whoop-noop", day = day, totalSleepMin = inBedMin)

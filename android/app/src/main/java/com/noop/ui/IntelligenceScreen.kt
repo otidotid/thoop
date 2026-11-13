@@ -380,7 +380,7 @@ private fun DayCard(d: DailyMetric, effortScale: EffortScale) {
                 // The REAL source of this day's dashboard headline, not a hard-coded "NOOP-computed".
                 // The merged DailyMetric carries the WINNING row's deviceId (mergeDaily: an import wins
                 // over the computed "-noop" row), so a strap-scored night reads "On-device" while a day an
-                // import covers reads "Whoop" / "Apple Health". Computed rows keep the charge tint; imports
+                // import covers reads "Whoop", "Apple Health" or "Health Connect". Computed rows keep the charge tint; imports
                 // use the accent tint to stand out. Mirrors macOS IntelligenceEngine.DaySource. (Sleep §2.6.)
                 val src = daySourceBadge(d.deviceId)
                 SourceBadge(src.first, tint = src.second)
@@ -463,13 +463,13 @@ private fun sleepValue(totalMin: Double?): String {
  * The By-Day numbers are always NOOP's on-device scores, but when an import covers the day it wins the
  * dashboard merge (mergeDaily), so the badge says so instead of the old hard-coded "NOOP-computed".
  * A computed row's id ends in "-noop"; imports keep their source id ("my-whoop" export, "apple-health" /
- * "health-connect"). Brand wording matches the rest of the app (macOS DaySource: "On-device"/"Whoop"/
- * "Apple Health"); imports use the accent tint, computed rows the charge tint. (Sleep overhaul §2.6.)
+ * "health-connect"). Each imported source keeps its own Android label; imports use the accent/source tint,
+ * computed rows the charge tint. (Sleep overhaul §2.6.)
  */
 internal fun daySourceBadge(deviceId: String): Pair<String, Color> = when {
     deviceId.endsWith("-noop") -> "On-device" to Palette.chargeColor
-    deviceId == com.noop.data.WhoopRepository.APPLE_HEALTH_SOURCE ||
-        deviceId == com.noop.data.WhoopRepository.HEALTH_CONNECT_SOURCE -> "Apple Health" to Palette.accent
+    deviceId == com.noop.data.WhoopRepository.APPLE_HEALTH_SOURCE -> "Apple Health" to Palette.accent
+    deviceId == com.noop.data.WhoopRepository.HEALTH_CONNECT_SOURCE -> "Health Connect" to Palette.metricPurple
     // An Oura night is persisted under the ring's "oura-<uuid>" id (the ring PROVIDES its own SleepNet
     // hypnogram, banked as the merge-winning session) — name it "Oura", not the generic "Whoop" the
     // else-branch would give a non-"-noop" id. Resolved off the canonical brand table, not an "oura" literal.

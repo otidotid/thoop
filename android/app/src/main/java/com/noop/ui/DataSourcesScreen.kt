@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -67,7 +65,6 @@ import com.noop.data.Metric
 import com.noop.data.PairedDeviceRow
 import com.noop.data.SourceKind
 import com.noop.ble.PuffinExperiment
-import com.noop.ingest.AppleHealthImporter
 import com.noop.ingest.HealthConnectImporter
 import com.noop.ingest.HealthConnectWriter
 import com.noop.ingest.ActivityFileImporter
@@ -85,8 +82,8 @@ import kotlinx.coroutines.withContext
  * onto the locked Android component system (ScreenScaffold / NoopCard / StatePill /
  * Overline / NoopType / Palette).
  *
- * The macOS screen is built around "bring your history in once, then it's yours": three
- * source cards (WHOOP Export, Apple Health, Live BLE) plus on-device file import. On
+ * The macOS screen is built around "bring your history in once, then it's yours": source
+ * cards plus on-device file import. On
  * Android the on-device store is a single Room/SQLite file, and the real, working
  * migration path is whole-store export/import via [DataBackup] (a SAF document the user
  * picks). So this screen keeps the macOS structure but maps each card to what Android
@@ -95,9 +92,6 @@ import kotlinx.coroutines.withContext
  *   - WHOOP data    — live counts of the cached "my-whoop" history, plus a working import
  *                     of a WHOOP .zip/.csv export (app.whoop.com → Data Management) via
  *                     [com.noop.ingest.WhoopCsvImporter].
- *   - Apple Health  — live counts of cached "apple-health" data, plus a working streaming
- *                     import of an Apple Health export.zip/export.xml via
- *                     [com.noop.ingest.AppleHealthImporter].
  *   - Health Connect— native Android import (steps/HR/HRV/sleep/SpO₂/weight/workouts) via
  *                     [com.noop.ingest.HealthConnectImporter], gated on runtime permission.
  *   - Nutrition CSV — daily calories / macros / body weight from a nutrition CSV
@@ -142,10 +136,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
     var whoopDays by remember { mutableStateOf<Int?>(null) }
     var whoopWorkouts by remember { mutableStateOf<Int?>(null) }
     var whoopHasHr by remember { mutableStateOf(false) }
-    var appleDays by remember { mutableStateOf<Int?>(null) }
-    var appleWorkouts by remember { mutableStateOf<Int?>(null) }
-    // Health Connect has its OWN source ("health-connect"), counted separately from an Apple Health
-    // export so each card reflects its own data rather than both showing under Apple Health (issue #34).
+    // Health Connect has its own source ("health-connect") and is counted independently.
     var hcDays by remember { mutableStateOf<Int?>(null) }
     var hcWorkouts by remember { mutableStateOf<Int?>(null) }
     // Nutrition CSV writes long-format metricSeries rows under its own source ("nutrition-csv"),
@@ -172,11 +163,9 @@ fun DataSourcesScreen(vm: AppViewModel) {
         // (mergeActivityFileSteps(mergeDaily(imported, computed))), so this
         // matches the iOS badge count, including a strap-only user's computed-only ("-noop") days that an
         // imported-only count would miss. workoutsUnion mirrors Swift's dataVolumeSnapshot workout union.
-        whoopDays = vm.repo.daysMerged(vm.activeStrapId).size
-        whoopWorkouts = vm.repo.workoutsUnion(vm.activeStrapId, 0L, nowS).size
+        whoopDays = vm.repo.daysMergedCount(vm.activeStrapId)
+        whoopWorkouts = vm.repo.workoutsUnionCount(vm.activeStrapId, 0L, nowS)
         whoopHasHr = vm.repo.latestHrSampleTsUnion(vm.activeStrapId) != null
-        appleDays = vm.repo.appleDailyCount("apple-health", "0000-01-01", "9999-12-31")
-        appleWorkouts = vm.repo.workoutsCount("apple-health", 0L, nowS)
         hcDays = vm.repo.appleDailyCount("health-connect", "0000-01-01", "9999-12-31")
         hcWorkouts = vm.repo.workoutsCount("health-connect", 0L, nowS)
         nutritionDays = vm.repo.metricSeriesKeyCount(NutritionCsvImporter.SOURCE_ID, "calories_in")
@@ -195,8 +184,6 @@ fun DataSourcesScreen(vm: AppViewModel) {
     // Busy flag shared by every importer's Export/Import buttons.
     var busy by remember { mutableStateOf(false) }
     var confirmHealthConnectImport by remember { mutableStateOf(false) }
-    // ah-delete (#616): drives the "Remove Apple Health imported data" confirm dialog.
-    var confirmDeleteApple by remember { mutableStateOf(false) }
 
     // Run an importer off the main thread, refresh the counts, then toast the result.
     fun runImport(block: suspend () -> ImportSummary) {
@@ -233,10 +220,6 @@ fun DataSourcesScreen(vm: AppViewModel) {
     val whoopImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) runImport { WhoopCsvImporter.importZip(context, uri, vm.repo) } }
-
-    val appleImportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri -> if (uri != null) runImport { AppleHealthImporter.importExport(context, uri, vm.repo) } }
 
     val xiaomiImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -434,48 +417,6 @@ fun DataSourcesScreen(vm: AppViewModel) {
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) { whoopImportLauncher.launch(arrayOf("*/*")) }
-        }
-        }
-
-        // --- Apple Health ---
-        item {
-        SourceCard(
-            title = uiString(R.string.l10n_data_sources_screen_apple_health_b19b87da),
-            icon = Icons.Filled.FavoriteBorder,
-            tint = Palette.metricCyan,
-            subtitle = "Import HR, HRV, sleep, SpO₂ and steps from an Apple Health export. On " +
-                "an iPhone: Health app → tap your photo → Export All Health Data, then " +
-                "import the .zip here. Working now on Android.",
-        ) {
-            val hasApple = (appleDays ?: 0) > 0 || (appleWorkouts ?: 0) > 0
-            StatePill(
-                title = if (hasApple) "Imported" else "Nothing imported",
-                tone = if (hasApple) StrandTone.Accent else StrandTone.Neutral,
-                showsDot = true,
-            )
-            CountLine(
-                primary = appleDays?.let { "$it days" } ?: "—",
-                secondary = appleWorkouts?.let { "$it workouts" } ?: "Counting…",
-            )
-            BackupButton(
-                label = uiString(R.string.l10n_data_sources_screen_import_apple_health_export_533fca27),
-                icon = Icons.Filled.FileUpload,
-                enabled = !busy,
-                tint = Palette.metricCyan,
-                modifier = Modifier.fillMaxWidth(),
-            ) { appleImportLauncher.launch(arrayOf("*/*")) }
-            // ah-delete (#616): a destructive "Remove imported data" action wired to
-            // DeviceRegistry.deleteDeviceData("apple-health") (via vm.deletePairedDeviceData), mirroring
-            // the Swift card. Shown only once there's something to remove; a confirm dialog gates it.
-            if (hasApple) {
-                BackupButton(
-                    label = uiString(R.string.l10n_data_sources_screen_remove_imported_data_813e4695),
-                    icon = Icons.Filled.DeleteOutline,
-                    enabled = !busy,
-                    tint = Palette.statusCritical,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { confirmDeleteApple = true }
-            }
         }
         }
 
@@ -908,49 +849,6 @@ fun DataSourcesScreen(vm: AppViewModel) {
             dismissButton = {
                 TextButton(onClick = { confirmHealthConnectImport = false }) {
                     Text("No, cancel", style = NoopType.body, color = Palette.textSecondary)
-                }
-            },
-        )
-    }
-
-    // ah-delete (#616): strongly-worded confirm before purging the "apple-health" source. On confirm,
-    // deletes every Apple-Health-sourced row (deviceId-keyed tables) in one transaction via the registry,
-    // re-counts so the card flips back to "Nothing imported", and toasts the result.
-    if (confirmDeleteApple) {
-        AlertDialog(
-            onDismissRequest = { confirmDeleteApple = false },
-            containerColor = Palette.surfaceOverlay,
-            title = {
-                Text(uiString(R.string.l10n_data_sources_screen_remove_apple_health_imported_data_5f878502), style = NoopType.title2, color = Palette.textPrimary)
-            },
-            text = {
-                Text(
-                    uiString(R.string.l10n_data_sources_screen_this_permanently_deletes_everything_imported_from_f42e760e),
-                    style = NoopType.subhead,
-                    color = Palette.textSecondary,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDeleteApple = false
-                    busy = true
-                    scope.launch {
-                        runCatching {
-                            withContext(Dispatchers.IO) { vm.deletePairedDeviceData("apple-health") }
-                        }
-                        vm.ble.externalLog("Import apple-health: imported data removed")
-                        refreshCounts()
-                        vm.loadWorkouts()
-                        busy = false
-                        Toast.makeText(context, "Removed Apple Health imported data.", Toast.LENGTH_LONG).show()
-                    }
-                }) {
-                    Text(uiString(R.string.l10n_data_sources_screen_remove_e963907d), style = NoopType.body, color = Palette.statusCritical)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDeleteApple = false }) {
-                    Text(uiString(R.string.l10n_data_sources_screen_cancel_77dfd213), style = NoopType.body, color = Palette.textSecondary)
                 }
             },
         )

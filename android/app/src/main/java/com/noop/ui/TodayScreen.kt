@@ -1313,14 +1313,13 @@ fun TodayScreen(
         // Union of the active strap id + legacy "my-whoop" (#814), NOT the literal id alone: after a
         // re-pair the fresh recordings live under "whoop-<id>", and a pinned read undercounted them
         // in the Whoop pill exactly like the feed dropped them from "Latest Workouts".
-        val whoopWorkouts = viewModel.repo.workoutsUnion(viewModel.deviceId, 0L, now)
-        // Apple Health and Health Connect are separate sources (since #34), keep them separate in the
-        // provenance footer too, so Health Connect data isn't mislabelled under the "Apple Health" pill
-        // (issue #53). The recent-workouts list below still unions all sources for a combined feed.
-        val appleWorkouts = viewModel.repo.workouts("apple-health", 0L, now)
-        val hcWorkouts = viewModel.repo.workouts("health-connect", 0L, now)
-        val appleDaysCount = viewModel.repo.appleDaily("apple-health", "0000-01-01", "9999-12-31").size
-        val hcDaysCount = viewModel.repo.appleDaily("health-connect", "0000-01-01", "9999-12-31").size
+        val whoopWorkoutsCount = viewModel.repo.workoutsUnionCount(viewModel.deviceId, 0L, now)
+        // Keep legacy Apple Health and Health Connect provenance separate. These are display counts,
+        // so use scalar SQL COUNT queries rather than loading every historical row into memory.
+        val appleWorkoutsCount = viewModel.repo.workoutsCount("apple-health", 0L, now)
+        val hcWorkoutsCount = viewModel.repo.workoutsCount("health-connect", 0L, now)
+        val appleDaysCount = viewModel.repo.appleDailyCount("apple-health", "0000-01-01", "9999-12-31")
+        val hcDaysCount = viewModel.repo.appleDailyCount("health-connect", "0000-01-01", "9999-12-31")
         footer = TodayFooterState(
             // fillWorkoutHrFromStrap: imported sessions carry no HR, derive it from strap samples (#77).
             // #510: strap-native rows now read HR under their OWN recording strap (inside the fill), so a 2nd
@@ -1335,11 +1334,11 @@ fun TodayScreen(
                 effortMethod = NoopPrefs.effortMethod(context),
             ),
             whoopDays = days.size,
-            whoopWorkouts = whoopWorkouts.size,
+            whoopWorkouts = whoopWorkoutsCount,
             appleDays = appleDaysCount,
-            appleWorkouts = appleWorkouts.size,
+            appleWorkouts = appleWorkoutsCount,
             hcDays = hcDaysCount,
-            hcWorkouts = hcWorkouts.size,
+            hcWorkouts = hcWorkoutsCount,
         )
         // Cache the result + record the signature so a later re-mount with unchanged data restores the footer
         // and short-circuits the heavy reload above.

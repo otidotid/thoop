@@ -17,7 +17,7 @@ import java.util.zip.ZipOutputStream
  * `truncated` so the import summary can say the set was partial instead of reporting a clean import.
  *
  * Drives the extracted [WearableExportImporter.collectZipEntries] seam from an in-memory zip, so no
- * Context / ContentResolver is needed (the same seam pattern as AppleHealthImporterToleranceTest).
+ * Context / ContentResolver is needed (the same injectable-parser testing style as ActivityFileImporterTest).
  * ZipInputStream yields entries in archive order, so which entries survive is deterministic.
  */
 class ImportByteBudgetTest {

@@ -172,7 +172,6 @@ internal enum class Destination(
     VitalSignsDetail("vital_detail/{key}", R.string.nav_vital_signs, Icons.Filled.HealthAndSafety),
     LabBook("lab_book", R.string.nav_lab_book, Icons.Filled.HealthAndSafety),
     Rhythm("rhythm", R.string.nav_rhythm, Icons.Filled.MonitorHeart),
-    AppleHealth("apple_health", R.string.nav_apple_health, Icons.Filled.HealthAndSafety),
 
     // Group: System
     Automations("automations", R.string.nav_automations, Icons.Filled.Bolt),
@@ -249,7 +248,7 @@ internal val drawerGroups: List<DrawerGroup> = listOf(
         Destination.Coach,
     ), defaultExpanded = false),
     DrawerGroup("Data", R.string.more_group_data, listOf(
-        Destination.FusedRecord, Destination.AppleHealth, Destination.DataSources,
+        Destination.FusedRecord, Destination.DataSources,
         Destination.BackupSync, Destination.Devices, Destination.NoopLimitations,
     ), defaultExpanded = false),
     DrawerGroup("Settings", R.string.more_group_app, listOf(
@@ -276,7 +275,6 @@ internal val configurableBottomBarDestinations: List<Destination> = listOf(
     Destination.Intervals,
     Destination.Rhythm,
     Destination.FusedRecord,
-    Destination.AppleHealth,
     Destination.DataSources,
     Destination.BackupSync,
     Destination.Devices,
@@ -858,7 +856,6 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     RhythmRoute(viewModel)
                 }
                 composable(Destination.FusedRecord.route) { FusedRecordRoute(viewModel) }
-                composable(Destination.AppleHealth.route) { AppleHealthScreen(viewModel) }
                 composable(Destination.Devices.route) {
                     DevicesScreen(
                         viewModel,

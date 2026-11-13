@@ -276,14 +276,14 @@ object ActivityFileImporter {
 
     /**
      * Pull-parser factory. Production uses the framework `Xml.newPullParser()`; JVM tests swap in a
-     * kXML2 parser (android.util.Xml is a throwing stub off-device). Mirrors AppleHealthImporter.
+     * kXML2 parser (android.util.Xml is a throwing stub off-device). Uses the same Android XML pull-parser approach as the other import paths.
      */
     @Volatile
     internal var newPullParser: () -> XmlPullParser = { Xml.newPullParser() }
 
     /**
-     * Stream-parse a GPX or TCX document with a single START/TEXT/END event loop and a text buffer
-     * (the AppleHealthImporter pattern). Element text is accumulated on TEXT events and committed to the
+     * Stream-parse a GPX or TCX document with a single START/TEXT/END event loop and a text buffer.
+     * Element text is accumulated on TEXT events and committed to the
      * right field on END_TAG — robust against mixed content and never advances the parser out of band.
      */
     private fun parseXml(data: ByteArray, kind: Kind): Result {

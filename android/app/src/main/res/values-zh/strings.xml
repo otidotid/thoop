@@ -33,7 +33,6 @@
     <string name="nav_vital_signs">体征</string>
     <string name="nav_lab_book">实验室</string>
     <string name="nav_rhythm">节律</string>
-    <string name="nav_apple_health">Apple Health</string>
     <string name="nav_automations">自动化</string>
     <string name="nav_alarms">智能闹钟</string>
     <string name="nav_devices">设备管理</string>
@@ -211,10 +210,6 @@
     <string name="l10n_add_device_wizard_whoop_is_noop_s_primary_fully_ac6fa33b">WHOOP 是 NOOP 首要且完全支持的核心设备。其他心率带只能提供基础的实时心率流。</string>
     <string name="l10n_app_root_more_4bab2d8f">更多</string>
     <string name="l10n_app_root_moregroupchevron_b2b36ec6">更多</string>
-    <string name="l10n_apple_health_screen_apple_health_b19b87da">Apple Health</string>
-    <string name="l10n_apple_health_screen_no_readings_recorded_05018b26">未记录到任何读数。</string>
-    <string name="l10n_apple_health_screen_nothing_imported_yet_f457cdbe">暂无导入记录</string>
-    <string name="l10n_apple_health_screen_reading_your_apple_health_history_1a3bf76d">正在读取您的 Apple Health 历史数据…</string>
     <string name="l10n_auto_workout_nudge_dismiss_this_workout_suggestion_52ace8f3">忽略此运动建议</string>
     <string name="l10n_auto_workout_nudge_looks_like_a_workout_e745e403">看起来像是一场运动</string>
     <string name="l10n_auto_workout_nudge_not_a_workout_15c5f784">不是运动</string>
@@ -360,13 +355,11 @@
     <string name="l10n_coupled_screen_recovery_b668d988">身体恢复</string>
     <string name="l10n_coupled_screen_sleep_performance_4611539f">睡眠表现</string>
     <string name="l10n_data_sources_screen_acts_as_a_standard_bluetooth_heart_f8d13439">作为标准的蓝牙心率手环使用。从你的跑步机、单车或应用中配对 NOOP，即可在那里看到手环的心率。</string>
-    <string name="l10n_data_sources_screen_apple_health_b19b87da">Apple Health</string>
     <string name="l10n_data_sources_screen_auto_sync_health_connect_periodically_6f3f4d92">定期自动同步 Health Connect</string>
     <string name="l10n_data_sources_screen_auto_sync_periodically_5f3041e8">定期自动同步</string>
     <string name="l10n_data_sources_screen_broadcast_heart_rate_as_a_bluetooth_6a44fdb4">作为蓝牙心率传感器广播心率</string>
     <string name="l10n_data_sources_screen_broadcast_hr_from_this_phone_10e5605c">从此手机广播心率</string>
     <string name="l10n_data_sources_screen_broadcast_hr_is_on_your_strap_0ad5368a">心率广播已开启。此手机正在持续广播心率，这会使蓝牙保持活跃并更快耗电。当你不与其他设备一起使用时，请将其关闭。</string>
-    <string name="l10n_data_sources_screen_cancel_77dfd213">取消</string>
     <string name="l10n_data_sources_screen_data_sources_5e43d6bb">数据源</string>
     <string name="l10n_data_sources_screen_every_3560d90b">每隔</string>
     <string name="l10n_data_sources_screen_health_connect_be6bca3e">Health Connect</string>
@@ -378,7 +371,6 @@
     <string name="health_connect_category_activity_detail">步数、卡路里、锻炼、距离和最大摄氧量</string>
     <string name="health_connect_category_body_composition">身体成分</string>
     <string name="health_connect_category_body_composition_detail">体重、体脂和瘦体重</string>
-    <string name="l10n_data_sources_screen_import_apple_health_export_533fca27">导入 Apple Health 数据包…</string>
     <string name="l10n_data_sources_screen_import_from_health_connect_35d55e21">从 Health Connect 导入</string>
     <string name="l10n_data_sources_screen_import_lifting_log_8fac7b68">导入举重记录…</string>
     <string name="l10n_data_sources_screen_import_mi_band_export_e587801c">导入小米手环导出包…</string>
@@ -393,12 +385,8 @@
     <string name="l10n_data_sources_screen_off_e3de5ab0">关闭</string>
     <string name="l10n_data_sources_screen_oura_fitbit_garmin_export_7b21682f">Oura / Fitbit / Garmin 导出文件</string>
     <string name="l10n_data_sources_screen_re_pull_new_health_connect_data_3e9c3914">定期重新拉取 Health Connect 中的新数据 (例如 三星健康 → Health Connect)，间隔： time you open NOOP, if it\'s been longer than the interval below. Read-only; never overwrites strap data.</string>
-    <string name="l10n_data_sources_screen_remove_apple_health_imported_data_5f878502">移除 Apple Health 导入的数据？</string>
-    <string name="l10n_data_sources_screen_remove_e963907d">移除</string>
-    <string name="l10n_data_sources_screen_remove_imported_data_813e4695">移除导入的数据</string>
     <string name="l10n_data_sources_screen_share_back_to_health_connect_1d578f4a">回传至 Health Connect</string>
     <string name="l10n_data_sources_screen_share_computed_metrics_back_to_health_c11f5d70">将计算出的健康指标回传至 Health Connect</string>
-    <string name="l10n_data_sources_screen_this_permanently_deletes_everything_imported_from_f42e760e">这将永久删除从 Apple 健康导入的一切，心率、HRV、睡眠、步数、锻炼等。你的实时手环数据不受影响。此操作无法撤销。</string>
     <string name="l10n_data_sources_screen_whoop_history_db101974">WHOOP 历史数据</string>
     <string name="l10n_data_sources_screen_whoop_strap_live_ble_217f7df6">WHOOP 手环 (实时蓝牙连线)</string>
     <string name="l10n_data_sources_screen_workout_file_gpx_tcx_fit_5469c068">运动轨迹文件 (GPX / TCX / FIT)</string>
@@ -707,7 +695,6 @@
     <string name="l10n_onboarding_screen_health_connect_is_not_available_on_0336b16d">此设备不支持 Health Connect（健康连接）。</string>
     <string name="l10n_onboarding_screen_height_3f608b49">身高</string>
     <string name="l10n_onboarding_screen_history_fills_the_dashboard_immediately_9728dde5">历史数据将立即填充您的仪表盘</string>
-    <string name="l10n_onboarding_screen_import_apple_health_export_077b5624">导入 Apple Health 数据包</string>
     <string name="l10n_onboarding_screen_import_from_health_connect_35d55e21">从 Health Connect 导入</string>
     <string name="l10n_onboarding_screen_import_whoop_export_zip_16f4176b">导入 WHOOP 历史数据 (.zip)</string>
     <string name="l10n_onboarding_screen_light_a36ef8ab">浅色</string>
@@ -1813,7 +1800,7 @@
     <string name="onboarding_cta_enter">进入 NOOP</string>
     <string name="onboarding_three_promises">三个安静的承诺。</string>
     <string name="onboarding_recovery_body">一个简洁的圆环将 HRV、静息心率和睡眠汇总成直观结果，帮助你判断该加把劲还是该休息。</string>
-    <string name="onboarding_live_hr_body">连接 WHOOP、心率带或健身器械，即可实时查看每一次心跳，并使用与你的个人资料相匹配的心率区间。其他服务中已有历史数据？可从 WHOOP、Apple 健康、Oura、Fitbit 或 Garmin 导入。</string>
+    <string name="onboarding_live_hr_body">连接 WHOOP、心率带或健身器械，即可实时查看每一次心跳，并使用与你的个人资料相匹配的心率区间。</string>
     <string name="onboarding_local_data_body">所有内容都保存在这台手机上。无需账号、无需同步、无需云端。</string>
     <string name="onboarding_expectations_subtitle">几句实话，免得让你意外。</string>
     <string name="onboarding_expectation_independent_body">NOOP 是一个个人开放项目：它不是 WHOOP 应用，也与 WHOOP 无关。它只在你自己的设备上读取你拥有的手环。请将它视为一个功能强大但仍在开发中的项目，而不是成品。</string>

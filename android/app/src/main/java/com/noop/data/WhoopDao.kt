@@ -947,6 +947,10 @@ interface WhoopDao : DeviceRegistryDao {
     @Query("SELECT COUNT(*) FROM dailyMetric WHERE deviceId = :deviceId")
     suspend fun daysCount(deviceId: String): Int
 
+    /** Count unique days across several source ids without materializing their daily rows. */
+    @Query("SELECT COUNT(DISTINCT day) FROM dailyMetric WHERE deviceId IN (:deviceIds)")
+    suspend fun distinctDailyDaysCount(deviceIds: List<String>): Int
+
     /** Reactive stream of all daily metrics for a device, oldest first. */
     @Query("SELECT * FROM dailyMetric WHERE deviceId = :deviceId ORDER BY day ASC")
     fun daysFlow(deviceId: String): Flow<List<DailyMetric>>
@@ -1255,6 +1259,14 @@ interface WhoopDao : DeviceRegistryDao {
      *  badges that were materializing the row list for `.size`. */
     @Query("SELECT COUNT(*) FROM workout WHERE deviceId = :deviceId AND startTs >= :from AND startTs <= :to")
     suspend fun workoutsCount(deviceId: String, from: Long, to: Long): Int
+
+    /** Exact workout count across source ids, deduplicated by the same (startTs, sport) key as the repository union. */
+    @Query(
+        "SELECT COUNT(*) FROM (SELECT startTs, sport FROM workout " +
+            "WHERE deviceId IN (:deviceIds) AND startTs >= :from AND startTs <= :to " +
+            "GROUP BY startTs, sport)"
+    )
+    suspend fun workoutsUnionCount(deviceIds: List<String>, from: Long, to: Long): Int
 
     /**
      * #1058: sum per-session `steps` over one source's workouts whose startTs is in [from, to). Used to

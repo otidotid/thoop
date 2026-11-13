@@ -41,7 +41,7 @@ class GermanLocalizationTest {
         val out = LinkedHashMap<String, String>()
         // Construct kXML2's KXmlParser directly (the testImplementation dep). We avoid
         // XmlPullParserFactory.newInstance() because android.jar ships a *stub* factory whose
-        // newInstance() throws "Stub!" on the JVM unit-test classpath (see AppleHealthImporterToleranceTest).
+        // newInstance() throws "Stub!" on the JVM unit-test classpath, so this test constructs KXmlParser directly.
         val parser = Class.forName("org.kxml2.io.KXmlParser")
             .getDeclaredConstructor().newInstance() as XmlPullParser
         file.inputStream().use { input ->
