@@ -91,12 +91,17 @@ export default {
         }
       }
 
-      const intent = classifyIntent(question);
+      // Keep food logging compatible with the Android Nutrition Review contract.
+      // A follow-up may refer to a meal in the previous user turn.
+      const intent = resolveFoodLogIntent(question, recentMessages);
+      const foodStatement = intent === "food_log"
+        ? foodStatementForReview(question, recentMessages)
+        : question;
       // Never send raw personal health questions to public reference services.
       const referenceEnabled = env.DISABLE_EXTERNAL_REFERENCES !== "true";
       const [nutritionReferences, healthReferences] = await Promise.all([
         referenceEnabled && ["food_log", "food_preview"].includes(intent)
-          ? lookupNutritionReferences(question)
+          ? lookupNutritionReferences(foodStatement)
           : Promise.resolve(""),
         referenceEnabled ? lookupHealthReferences(question) : Promise.resolve({ text: "", items: [] }),
       ]);
@@ -106,13 +111,15 @@ export default {
       });
 
       const aiOutput = await callWorkersAI(env, prompt, question);
-      const answer = cleanText(aiOutput.answer, 16000);
-      if (!answer) throw new HttpError(502, "Cloud Coach could not produce a valid response", true);
+      const modelAnswer = cleanText(aiOutput.answer, 16000);
+      if (!modelAnswer) throw new HttpError(502, "Cloud Coach could not produce a valid response", true);
 
-      // Food logging remains a preview; the Android app chooses whether to save it.
+      // Structured nutrition is mandatory for Android's SAVE TO CALORIES INTAKE review.
+      // The Worker cannot save food to the phone's SQLite database.
       const nutrition = intent === "food_log"
-        ? await estimateNutritionSafely(env, question, nutritionReferences, body.localHour)
+        ? await estimateNutritionSafely(env, foodStatement, nutritionReferences, body.localHour)
         : null;
+      const answer = finalizeCoachAnswer(modelAnswer, intent, nutrition);
       let memorySaved = false;
       if (env.DB) {
         try {
@@ -137,7 +144,7 @@ export default {
       return jsonResponse({
         answer,
         conversationId,
-        intent: normalizeIntent(aiOutput.intent),
+        intent,
         nutrition,
         references: healthReferences.items,
         memorySaved,
@@ -239,6 +246,10 @@ function buildCoachPrompt({
     "You are a seasoned, practical coach for health, fitness, recovery, sleep, activity, stress, and nutrition.",
     "Use the judgment of a deeply experienced coach, but never claim a medical license or diagnose disease.",
     "Read the supplied THOOP data and confirmed food log before advising.",
+    "CRITICAL FOOD INTEGRITY: Only foods explicitly present in TODAY'S CONFIRMED NUTRITION LOG are already saved.",
+    "You cannot save, insert, or modify the Android Calories Intake database. Do not claim any meal is saved, logged, added, or recorded by this chat.",
+    "For newly described food, discuss the estimate but instruct the user to review and tap SAVE TO CALORIES INTAKE. A nutrition estimate alone is NOT a saved entry.",
+    "If there are no confirmed food entries, acknowledge that the app currently has none even if previous assistant messages claim they were saved.",
     "For health or lifestyle concerns, connect relevant personal trends with the supplied live internet evidence.",
     "Clearly separate observations from personal THOOP data and general evidence-based guidance.",
     "If personal data is missing, do not treat it as zero. Give conservative general guidance and say it is not personalized.",
@@ -420,18 +431,75 @@ function classifyIntent(question) {
   const text = String(question || "").trim().toLowerCase();
   if (!text) return "chat";
 
-  const summary = /(makanan|food|nutrisi|nutrition|kalori|calorie|protein|karbo|carb|lemak|fat|serat|fiber).*(hari ini|today|sudah|udah|tercatat|logged)|(?:hari ini|today).*(makanan|food|nutrisi|nutrition|kalori|calorie|protein|karbo|carb|lemak|fat|serat|fiber)/i;
-  if (summary.test(text) || /(makanan saya hari ini gimana|saya sudah makan apa|what did i eat today)/i.test(text)) {
+  // A complaint about an earlier turn is not a new meal on its own.
+  if (isFoodLogFollowUp(text)) return "chat";
+
+  // Hypothetical meals must never be saved as consumed.
+  const preview = /\b(?:what if|if i|should i|can i|planning to|plan to|going to|will eat|want to eat)\b|\b(?:kalau|rencana|ingin makan|mau makan|boleh makan|cocok makan)\b/i;
+  if (preview.test(text)) return "food_preview";
+
+  // Questions about already CONFIRMED intake are not new log requests.
+  const summary = /\b(?:what did i eat|what have i eaten|how many calories|calories (?:so far|today)|total (?:calories|protein|carbs|fat)|food logged|no food logged|nothing logged|already logged|nutrition summary|food diary)\b|\b(?:berapa kalori|makanan hari ini|sudah (?:makan|tercatat)|belum (?:tercatat|dicatat)|rekap (?:makanan|kalori)|total kalori)\b/i;
+  if (summary.test(text) && !/\b(?:please log|log this|log my|add this|save this|catat|masukkan)\b/i.test(text)) {
     return "nutrition_summary";
   }
 
-  const preview = /(kalau|if|mau|ingin|rencana|plan|boleh|cocok).*(makan|eat|drink|minum)|(?:makan|eat|drink|minum).*(gimana|bagaimana|what if|boleh|cocok)/i;
-  if (preview.test(text)) return "food_preview";
+  // THOOP users describe meals naturally; don't require the exact words "I ate".
+  const explicit = /\b(?:log|record|track|save|add|input)\b[\s\S]{0,100}\b(?:my |this |the )?(?:food|meal|breakfast|lunch|dinner|snack|calories|intake)\b|\b(?:catat|masukkan|tambahkan|simpan)\b[\s\S]{0,100}\b(?:makanan|sarapan|makan|kalori|asupan)\b/i;
+  const consumed = /\b(?:i|i've|i have|we|saya|aku|gue|gw)\s+(?:(?:just|already|baru|tadi|sudah|udah|habis|baru saja)\s+){0,3}(?:ate|eat|eaten|had|have eaten|consumed|drank|drink|makan|memakan|minum|sarapan)\b|\b(?:for (?:my )?(?:breakfast|lunch|dinner)|my (?:breakfast|lunch|dinner|snack) (?:was|is)|sarapan saya|makan siang saya|makan malam saya)\b/i;
+  if (explicit.test(text) || consumed.test(text)) return "food_log";
 
-  const log = /(saya|aku|i)\s+(tadi\s+)?(makan|memakan|minum|ate|had|drank)|(?:catat|log|tambahkan|add).*(makan|food|meal|drink)/i;
-  if (log.test(text)) return "food_log";
+  // A list with portion quantities and recognizable food words is also a log.
+  const portion = /\b\d+(?:[.,]\d+)?\s*(?:g|gr|gram|grams|kg|ml|pcs?|pieces?|slices?|portions?|servings?|buah|butir|porsi|lembar)\b|\b\d+\s+(?:bananas?|eggs?|sosis|sausages?|chicken breasts?|breads?|apples?|oranges?)\b/i;
+  const foods = /\b(?:chicken|bread|banana|rice|egg|beef|fish|milk|coffee|noodles|siomay|sosis|ayam|nasi|roti|pisang|telur|ikan|mie|susu|tempe|tahu)\b/i;
+  if (portion.test(text) && foods.test(text) && !/\?$/.test(text)) return "food_log";
 
   return "chat";
+}
+
+function isFoodLogFollowUp(question) {
+  return /\b(?:i (?:just |already )?told you|just told you|i mentioned|i already said|i gave you my (?:food|meal)|why (?:are|do) you ask(?:ing)? again|you (?:keep|are) asking again|what i (?:just )?(?:ate|had)|saya (?:sudah|udah|tadi) (?:bilang|kasih tahu))\b/i.test(String(question || ""));
+}
+
+function findPriorFoodStatement(recentMessages) {
+  for (let i = recentMessages.length - 1; i >= 0; i--) {
+    const item = recentMessages[i];
+    if (item.role === "user" && !isFoodLogFollowUp(item.text) && classifyIntent(item.text) === "food_log") {
+      return item.text;
+    }
+  }
+  return "";
+}
+
+function resolveFoodLogIntent(question, recentMessages) {
+  const direct = classifyIntent(question);
+  return direct === "chat" && isFoodLogFollowUp(question) && findPriorFoodStatement(recentMessages)
+    ? "food_log"
+    : direct;
+}
+
+function foodStatementForReview(question, recentMessages) {
+  return isFoodLogFollowUp(question)
+    ? findPriorFoodStatement(recentMessages) || question
+    : question;
+}
+
+// Explicitly distinguish an AI answer from a locally committed nutrition entry.
+function finalizeCoachAnswer(rawAnswer, intent, nutrition) {
+  const falseSavedClaim = /\b(?:i(?:'ve| have)?|we(?:'ve| have)?)\s+(?:already\s+)?(?:saved|logged|recorded|added)\b|\b(?:your|the|this|that)\s+(?:meal|breakfast|lunch|dinner|food|entry)\s+(?:has been|is|was)\s+(?:saved|logged|added|recorded)\b/i;
+  if (intent === "food_log") {
+    if (!nutrition) {
+      return "I understood that you shared food, but I couldn't prepare a valid Nutrition Review entry. Nothing was saved to Calories Intake. Please try again with the foods and amounts, or enter them directly in Calories Intake.";
+    }
+    const text = falseSavedClaim.test(rawAnswer)
+      ? "I've prepared a nutrition estimate for the foods you described."
+      : rawAnswer;
+    return cleanText(text + "\n\nNothing has been saved to Calories Intake yet. Check the Nutrition Review card below and tap SAVE TO CALORIES INTAKE to confirm.", 16000);
+  }
+  if (falseSavedClaim.test(rawAnswer)) {
+    return "I can't confirm a saved food entry from this chat. Please check Calories Intake: only confirmed entries in that module count as logged. If it is empty, the meal still needs to be saved.";
+  }
+  return rawAnswer;
 }
 
 async function runAIWithDeadline(ai, parameters, timeoutMs) {
