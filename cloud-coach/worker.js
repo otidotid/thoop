@@ -388,9 +388,31 @@ async function estimateNutritionSafely(env, question, references, localHour) {
       max_tokens: 900,
       temperature: 0.15,
     }, NUTRITION_AI_TIMEOUT_MS);
-    const raw = extractWorkersText(result);
-    const parsed = extractFirstJsonObject(raw);
-    return normalizeNutrition(parsed, question, localHour);
+    // An answer-shaped model reply must not silently bypass the Android
+    // Nutrition Review card. Retry once with a minimal contract instead.
+    let first = null;
+    try {
+      first = normalizeNutrition(extractFirstJsonObject(extractWorkersText(result)), question, localHour);
+    } catch (_) {
+      // Invalid JSON: repair with one bounded, simpler model call below.
+    }
+    if (first) return first;
+    const repair = await runAIWithDeadline(env.AI, {
+      messages: [
+        {
+          role: "system",
+          content: "Nutrition estimate only. Output EXACTLY one valid compact JSON object. Required keys: foodName (string) and caloriesKcal (number). Optional keys: proteinGrams, carbohydrateGrams, fatGrams, servingDescription, confidence. No markdown. No apology. Never say you saved the food.",
+        },
+        {
+          role: "user",
+          content: "Estimate this actual consumed meal, conservatively, combining all listed items into one meal: " + cleanText(question, 1000),
+        },
+      ],
+      reasoning_effort: "low",
+      max_tokens: 450,
+      temperature: 0.1,
+    }, NUTRITION_AI_TIMEOUT_MS);
+    return normalizeNutrition(extractFirstJsonObject(extractWorkersText(repair)), question, localHour);
   } catch (error) {
     console.warn("Nutrition estimate unavailable", String(error));
     return null;
