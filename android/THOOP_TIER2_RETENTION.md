@@ -1,54 +1,51 @@
-# THOOP Android — Tier 2 history design (not enabled)
+# THOOP Android — Rolling hybrid history (partial integration)
 
-This file documents the **THOOP fork's proposed optional online-history feature**. It does **not**
-change upstream NOOP's scope in `../AGENTS.md` and `../docs/SCOPE.md`; those documents currently
-exclude cloud read-back. A deliberate fork-specific change to that boundary, with explicit user
-consent and no NOOP-operated account/server, is required before online history ships.
+> **Never delete or offload source data.** All original records stay in the two local databases.
+> Google Drive history is an additional encrypted copy, not the only place data exists.
 
-## Planned calendar-day policy
+## Calendar-day rolling window
 
-| Record age as of the phone's local day | Target behaviour |
-|---|---|
-| Today through 14 days old | Full detail stored locally and readable offline |
-| 15 through 21 days old | Compact per-day/per-session local summary; full detail in encrypted user-owned storage |
-| 22 days or older | History online only, with explicit download/read-back when requested |
+| Age of record on this phone | Presentation tier | Data retention |
+|---|---|---|
+| Today–14 days ago | Full local detail | Original remains local |
+| 15–21 days ago (exactly 7 days) | Compact daily snapshots (generated on opening the backup/history screen) | Original remains local |
+| 22+ days ago | Eligible for verified encrypted Google Drive rolling archive and online day preview | Original remains local |
 
-The range is **inclusive**: `today - 14 days` is still full local; `today - 21 days` is still a
-local snapshot. Operational data (pairings, definitions, day ownership) and anti-resurrection
-tombstones remain on-device and are not treated as historical detail to purge.
+The window advances by **one day every calendar day**. Example on November 13, 2026:
+October 23–29 are the seven snapshot days; October 22 and earlier are cloud-eligible.
+On November 14, October 23 becomes cloud-eligible. Each month archive can contain only
+records up to the eligible cutoff date. Incomplete months are re-uploaded on the next
+**manual** sync if more days have become eligible. Previously verified encrypted files
+are kept; only the local archive manifest is updated after a new copy is downloaded,
+decrypted and checked. The passphrase never persists on the device.
 
-This design is not a promise that offline analytics will work for older dates. Any screen,
-trend, benchmark, source resolver or score that needs old records must first be adapted to fetch
-verified historical data, or explain clearly that the network is required. Sources must remain
-separate: WHOOP, Zepp/Amazfit, Garmin, other devices, manual logs and imports must not be merged
-solely because their dates match.
+## Already wired in this patch
 
-## Table inventory
+- `HybridHistoryPolicy.kt` centralizes the rolling day boundaries and cutoff tests.
+- The existing local compact-snapshot builder refreshes when the Backup/History
+  account screen opens, even without internet, and its summaries display without Drive authorization.
+- `GoogleDriveArchiveManager` can now prepare verified encrypted *partial months* through
+  day 22, and refresh those months when another day becomes eligible.
+- The Backup/History card can preview exactly one eligible day via verified Drive archive,
+  as well as open an entire archived month.
+- All sources, app databases, full encrypted backups and existing scheduled backups are unchanged.
 
-`app/src/main/java/com/noop/data/RetentionPlan.kt` declares every current main-health Room table
-(34) and the separate `foodIntake` table (1). The JVM test compares this registry against
-`@Entity(tableName = ...)` declarations and rejects tables added without a policy. Lifting sets
-must use their parent `liftSession` date; tombstones and reusable definitions remain local.
+## Important remaining limitations
 
-This is only **classification**. No existing DAO uses this registry, and it performs no archive,
-upload, download, database migration, read-limit change or deletion.
+1. **Encrypted Drive archive updates remain manual**: press **Sync rolling encrypted archives**
+   while connected to Google Drive and provide the user-held recovery passphrase. This is
+   deliberate; storing the passphrase to allow unattended daily uploads would weaken security.
+   A date becoming eligible does NOT automatically mean it has been uploaded that day.
+2. The current month-history archive contains the **main health database**. The separate food
+   database is covered by the manual encrypted *full recovery backup*, but not this month archive.
+3. This patch adds day-level browsing to **Backup & History**, not automatic cloud hydration
+   inside *every* training, labs, journal or nutrition screen. Those other screens continue to
+   read their complete local data (which is preserved).
+4. Google Drive archive manifests remain stored locally. Cloud rediscovery on a newly
+   initialized device is not included; the encrypted full recovery backup remains the
+   supported disaster-recovery mechanism.
+5. Repeated manual partial-month refreshes create additional immutable encrypted Drive
+   objects. Existing objects are not deleted. Expect additional Drive storage use.
 
-## Gates before any automatic offloading
-
-1. Explicitly accept and document the optional cloud read-back boundary for this fork; keep it
-   user-configurable and off by default, with no change to BLE sync or existing background jobs.
-2. Use authenticated encryption for archive contents and a portable recovery mechanism; a SHA-256
-   checksum alone is not encryption. The current `.nooparc`/`.noopbak` ZIPs do not provide this.
-3. Include both `noop_whoop.db` **and** `thoop_food_intake.db` in verified backup/restore plans.
-4. Design compact snapshots separately for HR/HRV, steps, sleep, workouts, nutrition, journals,
-   lab values, mood/cycle metrics, and live/strength sessions, retaining source and quality info.
-5. Implement encrypted upload, verified download, read-only history and full restoration tests
-   BEFORE allowing any cleanup. Existing monthly archive handling cannot by itself support
-   rolling 15/22-day transitions or partial months safely.
-6. Run a **dry-run report** of exactly which rows would move and which archives prove they are safe;
-   refuse cleanup on missing/unknown tables, failed checks, missing network or restore errors.
-7. Enable deletion only after an explicit, separately reviewed change. No auto deletion is included
-   in the present patch.
-
-**Background processes remain unchanged.** Neither the BLE foreground service nor any worker,
-widget, backup scheduler or automatic sync process is modified by this plan.
+This patch does not touch BLE, the health calculation algorithms, scheduled background
+services, Google Drive full backup/restore behavior, or the v13.1.0 release tag.

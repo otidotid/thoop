@@ -29,6 +29,7 @@ import com.noop.data.GoogleDriveBackupClient
 import com.noop.data.GoogleDriveBackupCoordinator
 import com.noop.data.GoogleDriveArchiveManager
 import com.noop.data.CompactDailySnapshots
+import com.noop.data.HybridHistoryPolicy
 import com.noop.data.DataBackup
 import com.noop.data.CloudBackupCadence
 import com.noop.data.CloudBackupSchedule
@@ -38,6 +39,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 import java.time.YearMonth
+import java.time.LocalDate
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -123,10 +125,22 @@ internal fun GoogleAccountCard() {
     // Transient, opt-in passphrase prompt. No password is written to settings or Drive metadata.
     var showArchivePassphraseDialog by remember { mutableStateOf(false) }
     var archiveOpenMonth by remember { mutableStateOf<YearMonth?>(null) }
+    var archiveOpenDay by remember { mutableStateOf<LocalDate?>(null) }
+    var selectedHistoryDay by remember {
+        mutableStateOf(HybridHistoryPolicy.archiveCutoff(LocalDate.now()).toString())
+    }
     var archivePassphrase by remember { mutableStateOf("") }
     var archivePassphraseConfirm by remember { mutableStateOf("") }
     var archiveMigrationMonth by remember { mutableStateOf<YearMonth?>(null) }
     var compactSnapshots by remember { mutableStateOf<List<CompactDailySnapshots.Summary>>(emptyList()) }
+    // Each screen opening rebuilds the rolling seven-day cache using the actual local day.
+    // No Google Drive token, passphrase or internet connection is needed.
+    LaunchedEffect(snapshotsManager) {
+        runCatching { snapshotsManager.refresh() }
+            .onSuccess { compactSnapshots = it }
+            .onFailure { errorMessage = "Local history snapshot could not refresh: " +
+                (it.message?.take(120) ?: "please try again") }
+    }
     // Full disaster-recovery backups use a user-held password. Never persist the password
     // to preferences or Google Drive metadata; another phone can restore with the same secret.
     var fullBackupAction by remember { mutableStateOf<String?>(null) }
@@ -307,6 +321,7 @@ internal fun GoogleAccountCard() {
                         val token = driveAccessToken ?: return@TextButton
                         val owner = account?.accountId ?: return@TextButton
                         val month = archiveOpenMonth
+                        val day = archiveOpenDay
                         val migrationMonth = archiveMigrationMonth
                         val secret = archivePassphrase.toCharArray()
                         archivePassphrase = ""
@@ -325,12 +340,19 @@ internal fun GoogleAccountCard() {
                                     val created = archiveManager.createAndVerifyArchives(token, owner, secret)
                                     archiveRecords = archiveManager.archives()
                                     backupStatus = if (created.isEmpty()) {
-                                        "No new monthly archives needed. Existing archives were not modified."
+                                        "Rolling cloud history is current through " +
+                                            "${HybridHistoryPolicy.archiveCutoff(LocalDate.now())}. Local data kept."
                                     } else {
-                                        "Encrypted and verified ${created.size} monthly archive(s). Local data was kept."
+                                        "Encrypted and verified ${created.size} rolling archive(s), " +
+                                            "through ${HybridHistoryPolicy.archiveCutoff(LocalDate.now())}. " +
+                                            "All local health and food data kept."
                                     }
                                 } else {
-                                    archivePreview = archiveManager.previewMonthOnline(token, month, secret)
+                                    archivePreview = if (day == null) {
+                                        archiveManager.previewMonthOnline(token, month, secret)
+                                    } else {
+                                        archiveManager.previewDayOnline(token, day, secret)
+                                    }
                                 }
                             } catch (failure: Exception) {
                                 errorMessage = if (month == null) {
@@ -353,13 +375,16 @@ internal fun GoogleAccountCard() {
     archivePreview?.let { preview ->
         AlertDialog(
             onDismissRequest = { archivePreview = null },
-            title = { Text("Archived History · ${preview.record.month}") },
+            title = { Text("Archived History · ${preview.selectedDay ?: preview.record.month}") },
             text = {
                 Column(
                     modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(Metrics.space12),
                 ) {
-                    Text("Read-only preview", style = NoopType.subhead, color = Palette.accent)
+                    Text("Read-only verified online history", style = NoopType.subhead, color = Palette.accent)
+                    preview.record.coveredThrough?.let {
+                        Text("Archived through: $it", style = NoopType.footnote, color = Palette.textSecondary)
+                    }
                     Text("Total records: ${preview.totalRecords}", style = NoopType.body, color = Palette.textPrimary)
                     Text("Schema: ${preview.record.schemaVersion} · " +
                         (if (preview.record.encrypted) "Encrypted + authenticated" else "Legacy unencrypted") +
@@ -613,7 +638,7 @@ internal fun GoogleAccountCard() {
 
             if (driveAuthorized && currentAccount != null) {
                 NoopButton(
-                    text = if (driveBusy) "Working with Google Drive..." else "Create & Verify Encrypted Archives",
+                    text = if (driveBusy) "Working with Google Drive..." else "Sync rolling encrypted archives (day 22+)",
                     fullWidth = true,
                     enabled = !driveBusy && !busy,
                     onClick = {
@@ -621,6 +646,7 @@ internal fun GoogleAccountCard() {
                             errorMessage = "Google Drive authorization expired. Connect Google Drive again."
                         } else {
                             archiveOpenMonth = null
+                            archiveOpenDay = null
                             archiveMigrationMonth = null
                             archivePassphrase = ""
                             archivePassphraseConfirm = ""
@@ -647,20 +673,60 @@ internal fun GoogleAccountCard() {
                         }
                     },
                 )
-                if (compactSnapshots.isNotEmpty()) {
-                    Text("Local compact summaries · source data preserved", style = NoopType.subhead, color = Palette.textPrimary)
-                    compactSnapshots.take(18).forEach { snapshot ->
-                        val details = buildList {
-                            snapshot.sleepMin?.let { add("sleep ${it.toInt()} min") }
-                            snapshot.avgHrv?.let { add("HRV ${it.toInt()} ms") }
-                            snapshot.steps?.let { add("${it} steps") }
-                            snapshot.foodCalories?.let { add("${it.toInt()} kcal") }
-                            add("${snapshot.recordCount} records")
+                Text(
+                    "Cloud history is eligible from day 22 onward. " +
+                        "Days 15–21 use the rolling local snapshot window; " +
+                        "no local records are deleted.",
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
+                )
+                OutlinedTextField(
+                    value = selectedHistoryDay,
+                    onValueChange = { selectedHistoryDay = it.take(10) },
+                    label = { Text("Online history day (YYYY-MM-DD)") },
+                    singleLine = true,
+                )
+                NoopButton(
+                    text = "Open verified online history for day",
+                    kind = NoopButtonKind.Secondary,
+                    fullWidth = true,
+                    enabled = !driveBusy,
+                    onClick = {
+                        val day = runCatching { LocalDate.parse(selectedHistoryDay.trim()) }.getOrNull()
+                        val token = driveAccessToken
+                        when {
+                            day == null -> errorMessage = "Enter a valid day in YYYY-MM-DD format."
+                            HybridHistoryPolicy.tier(day, LocalDate.now()) !=
+                                HybridHistoryPolicy.Tier.ENCRYPTED_CLOUD_ELIGIBLE -> {
+                                errorMessage = "This date is not yet in the cloud window. " +
+                                    "Cloud history starts at day 22."
+                            }
+                            token == null -> errorMessage = "Reconnect Google Drive to read online history."
+                            else -> {
+                                val record = archiveRecords.firstOrNull { it.month == YearMonth.from(day).toString() }
+                                if (record == null) {
+                                    errorMessage = "This day has no verified cloud archive yet. " +
+                                        "Use Sync rolling encrypted archives first."
+                                } else if (record.encrypted) {
+                                    archiveOpenDay = day
+                                    archiveOpenMonth = YearMonth.from(day)
+                                    archiveMigrationMonth = null
+                                    archivePassphrase = ""
+                                    archivePassphraseConfirm = ""
+                                    showArchivePassphraseDialog = true
+                                } else {
+                                    driveBusy = true
+                                    scope.launch {
+                                        runCatching { archiveManager.previewDayOnline(token, day) }
+                                            .onSuccess { archivePreview = it }
+                                            .onFailure { errorMessage = "Unable to verify this historical day." }
+                                        driveBusy = false
+                                    }
+                                }
+                            }
                         }
-                        Text("${snapshot.day} · ${snapshot.source}: ${details.joinToString(" · ")}",
-                            style = NoopType.footnote, color = Palette.textSecondary)
-                    }
-                }
+                    },
+                )
                 NoopButton(
                     text = "Browse Archived History",
                     kind = NoopButtonKind.Secondary,
@@ -674,7 +740,9 @@ internal fun GoogleAccountCard() {
                     } else {
                         archiveRecords.sortedByDescending { it.month }.forEach { archive ->
                             NoopButton(
-                                text = "${archive.month} · ${archive.recordCount} records · " +
+                                text = "${archive.month} · " +
+                                    "through ${archive.coveredThrough ?: "month end"} · " +
+                                    "${archive.recordCount} records · " +
                                     (if (archive.encrypted) "Encrypted" else "Legacy unencrypted"),
                                 kind = NoopButtonKind.Tertiary,
                                 fullWidth = true,
@@ -685,6 +753,7 @@ internal fun GoogleAccountCard() {
                                         errorMessage = "Internet connection and Google Drive authorization are required."
                                     } else if (archive.encrypted) {
                                         archiveOpenMonth = YearMonth.parse(archive.month)
+                                        archiveOpenDay = null
                                         archivePassphrase = ""
                                         archivePassphraseConfirm = ""
                                         showArchivePassphraseDialog = true
@@ -710,6 +779,7 @@ internal fun GoogleAccountCard() {
                                     enabled = !driveBusy,
                                     onClick = {
                                         archiveOpenMonth = null
+                                        archiveOpenDay = null
                                         archiveMigrationMonth = YearMonth.parse(archive.month)
                                         archivePassphrase = ""
                                         archivePassphraseConfirm = ""
@@ -721,12 +791,39 @@ internal fun GoogleAccountCard() {
                     }
                 }
                 Text(
-                    "The current monthly-archive window remains 90 days. New monthly archives are encrypted; " +
-                        "older ones may still be unencrypted. This does NOT encrypt full .noopbak backups. " +
-                        "No local history is deleted.",
+                    "Rolling archives cover days 22+ when you manually verify and sync. " +
+                        "Partial months are updated as each new day becomes eligible. " +
+                        "Encrypted cloud history does not replace your local data or full backups.",
                     style = NoopType.footnote,
                     color = Palette.textSecondary,
                 )
+            }
+            Text(
+                "Rolling local history · days 15–21 (offline)",
+                style = NoopType.subhead,
+                color = Palette.textPrimary,
+            )
+            Text(
+                "Rebuilt when this screen opens. All detailed source records stay on your phone.",
+                style = NoopType.footnote,
+                color = Palette.textSecondary,
+            )
+            if (compactSnapshots.isEmpty()) {
+                Text("No daily snapshot data in this seven-day window.",
+                    style = NoopType.footnote, color = Palette.textSecondary)
+            } else {
+                compactSnapshots.take(35).forEach { snapshot ->
+                    val details = buildList {
+                        snapshot.sleepMin?.let { add("sleep ${it.toInt()} min") }
+                        snapshot.avgHrv?.let { add("HRV ${it.toInt()} ms") }
+                        snapshot.recovery?.let { add("recovery ${it.toInt()}") }
+                        snapshot.steps?.let { add("${it} steps") }
+                        snapshot.foodCalories?.let { add("${it.toInt()} kcal") }
+                        add("${snapshot.recordCount} records")
+                    }
+                    Text("${snapshot.day} · ${snapshot.source}: ${details.joinToString(" · ")}",
+                        style = NoopType.footnote, color = Palette.textSecondary)
+                }
             }
             errorMessage?.let { message ->
                 Text(

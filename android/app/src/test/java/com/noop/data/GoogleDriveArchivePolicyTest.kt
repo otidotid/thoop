@@ -5,9 +5,9 @@ import org.junit.Test
 import java.time.LocalDate
 
 class GoogleDriveArchivePolicyTest {
-    @Test fun retentionWindowKeepsTodayAndPrevious89Days() {
-        val today = LocalDate.of(2026, 11, 9)
-        assertEquals(LocalDate.of(2026, 8, 12), today.minusDays(89))
+    @Test fun cloudEligibilityStartsOnDay22() {
+        val today = LocalDate.of(2026, 11, 13)
+        assertEquals(LocalDate.of(2026, 10, 22), HybridHistoryPolicy.archiveCutoff(today))
     }
 
     @Test fun manifestRecordPreservesVerificationFields() {
@@ -24,15 +24,12 @@ class GoogleDriveArchivePolicyTest {
     }
 
     @Test
-    fun onlyCompleteMonthsAreEligibleForArchive() {
-        val today = LocalDate.of(2026, 11, 9)
-        val cutoff = today.minusDays(89)
-
-        assertEquals(LocalDate.of(2026, 8, 12), cutoff)
-        assertEquals(
-            java.time.YearMonth.of(2026, 7),
-            java.time.YearMonth.from(cutoff).minusMonths(1),
-        )
+    fun partialMonthsAreEligibleStartingAtDay22() {
+        val today = LocalDate.of(2026, 11, 13)
+        val cutoff = today.minusDays(22)
+        assertEquals(LocalDate.of(2026, 10, 22), cutoff)
+        assertEquals(java.time.YearMonth.of(2026, 10),
+            HybridHistoryPolicy.lastArchiveMonth(today))
     }
     @Test fun migrationKeepsTheOriginalDriveObjectReference() {
         val original = GoogleDriveArchiveRecord("2026-07", "old-id", "original-sha", 99, 42, 28, 1)

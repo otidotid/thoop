@@ -31,6 +31,8 @@ data class GoogleDriveArchiveRecord(
     val encrypted: Boolean = false,
     /** Reference to untouched original Drive object after a manual legacy encryption migration. */
     val legacyDriveFileId: String? = null,
+    /** Inclusive rolling cutoff. Null for legacy archives which cover a complete month. */
+    val coveredThrough: String? = null,
 )
 
 internal class GoogleDriveArchiveManifest(context: Context) {
@@ -52,6 +54,7 @@ internal class GoogleDriveArchiveManifest(context: Context) {
                     verifiedAtMs = item.getLong("verifiedAtMs"),
                     encrypted = item.optBoolean("encrypted", false),
                     legacyDriveFileId = item.optString("legacyDriveFileId").takeIf { it.isNotBlank() },
+                    coveredThrough = item.optString("coveredThrough").takeIf { it.isNotBlank() },
                 ))
             }
         }
@@ -66,7 +69,8 @@ internal class GoogleDriveArchiveManifest(context: Context) {
                 .put("recordCount", row.recordCount).put("schemaVersion", row.schemaVersion)
                 .put("verifiedAtMs", row.verifiedAtMs)
                 .put("encrypted", row.encrypted)
-                .put("legacyDriveFileId", row.legacyDriveFileId))
+                .put("legacyDriveFileId", row.legacyDriveFileId)
+                .put("coveredThrough", row.coveredThrough))
         }
         val temp = File(file.parentFile, "${file.name}.tmp")
         temp.writeText(array.toString(), Charsets.UTF_8)
@@ -92,27 +96,43 @@ internal class GoogleDriveArchiveManager(
         require(recoveryPassphrase.size >= 12) {
             "A recovery passphrase with at least 12 characters is required before archiving."
         }
-        val firstRetainedDay = today.minusDays(89)
-        val lastArchiveMonth = lastEligibleArchiveMonth(today)
+        // Rolling day 22 eligibility (not the old 90-day/complete-month wait).
+        // A partial current month is re-uploaded when another day becomes eligible.
+        // Archive uploads are manual: we NEVER persist the passphrase or OAuth token.
+        val lastArchiveMonth = HybridHistoryPolicy.lastArchiveMonth(today)
         val existing = manifest.read().associateBy { it.month }.toMutableMap()
         val oldest = oldestLocalMonth() ?: return@withContext emptyList()
         val created = mutableListOf<GoogleDriveArchiveRecord>()
         var month = oldest
         while (!month.isAfter(lastArchiveMonth)) {
-            if (existing[month.toString()] == null) {
-                buildUploadVerify(month, accessToken, ownerId, recoveryPassphrase).also {
+            val coveredThrough = HybridHistoryPolicy.coveredThrough(month, today)
+            val previous = existing[month.toString()]
+            if (previous == null || !HybridHistoryPolicy.isCoveredThrough(previous.coveredThrough, coveredThrough)) {
+                // Legacy plaintext archives are never silently replaced; migration remains explicit.
+                require(previous == null || previous.encrypted) {
+                    "Legacy archive $month needs explicit encryption migration before rolling refresh."
+                }
+                if (previous != null) {
+                    // Refuse a rolling refresh with the wrong passphrase: older data must stay readable.
+                    val verified = openMonthOnline(accessToken, month, recoveryPassphrase)
+                    verified.close()
+                    clearTemporaryCache(month)
+                }
+                buildUploadVerify(month, accessToken, ownerId, recoveryPassphrase, coveredThrough).also {
                     manifest.put(it); existing[it.month] = it; created += it
                 }
             }
             month = month.plusMonths(1)
         }
+        // A verified manifest entry is required for each eligible month. It is NOT permission
+        // to purge rows: all original health and food data remain on-device.
         val required = generateSequence(oldest) { it.plusMonths(1) }
-            .takeWhile { !it.isAfter(lastArchiveMonth) }.map(YearMonth::toString).toList()
-        check(required.all(existing::containsKey)) {
-            "THOOP archive verification stopped because one or more monthly archives are not verified."
-        }
-        // Deliberately archive-only. Local deletion is a separate future retention gate and may not
-        // run until an archive has also been reopened through History Browser.
+            .takeWhile { !it.isAfter(lastArchiveMonth) }
+        check(required.all { candidate ->
+            existing[candidate.toString()]?.let {
+                HybridHistoryPolicy.isCoveredThrough(it.coveredThrough, HybridHistoryPolicy.coveredThrough(candidate, today))
+            } == true
+        }) { "One or more rolling monthly archives are not verified." }
         created
     }
 
@@ -236,13 +256,27 @@ internal class GoogleDriveArchiveManager(
         val totalRecords: Long,
         /** Read-only, bounded daily detail from the downloaded archive (not a restore). */
         val history: List<String> = emptyList(),
+        val selectedDay: LocalDate? = null,
     )
 
     suspend fun previewMonthOnline(
         accessToken: String, month: YearMonth, recoveryPassphrase: CharArray? = null,
+        selectedDay: LocalDate? = null,
     ): ArchivePreview = withContext(Dispatchers.IO) {
+            if (selectedDay != null) {
+                require(YearMonth.from(selectedDay) == month) { "Selected day is outside the archive month." }
+                require(HybridHistoryPolicy.tier(selectedDay, LocalDate.now()) ==
+                    HybridHistoryPolicy.Tier.ENCRYPTED_CLOUD_ELIGIBLE) {
+                    "This day is not yet eligible for cloud history."
+                }
+            }
             val record = manifest.read().firstOrNull { it.month == month.toString() }
                 ?: error("No verified archive is registered for $month.")
+            if (selectedDay != null && record.coveredThrough != null) {
+                require(!selectedDay.isAfter(LocalDate.parse(record.coveredThrough))) {
+                    "This date has not been archived yet. Sync rolling archives first."
+                }
+            }
             val opened = openMonthOnline(accessToken, month, recoveryPassphrase)
             try {
                 val counts = linkedMapOf<String, Long>()
@@ -258,7 +292,8 @@ internal class GoogleDriveArchiveManager(
                         }
                     }
                 }
-                ArchivePreview(record, counts, counts.values.sum(), readHistoryPreview(opened, counts.keys))
+                ArchivePreview(record, counts, counts.values.sum(),
+                    readHistoryPreview(opened, counts.keys, selectedDay), selectedDay)
             } finally {
                 opened.close()
                 clearTemporaryCache(month)
@@ -266,11 +301,14 @@ internal class GoogleDriveArchiveManager(
         }
 
     /** Never selects free-text notes, waveform BLOBs, GPS routes, or Coach conversation text. */
-    private fun readHistoryPreview(db: SQLiteDatabase, tables: Set<String>): List<String> = buildList {
+    private fun readHistoryPreview(
+        db: SQLiteDatabase, tables: Set<String>, selectedDay: LocalDate? = null,
+    ): List<String> = buildList {
         if ("dailyMetric" in tables) {
             db.rawQuery(
                 "SELECT day,deviceId,totalSleepMin,avgHrv,recovery,steps FROM dailyMetric " +
-                    "ORDER BY day DESC LIMIT 12", null,
+                    (if (selectedDay == null) "" else "WHERE day = ? ") +
+                    "ORDER BY day DESC LIMIT 50", selectedDay?.let { arrayOf(it.toString()) },
             ).use { c -> while (c.moveToNext()) {
                 fun n(i: Int): String = if (c.isNull(i)) "–" else c.getString(i)
                 add("${c.getString(0)} · ${c.getString(1)} · Sleep ${n(2)} min · HRV ${n(3)} ms · Recovery ${n(4)} · Steps ${n(5)}")
@@ -278,7 +316,10 @@ internal class GoogleDriveArchiveManager(
         }
         if ("workout" in tables) {
             db.rawQuery(
-                "SELECT startTs,sport,source,durationS FROM workout ORDER BY startTs DESC LIMIT 10", null,
+                "SELECT startTs,sport,source,durationS FROM workout " +
+                    (if (selectedDay == null) "" else "WHERE startTs >= ? AND startTs < ? ") +
+                    "ORDER BY startTs DESC LIMIT 50",
+                selectedDay?.let { dayEpochWindow(it) },
             ).use { c -> while (c.moveToNext()) {
                 val day = Instant.ofEpochSecond(c.getLong(0)).atZone(ZoneId.systemDefault()).toLocalDate()
                 val duration = if (c.isNull(3)) "?" else (c.getDouble(3) / 60.0).toInt().toString()
@@ -286,19 +327,34 @@ internal class GoogleDriveArchiveManager(
             } }
         }
         if ("sleepSession" in tables) {
-            db.rawQuery("SELECT startTs,endTs,deviceId FROM sleepSession ORDER BY startTs DESC LIMIT 10", null)
+            db.rawQuery("SELECT startTs,endTs,deviceId FROM sleepSession " +
+                (if (selectedDay == null) "" else "WHERE startTs >= ? AND startTs < ? ") +
+                "ORDER BY startTs DESC LIMIT 50", selectedDay?.let { dayEpochWindow(it) })
                 .use { c -> while (c.moveToNext()) {
                     val day = Instant.ofEpochSecond(c.getLong(0)).atZone(ZoneId.systemDefault()).toLocalDate()
                     add("$day · Sleep session · ${c.getString(2)} · ${(c.getLong(1) - c.getLong(0)) / 60} min")
                 } }
         }
         if ("metricSeries" in tables) {
-            db.rawQuery("SELECT day,deviceId,`key`,value FROM metricSeries ORDER BY day DESC LIMIT 10", null)
+            db.rawQuery("SELECT day,deviceId,`key`,value FROM metricSeries " +
+                (if (selectedDay == null) "" else "WHERE day = ? ") +
+                "ORDER BY day DESC LIMIT 50", selectedDay?.let { arrayOf(it.toString()) })
                 .use { c -> while (c.moveToNext()) {
                     add("${c.getString(0)} · ${c.getString(1)} · ${c.getString(2)}: ${c.getDouble(3)}")
                 } }
         }
     }
+
+    private fun dayEpochWindow(day: LocalDate): Array<String> = arrayOf(
+        day.atStartOfDay(ZoneId.systemDefault()).toEpochSecond().toString(),
+        day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toEpochSecond().toString(),
+    )
+
+    suspend fun previewDayOnline(
+        accessToken: String, day: LocalDate, passphrase: CharArray? = null,
+    ): ArchivePreview = previewMonthOnline(
+        accessToken, YearMonth.from(day), passphrase, day,
+    )
 
     fun clearTemporaryCache(month: YearMonth? = null) {
         val cache = File(appContext.cacheDir, "drive-archive-cache")
@@ -314,9 +370,10 @@ internal class GoogleDriveArchiveManager(
         }
 
     internal fun lastEligibleArchiveMonth(today: LocalDate): YearMonth =
-        YearMonth.from(today.minusDays(89)).minusMonths(1)
+        HybridHistoryPolicy.lastArchiveMonth(today)
     private suspend fun buildUploadVerify(
         month: YearMonth, token: String, ownerId: String, recoveryPassphrase: CharArray,
+        coveredThrough: LocalDate,
     ): GoogleDriveArchiveRecord {
         val work = File(appContext.cacheDir, "drive-archive-work").apply { mkdirs() }
         val dbCopy = File(work, "$month.sqlite")
@@ -330,7 +387,7 @@ internal class GoogleDriveArchiveManager(
             listOf(dbCopy, archive, encryptedArchive, verifyEncrypted, verifyArchive, verifyDb)
                 .forEach(File::delete)
             checkpointAndCopy(dbCopy)
-            filterToMonth(dbCopy, month)
+            filterToMonth(dbCopy, month, coveredThrough.plusDays(1))
             val snapshot = SQLiteDatabase.openDatabase(dbCopy.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
             val schema: Int
             val count: Long
@@ -358,6 +415,7 @@ internal class GoogleDriveArchiveManager(
             return GoogleDriveArchiveRecord(
                 month.toString(), remote.id, checksum, encryptedArchive.length(), count,
                 schema, System.currentTimeMillis(), encrypted = true,
+                coveredThrough = coveredThrough.toString(),
             )
         } finally {
             // App-private cache only. No plaintext is retained after this manual operation.
@@ -377,8 +435,12 @@ internal class GoogleDriveArchiveManager(
         source.copyTo(destination, overwrite = true)
     }
 
-    private fun filterToMonth(file: File, month: YearMonth) {
-        val fromDay = month.atDay(1); val toDay = month.plusMonths(1).atDay(1)
+    private fun filterToMonth(file: File, month: YearMonth, endExclusive: LocalDate) {
+        val fromDay = month.atDay(1)
+        require(!endExclusive.isAfter(month.plusMonths(1).atDay(1))) {
+            "Rolling archive cannot include a day newer than its month."
+        }
+        val toDay = endExclusive
         val fromTs = fromDay.atStartOfDay(ZoneId.systemDefault()).toEpochSecond()
         val toTs = toDay.atStartOfDay(ZoneId.systemDefault()).toEpochSecond()
         val db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
