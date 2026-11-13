@@ -20,10 +20,10 @@ import java.util.zip.ZipOutputStream
 /**
  * Whole-store EXPORT / IMPORT for device migration.
  *
- * NOOP keeps everything on-device in a single Room/SQLite file ([WhoopDatabase.DB_NAME]).
- * Moving to a new phone therefore means moving exactly that one file. There is no cloud,
- * no account, nothing leaves the device except through these two explicit, user-driven
- * file operations (a SAF document the user picks).
+ * THOOP stores health history in [WhoopDatabase.DB_NAME] and confirmed food entries
+ * in a separate Room database. Complete Android backups include BOTH databases plus
+ * portable whitelisted settings. Existing legacy single-database files remain readable.
+ * The Google Drive coordinator uses this same format for device recovery.
  *
  * Export: checkpoint the WAL into the main db file, then write a ZIP (the `.noopbak`
  * format) containing the SQLite file plus a small `settings.json` entry (#1000) with the
@@ -46,6 +46,9 @@ object DataBackup {
 
     /** Entry name of the SQLite inside the `.noopbak` ZIP. */
     private const val ZIP_ENTRY_NAME = "noop-backup.sqlite"
+    /** Optional in legacy files; REQUIRED for new complete Android recovery backups. */
+    internal const val FOOD_ENTRY_NAME = "thoop-food.sqlite"
+    private const val FOOD_DB_NAME = "thoop_food_intake.db"
 
     /** Entry name of the optional whitelisted-settings JSON (#1000). Matches the Apple exporter. */
     private const val SETTINGS_ENTRY_NAME = BackupSettingsCodec.ENTRY_NAME
@@ -199,6 +202,20 @@ object DataBackup {
         }
     }.getOrDefault(false)
 
+    /** True for new multi-database backups; false for legacy health-only backups. */
+    internal fun containsFoodHistory(file: File): Boolean = runCatching {
+        java.util.zip.ZipFile(file).use { it.getEntry(FOOD_ENTRY_NAME) != null }
+    }.getOrDefault(false)
+
+    /** Estimated uncompressed database bytes for a full restore preflight (unknown → null). */
+    internal fun restoreDatabaseBytes(file: File): Long? = runCatching {
+        java.util.zip.ZipFile(file).use { zip ->
+            val health = zip.getEntry(ZIP_ENTRY_NAME)?.size?.takeIf { it >= 0 } ?: return@use null
+            val food = zip.getEntry(FOOD_ENTRY_NAME)?.size?.takeIf { it >= 0 } ?: 0L
+            if (health > Long.MAX_VALUE - food) null else health + food
+        }
+    }.getOrNull()
+
     /** First 4 bytes of every ZIP file: "PK\x03\x04". */
     private val ZIP_MAGIC: ByteArray =
         byteArrayOf(0x50, 0x4B, 0x03, 0x04)
@@ -232,7 +249,7 @@ object DataBackup {
     data class ExportOutcome(val bytes: Long, val overRestoreCeiling: Boolean, val limitBytes: Long)
 
     /**
-     * Export the live database to [uri] as a compressed `.noopbak` (single-entry ZIP).
+     * Export both live databases to [uri] as a compressed `.noopbak` (multi-entry ZIP).
      *
      * Runs `PRAGMA wal_checkpoint(TRUNCATE)` first so the db file is fully consistent.
      * The ZIP uses deflate compression; typical reduction is 80–90% vs the raw SQLite.
@@ -270,6 +287,15 @@ object DataBackup {
         // brings back weight/height/units, not just the rows. Null (nothing user-set) degrades to the
         // legacy single-entry ZIP. The DB entry stays FIRST — older importers stop at the first
         // `.sqlite` entry, so entry order is part of the cross-platform container contract.
+        // Food Log is a different Room database. It must travel with the health store
+        // or a new phone silently loses every confirmed nutrition entry.
+        val foodDb = FoodIntakeDatabase.get(appContext)
+        foodDb.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
+        val foodFile = appContext.getDatabasePath(FOOD_DB_NAME)
+        if (!foodFile.isFile) throw IOException("Food history database could not be included in the backup.")
+        sqliteQuickCheckFailure(foodFile)?.let { complaint ->
+            throw IOException("Food history database failed validation: ${readableComplaint(complaint)}")
+        }
         val settingsJson = BackupSettingsBridge.snapshotJson(appContext)
         // #1410: build provenance for this export — which build wrote the file.
         val manifestJson = BackupManifest.json(
@@ -306,6 +332,12 @@ object DataBackup {
                     if (settingsJson != null) {
                         zip.putNextEntry(ZipEntry(SETTINGS_ENTRY_NAME))
                         zip.write(settingsJson.toByteArray(Charsets.UTF_8))
+                        zip.closeEntry()
+                    }
+                    // Keep the second Room connection in a read-consistent state during copy.
+                    foodDb.runInTransaction {
+                        zip.putNextEntry(ZipEntry(FOOD_ENTRY_NAME))
+                        foodFile.inputStream().use { it.copyTo(zip) }
                         zip.closeEntry()
                     }
                     zip.putNextEntry(ZipEntry(MANIFEST_ENTRY_NAME))
@@ -392,10 +424,12 @@ object DataBackup {
         //    matters, or a leftover from an earlier import could masquerade as THIS backup's settings.
         val tempSqlite = File(appContext.cacheDir, "import-extract.sqlite")
         val tempSettings = File(appContext.cacheDir, "import-settings.json")
+        val tempFood = File(appContext.cacheDir, "import-food.sqlite")
         tempSettings.delete()
+        tempFood.delete()
         try {
             when (stageBackupSqlite(resolver.openInputStream(uri), header, tempSqlite, tempSettings,
-                                    allowOversize = allowOversize)) {
+                                    allowOversize = allowOversize, foodDest = tempFood)) {
                 StageResult.OK -> Unit
                 StageResult.CANNOT_OPEN -> return ImportResult.Failed("Could not open the chosen file.")
                 StageResult.NO_DB_IN_ZIP -> {
@@ -479,10 +513,42 @@ object DataBackup {
             )
         }
 
+        // Validate every included database before either live store is replaced.
+        if (tempFood.isFile) {
+            sqliteQuickCheckFailure(tempFood)?.let { complaint ->
+                tempFood.delete()
+                tempSqlite.delete()
+                tempSettings.delete()
+                return ImportResult.Failed(
+                    "Food history in this backup is damaged. Nothing was restored. " +
+                        "(SQLite: ${readableComplaint(complaint)})"
+                )
+            }
+        }
+
         val dbFile = appContext.getDatabasePath(WhoopDatabase.DB_NAME)
         val walFile = File(dbFile.path + "-wal")
         val shmFile = File(dbFile.path + "-shm")
         val rollbackFile = File(dbFile.path + ".import-bak")
+
+        // Food is optional only for older backups. Leave existing food intact when restoring
+        // one of those older single-database backups.
+        val restoreFood = tempFood.isFile
+        val foodFile = appContext.getDatabasePath(FOOD_DB_NAME)
+        val foodRollback = File(foodFile.path + ".import-bak")
+        if (restoreFood) {
+            try {
+                val foodDb = FoodIntakeDatabase.get(appContext)
+                foodDb.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)")
+                    .use { it.moveToFirst() }
+                FoodIntakeDatabase.closeForRestore()
+                foodRollback.delete()
+                if (foodFile.isFile) foodFile.copyTo(foodRollback, overwrite = true)
+            } catch (failure: Exception) {
+                tempSqlite.delete(); tempSettings.delete(); tempFood.delete()
+                return ImportResult.Failed("Could not make a food history safety copy: ${failure.message}")
+            }
+        }
 
         // 4. Close the live Room singleton so the file handles are released.
         WhoopDatabase.close()
@@ -546,6 +612,42 @@ object DataBackup {
             return ImportResult.Failed(message)
         }
 
+        // 6c. Complete recovery: install food history only after BOTH extracted stores pass
+        // integrity checks. If it fails, roll back the health database as well.
+        if (restoreFood) {
+            val foodWal = File(foodFile.path + "-wal")
+            val foodShm = File(foodFile.path + "-shm")
+            try {
+                foodFile.parentFile?.mkdirs()
+                tempFood.copyTo(foodFile, overwrite = true)
+                check(foodWal.delete() || !foodWal.exists()) { "Could not clear food WAL" }
+                check(foodShm.delete() || !foodShm.exists()) { "Could not clear food SHM" }
+                sqliteQuickCheckFailure(foodFile)?.let { throw IOException(it) }
+            } catch (failure: Exception) {
+                // Never claim a complete restore after only one database was installed.
+                val recoveredHealth = runCatching {
+                    walFile.delete(); shmFile.delete()
+                    if (rollbackFile.isFile) rollbackFile.copyTo(dbFile, overwrite = true)
+                    else dbFile.delete()
+                }.isSuccess
+                val recoveredFood = runCatching {
+                    foodWal.delete(); foodShm.delete()
+                    if (foodRollback.isFile) foodRollback.copyTo(foodFile, overwrite = true)
+                    else foodFile.delete()
+                }.isSuccess
+                tempFood.delete(); tempSqlite.delete(); tempSettings.delete()
+                if (recoveredHealth) rollbackFile.delete()
+                if (recoveredFood) foodRollback.delete()
+                return ImportResult.Failed(
+                    "Food history restore failed: ${failure.message}. " +
+                        if (recoveredHealth && recoveredFood) "Both previous databases were restored."
+                        else "A recovery copy remains beside the database. Do not clear app data."
+                )
+            }
+            foodRollback.delete()
+            tempFood.delete()
+        }
+
         // 7. #1000: re-apply the backup's whitelisted profile/display settings (weight, height, age,
         //    sex, HR-max override, unit prefs) — but only NOW, after the DB swap landed. Every failure
         //    path above returns without touching settings. Legacy single-entry backups staged no
@@ -596,6 +698,7 @@ object DataBackup {
         settingsDest: File? = null,
         /** #1807: lift the SQLite cap for a file the USER chose. See [ImportResult.TooLarge]. */
         allowOversize: Boolean = false,
+        foodDest: File? = null,
     ): StageResult {
         if (input == null) return StageResult.CANNOT_OPEN
         input.use { stream ->
@@ -603,6 +706,7 @@ object DataBackup {
                 header.startsWith(ZIP_MAGIC) -> {
                     var foundDb = false
                     var foundSettings = false
+                    var foundFood = false
                     ZipInputStream(stream).use { zip ->
                         var entry = zip.nextEntry
                         while (entry != null) {
@@ -627,9 +731,21 @@ object DataBackup {
                                     }
                                     foundSettings = true
                                 }
+                                !entry.isDirectory && !foundFood && foodDest != null &&
+                                    entry.name.substringAfterLast('/') == FOOD_ENTRY_NAME -> {
+                                    FileOutputStream(foodDest).use { out ->
+                                        if (!copyBounded(zip, out, sqliteCap(allowOversize))) {
+                                            foodDest.delete()
+                                            return StageResult.ENTRY_TOO_LARGE
+                                        }
+                                    }
+                                    foundFood = true
+                                }
                             }
-                            // Everything we could want is staged - stop reading the archive.
-                            if (foundDb && (settingsDest == null || foundSettings)) break
+                            // Continue to the end for legacy ZIPs without food. A missing food
+                            // entry must NEVER be misrepresented as recovered nutrition history.
+                            if (foundDb && (settingsDest == null || foundSettings) &&
+                                (foodDest == null || foundFood)) break
                             entry = zip.nextEntry
                         }
                     }

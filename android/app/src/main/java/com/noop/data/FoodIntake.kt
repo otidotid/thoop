@@ -67,6 +67,12 @@ internal abstract class FoodIntakeDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE foodIntake ADD COLUMN mealType TEXT NOT NULL DEFAULT 'other'")
             }
         }
+        /** Release SQLite handles before replacing the file during a confirmed restore. */
+        fun closeForRestore() = synchronized(this) {
+            instance?.close()
+            instance = null
+        }
+
         fun get(context: Context): FoodIntakeDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(

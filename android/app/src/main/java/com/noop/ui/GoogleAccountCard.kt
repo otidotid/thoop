@@ -2,6 +2,11 @@ package com.noop.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Login
@@ -10,6 +15,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.noop.data.GoogleDriveBackupClient
 import com.noop.data.GoogleDriveBackupCoordinator
 import com.noop.data.GoogleDriveArchiveManager
+import com.noop.data.CompactDailySnapshots
 import com.noop.data.DataBackup
 import com.noop.data.CloudBackupCadence
 import com.noop.data.CloudBackupSchedule
@@ -50,6 +58,9 @@ internal fun GoogleAccountCard() {
     }
     val archiveManager = remember(context) {
         GoogleDriveArchiveManager(context.applicationContext)
+    }
+    val snapshotsManager = remember(context) {
+        CompactDailySnapshots(context.applicationContext)
     }
 
     val scope = rememberCoroutineScope()
@@ -109,6 +120,19 @@ internal fun GoogleAccountCard() {
     var archiveRecords by remember { mutableStateOf(archiveManager.archives()) }
     var archivePreview by remember { mutableStateOf<GoogleDriveArchiveManager.ArchivePreview?>(null) }
     var showArchiveBrowser by remember { mutableStateOf(false) }
+    // Transient, opt-in passphrase prompt. No password is written to settings or Drive metadata.
+    var showArchivePassphraseDialog by remember { mutableStateOf(false) }
+    var archiveOpenMonth by remember { mutableStateOf<YearMonth?>(null) }
+    var archivePassphrase by remember { mutableStateOf("") }
+    var archivePassphraseConfirm by remember { mutableStateOf("") }
+    var archiveMigrationMonth by remember { mutableStateOf<YearMonth?>(null) }
+    var compactSnapshots by remember { mutableStateOf<List<CompactDailySnapshots.Summary>>(emptyList()) }
+    // Full disaster-recovery backups use a user-held password. Never persist the password
+    // to preferences or Google Drive metadata; another phone can restore with the same secret.
+    var fullBackupAction by remember { mutableStateOf<String?>(null) }
+    var fullBackupTarget by remember { mutableStateOf<GoogleDriveBackupClient.RemoteBackup?>(null) }
+    var fullBackupPassword by remember { mutableStateOf("") }
+    var fullBackupConfirm by remember { mutableStateOf("") }
 
     val cloudSchedulePreferences = remember(context) {
         GoogleCloudBackupPreferences(context.applicationContext)
@@ -224,22 +248,232 @@ internal fun GoogleAccountCard() {
         )
     }
 
+    if (showArchivePassphraseDialog) {
+        val creating = archiveOpenMonth == null
+        val migrating = archiveMigrationMonth != null
+        AlertDialog(
+            onDismissRequest = {
+                if (!driveBusy) {
+                    showArchivePassphraseDialog = false
+                    archivePassphrase = ""
+                    archivePassphraseConfirm = ""
+                }
+            },
+            title = { Text(when { migrating -> "Encrypt existing archive"; creating -> "Encrypt monthly archives"; else -> "Unlock encrypted history" }) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    Text(
+                        if (creating) {
+                            (if (migrating) "Encrypt a new copy of ${archiveMigrationMonth}; the original stays in Google Drive. " else "") +
+                            "Choose a recovery passphrase (12+ characters) and keep it in your password manager. " +
+                                "It is NOT saved by THOOP. Without it, archives cannot be recovered on another phone."
+                        } else {
+                            "Enter the passphrase used when you created this archive. " +
+                                "THOOP does not store your recovery passphrase."
+                        },
+                        style = NoopType.footnote,
+                        color = Palette.textSecondary,
+                    )
+                    OutlinedTextField(
+                        value = archivePassphrase,
+                        onValueChange = { archivePassphrase = it },
+                        label = { Text("Recovery passphrase") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
+                    if (creating) {
+                        OutlinedTextField(
+                            value = archivePassphraseConfirm,
+                            onValueChange = { archivePassphraseConfirm = it },
+                            label = { Text("Confirm passphrase") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showArchivePassphraseDialog = false
+                    archivePassphrase = ""
+                    archivePassphraseConfirm = ""
+                }) { Text("Cancel") }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !driveBusy && archivePassphrase.length >= 12 &&
+                        (!creating || archivePassphrase == archivePassphraseConfirm),
+                    onClick = {
+                        val token = driveAccessToken ?: return@TextButton
+                        val owner = account?.accountId ?: return@TextButton
+                        val month = archiveOpenMonth
+                        val migrationMonth = archiveMigrationMonth
+                        val secret = archivePassphrase.toCharArray()
+                        archivePassphrase = ""
+                        archivePassphraseConfirm = ""
+                        showArchivePassphraseDialog = false
+                        archiveMigrationMonth = null
+                        driveBusy = true
+                        errorMessage = null
+                        scope.launch {
+                            try {
+                                if (migrationMonth != null) {
+                                    archiveManager.encryptLegacyMonth(token, owner, migrationMonth, secret)
+                                    archiveRecords = archiveManager.archives()
+                                    backupStatus = "$migrationMonth encrypted and verified. Original Drive archive and all local data kept."
+                                } else if (month == null) {
+                                    val created = archiveManager.createAndVerifyArchives(token, owner, secret)
+                                    archiveRecords = archiveManager.archives()
+                                    backupStatus = if (created.isEmpty()) {
+                                        "No new monthly archives needed. Existing archives were not modified."
+                                    } else {
+                                        "Encrypted and verified ${created.size} monthly archive(s). Local data was kept."
+                                    }
+                                } else {
+                                    archivePreview = archiveManager.previewMonthOnline(token, month, secret)
+                                }
+                            } catch (failure: Exception) {
+                                errorMessage = if (month == null) {
+                                    "Encrypted archive could not be verified. No local history was deleted. " +
+                                        (failure.message?.take(120) ?: "Try again.")
+                                } else {
+                                    "Could not unlock the archive. Check your passphrase and internet connection."
+                                }
+                            } finally {
+                                secret.fill('\u0000')
+                                driveBusy = false
+                            }
+                        }
+                    },
+                ) { Text(if (migrating) "Encrypt copy" else if (creating) "Encrypt & archive" else "Unlock") }
+            },
+        )
+    }
+
     archivePreview?.let { preview ->
         AlertDialog(
             onDismissRequest = { archivePreview = null },
             title = { Text("Archived History · ${preview.record.month}") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                Column(
+                    modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Metrics.space12),
+                ) {
                     Text("Read-only preview", style = NoopType.subhead, color = Palette.accent)
                     Text("Total records: ${preview.totalRecords}", style = NoopType.body, color = Palette.textPrimary)
-                    Text("Schema: ${preview.record.schemaVersion} · SHA-256 verified", style = NoopType.footnote, color = Palette.textSecondary)
+                    Text("Schema: ${preview.record.schemaVersion} · " +
+                        (if (preview.record.encrypted) "Encrypted + authenticated" else "Legacy unencrypted") +
+                        " · SHA-256 verified", style = NoopType.footnote, color = Palette.textSecondary)
                     preview.tableCounts.entries.filter { it.value > 0 }.take(12).forEach { row ->
                         Text("${row.key}: ${row.value}", style = NoopType.footnote, color = Palette.textSecondary)
+                    }
+                    Text("Historical data preview (read-only)", style = NoopType.subhead, color = Palette.accent)
+                    preview.history.forEach { line ->
+                        Text(line, style = NoopType.footnote, color = Palette.textSecondary)
                     }
                     Text("The temporary archive cache is removed when this preview closes.", style = NoopType.caption, color = Palette.textTertiary)
                 }
             },
             confirmButton = { TextButton(onClick = { archivePreview = null }) { Text("Close") } },
+        )
+    }
+
+    fullBackupAction?.let { action ->
+        val creating = action == "backup"
+        AlertDialog(
+            onDismissRequest = {
+                if (!driveBusy) {
+                    fullBackupAction = null
+                    fullBackupTarget = null
+                    fullBackupPassword = ""
+                    fullBackupConfirm = ""
+                }
+            },
+            title = { Text(when (action) {
+                "backup" -> "Encrypt complete cloud backup"
+                "restore" -> "Unlock and restore backup"
+                else -> "Unlock cloud backup"
+            }) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    Text(if (creating)
+                        "Choose a recovery passphrase (12+ characters). Keep it in a password " +
+                            "manager. You will need it on a replacement phone; THOOP does not store it. " +
+                            "This includes the health and food databases and supported profile settings."
+                    else "Enter the recovery passphrase used for this encrypted backup. " +
+                        "Never share your passphrase in a chat or screenshot.")
+                    OutlinedTextField(
+                        value = fullBackupPassword,
+                        onValueChange = { fullBackupPassword = it },
+                        label = { Text("Recovery passphrase") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                    )
+                    if (creating) {
+                        OutlinedTextField(
+                            value = fullBackupConfirm,
+                            onValueChange = { fullBackupConfirm = it },
+                            label = { Text("Confirm passphrase") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                        )
+                    }
+                }
+            },
+            dismissButton = { TextButton(enabled = !driveBusy, onClick = {
+                fullBackupAction = null; fullBackupTarget = null
+                fullBackupPassword = ""; fullBackupConfirm = ""
+            }) { Text("Cancel") } },
+            confirmButton = {
+                TextButton(
+                    enabled = !driveBusy && fullBackupPassword.length >= 12 &&
+                        (!creating || fullBackupPassword == fullBackupConfirm),
+                    onClick = {
+                        val token = driveAccessToken ?: return@TextButton
+                        val current = account ?: return@TextButton
+                        val target = fullBackupTarget
+                        val password = fullBackupPassword.toCharArray()
+                        fullBackupPassword = ""; fullBackupConfirm = ""
+                        fullBackupAction = null; fullBackupTarget = null
+                        driveBusy = true
+                        errorMessage = null
+                        scope.launch {
+                            try {
+                                when (action) {
+                                    "backup" -> {
+                                        val uploaded = backupCoordinator.backUpNow(token, current.accountId, password)
+                                        backupStatus = "Encrypted complete backup uploaded and verified: " +
+                                            formatBackupSize(uploaded.sizeBytes) + ". Save your recovery passphrase."
+                                    }
+                                    "preview" -> {
+                                        val remote = target ?: error("No backup selected.")
+                                        selectedPreview = backupCoordinator.previewBackup(token, remote, password)
+                                        backupStatus = "Encrypted backup authenticated. Database integrity will be checked before restore."
+                                    }
+                                    "restore" -> {
+                                        val remote = target ?: error("No backup selected.")
+                                        val outcome = backupCoordinator.restoreBackup(token, remote, password)
+                                        when (val result = outcome.result) {
+                                            DataBackup.ImportResult.NeedsRestart -> {
+                                                restartRequired = true
+                                                backupStatus = "Restore completed. Restart THOOP. A safety backup was kept locally."
+                                                pendingRestore = null
+                                            }
+                                            is DataBackup.ImportResult.Failed -> errorMessage = result.message
+                                            is DataBackup.ImportResult.TooLarge -> errorMessage = result.message
+                                        }
+                                    }
+                                }
+                            } catch (failure: Exception) {
+                                errorMessage = failure.message ?: "Google Drive recovery failed safely."
+                            } finally {
+                                password.fill('\u0000')
+                                driveBusy = false
+                            }
+                        }
+                    },
+                ) { Text(when (action) { "backup" -> "Encrypt & back up"; "restore" -> "Unlock & restore"; else -> "Unlock & preview" }) }
+            },
         )
     }
 
@@ -265,6 +499,12 @@ internal fun GoogleAccountCard() {
                     enabled = !driveBusy,
                     onClick = {
                         val token = driveAccessToken ?: return@TextButton
+                        if (backup.encrypted) {
+                            pendingRestore = null
+                            fullBackupTarget = backup
+                            fullBackupAction = "restore"
+                            return@TextButton
+                        }
                         driveBusy = true
                         errorMessage = null
                         scope.launch {
@@ -373,36 +613,54 @@ internal fun GoogleAccountCard() {
 
             if (driveAuthorized && currentAccount != null) {
                 NoopButton(
-                    text = if (driveBusy) "Working with Google Drive..." else "Create & Verify Archives",
+                    text = if (driveBusy) "Working with Google Drive..." else "Create & Verify Encrypted Archives",
                     fullWidth = true,
                     enabled = !driveBusy && !busy,
                     onClick = {
-                        val token = driveAccessToken
-                        if (token == null) {
+                        if (driveAccessToken == null) {
                             errorMessage = "Google Drive authorization expired. Connect Google Drive again."
                         } else {
-                            driveBusy = true
-                            errorMessage = null
-                            scope.launch {
-                                runCatching { archiveManager.createAndVerifyArchives(token, currentAccount.accountId) }
-                                    .onSuccess { created ->
-                                        archiveRecords = archiveManager.archives()
-                                        backupStatus = if (created.isEmpty()) {
-                                            "All eligible monthly archives are already verified. Local data was kept."
-                                        } else {
-                                            "Created and verified ${created.size} monthly archive(s). Local data was kept."
-                                        }
-                                    }
-                                    .onFailure { failure ->
-                                        errorMessage = "Archive verification could not finish. Local data was kept. " +
-                                            (failure.message?.substringBefore("/data/")?.trim()?.take(160)
-                                                ?: "Try again after restarting THOOP.")
-                                    }
-                                driveBusy = false
-                            }
+                            archiveOpenMonth = null
+                            archiveMigrationMonth = null
+                            archivePassphrase = ""
+                            archivePassphraseConfirm = ""
+                            showArchivePassphraseDialog = true
                         }
                     },
                 )
+                NoopButton(
+                    text = if (driveBusy) "Preparing snapshots..." else "Refresh compact snapshots (days 15–21)",
+                    kind = NoopButtonKind.Secondary,
+                    fullWidth = true,
+                    enabled = !driveBusy,
+                    onClick = {
+                        driveBusy = true
+                        errorMessage = null
+                        scope.launch {
+                            runCatching { snapshotsManager.refresh() }
+                                .onSuccess {
+                                    compactSnapshots = it
+                                    backupStatus = "Saved ${it.size} compact daily summaries locally. Full source data kept."
+                                }
+                                .onFailure { errorMessage = it.message ?: "Could not prepare daily summaries." }
+                            driveBusy = false
+                        }
+                    },
+                )
+                if (compactSnapshots.isNotEmpty()) {
+                    Text("Local compact summaries · source data preserved", style = NoopType.subhead, color = Palette.textPrimary)
+                    compactSnapshots.take(18).forEach { snapshot ->
+                        val details = buildList {
+                            snapshot.sleepMin?.let { add("sleep ${it.toInt()} min") }
+                            snapshot.avgHrv?.let { add("HRV ${it.toInt()} ms") }
+                            snapshot.steps?.let { add("${it} steps") }
+                            snapshot.foodCalories?.let { add("${it.toInt()} kcal") }
+                            add("${snapshot.recordCount} records")
+                        }
+                        Text("${snapshot.day} · ${snapshot.source}: ${details.joinToString(" · ")}",
+                            style = NoopType.footnote, color = Palette.textSecondary)
+                    }
+                }
                 NoopButton(
                     text = "Browse Archived History",
                     kind = NoopButtonKind.Secondary,
@@ -416,7 +674,8 @@ internal fun GoogleAccountCard() {
                     } else {
                         archiveRecords.sortedByDescending { it.month }.forEach { archive ->
                             NoopButton(
-                                text = "${archive.month} · ${archive.recordCount} records · Verified",
+                                text = "${archive.month} · ${archive.recordCount} records · " +
+                                    (if (archive.encrypted) "Encrypted" else "Legacy unencrypted"),
                                 kind = NoopButtonKind.Tertiary,
                                 fullWidth = true,
                                 enabled = !driveBusy,
@@ -424,24 +683,47 @@ internal fun GoogleAccountCard() {
                                     val token = driveAccessToken
                                     if (token == null) {
                                         errorMessage = "Internet connection and Google Drive authorization are required."
+                                    } else if (archive.encrypted) {
+                                        archiveOpenMonth = YearMonth.parse(archive.month)
+                                        archivePassphrase = ""
+                                        archivePassphraseConfirm = ""
+                                        showArchivePassphraseDialog = true
                                     } else {
+                                        // Existing archives are plaintext. Keep the legacy reader for compatibility.
                                         driveBusy = true
                                         scope.launch {
                                             runCatching { archiveManager.previewMonthOnline(token, YearMonth.parse(archive.month)) }
                                                 .onSuccess { archivePreview = it }
-                                                .onFailure { failure ->
-                                                    errorMessage = "Archived history could not be opened. Check the internet connection and try again."
+                                                .onFailure {
+                                                    errorMessage = "Legacy archived history could not be opened."
                                                 }
                                             driveBusy = false
                                         }
                                     }
                                 },
                             )
+                            if (!archive.encrypted) {
+                                NoopButton(
+                                    text = "Encrypt a copy of ${archive.month} (keep original)",
+                                    kind = NoopButtonKind.Secondary,
+                                    fullWidth = true,
+                                    enabled = !driveBusy,
+                                    onClick = {
+                                        archiveOpenMonth = null
+                                        archiveMigrationMonth = YearMonth.parse(archive.month)
+                                        archivePassphrase = ""
+                                        archivePassphraseConfirm = ""
+                                        showArchivePassphraseDialog = true
+                                    },
+                                )
+                            }
                         }
                     }
                 }
                 Text(
-                    "The latest 90 days stay offline. Create & Verify never deletes local data. Older archives open read-only from private Google Drive app data.",
+                    "The current monthly-archive window remains 90 days. New monthly archives are encrypted; " +
+                        "older ones may still be unencrypted. This does NOT encrypt full .noopbak backups. " +
+                        "No local history is deleted.",
                     style = NoopType.footnote,
                     color = Palette.textSecondary,
                 )
@@ -524,17 +806,23 @@ internal fun GoogleAccountCard() {
                 )
                 availableBackups.forEach { backup ->
                     NoopButton(
-                        text = "${formatCloudBackupDate(backup.createdTime)} · ${formatBackupSize(backup.sizeBytes)}",
+                        text = "${formatCloudBackupDate(backup.createdTime)} · ${formatBackupSize(backup.sizeBytes)} · " +
+                            if (backup.encrypted) "Encrypted" else "Legacy unencrypted",
                         fullWidth = true,
                         enabled = !driveBusy,
                         onClick = {
                             val token = driveAccessToken ?: return@NoopButton
+                            if (backup.encrypted) {
+                                fullBackupTarget = backup
+                                fullBackupAction = "preview"
+                                return@NoopButton
+                            }
                             driveBusy = true
                             scope.launch {
                                 runCatching { backupCoordinator.previewBackup(token, backup) }
                                     .onSuccess {
                                         selectedPreview = it
-                                        backupStatus = "Backup validated. No local data was changed."
+                                        backupStatus = "Backup downloaded and checked. Database integrity will be checked before restore."
                                     }
                                     .onFailure { errorMessage = it.message ?: "Could not validate backup." }
                                 driveBusy = false
@@ -546,7 +834,8 @@ internal fun GoogleAccountCard() {
                     Text(
                         text = "${preview.backup.name}\n" +
                             "${formatCloudBackupDate(preview.backup.createdTime)} · " +
-                            "${formatBackupSize(preview.backup.sizeBytes)}\nValid THOOP backup",
+                            "${formatBackupSize(preview.backup.sizeBytes)}\nValid THOOP backup · " +
+                            if (preview.includesFoodHistory) "Food history included" else "Legacy health-only backup",
                         style = NoopType.footnote,
                         color = Palette.textSecondary,
                     )
@@ -556,7 +845,7 @@ internal fun GoogleAccountCard() {
                     NoopButton(
                         text = "Restore this backup",
                         fullWidth = true,
-                        enabled = !driveBusy,
+                        enabled = !driveBusy && !restartRequired,
                         onClick = { pendingRestore = preview.backup },
                     )
                 }
@@ -570,25 +859,14 @@ internal fun GoogleAccountCard() {
                 }
 
                 NoopButton(
-                    text = if (driveBusy) "Backing up..." else "Back up now",
+                    text = if (driveBusy) "Backing up..." else "Encrypted full backup now",
                     fullWidth = true,
                     enabled = !driveBusy && !busy && driveAccessToken != null,
                     onClick = {
-                        val token = driveAccessToken ?: return@NoopButton
-                        driveBusy = true
-                        errorMessage = null
-                        backupStatus = null
-                        scope.launch {
-                            runCatching {
-                                backupCoordinator.backUpNow(token, currentAccount.accountId)
-                            }.onSuccess { backup ->
-                                val whenUploaded = DateFormat.getDateTimeInstance().format(Date())
-                                backupStatus = "Uploaded $whenUploaded · ${formatBackupSize(backup.sizeBytes)} · newest 3 kept"
-                            }.onFailure { failure ->
-                                errorMessage = failure.message ?: "Google Drive backup failed."
-                            }
-                            driveBusy = false
-                        }
+                        fullBackupAction = "backup"
+                        fullBackupTarget = null
+                        fullBackupPassword = ""
+                        fullBackupConfirm = ""
                     },
                 )
             }
@@ -617,6 +895,13 @@ internal fun GoogleAccountCard() {
                         }
                         updateCloudSchedule(cloudSchedule.copy(cadence = next))
                     },
+                )
+                Text(
+                    "Scheduled backups currently use the legacy unencrypted format. " +
+                        "Use Encrypted full backup now for password-protected recovery. " +
+                        "Account sign-in and hardware pairing need to be repeated on a new phone.",
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
                 )
                 Text(text = "Wi-Fi only", style = NoopType.footnote, color = Palette.textSecondary)
                 Switch(

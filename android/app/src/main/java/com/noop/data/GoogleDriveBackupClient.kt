@@ -29,9 +29,10 @@ internal class GoogleDriveBackupClient(
         val createdTime: String,
         val sizeBytes: Long,
         val sha256: String? = null,
+        val encrypted: Boolean = false,
     )
 
-    suspend fun upload(accessToken: String, backup: File, ownerId: String): RemoteBackup =
+    suspend fun upload(accessToken: String, backup: File, ownerId: String, encrypted: Boolean = false): RemoteBackup =
         withContext(Dispatchers.IO) {
             require(accessToken.isNotBlank()) { "Google Drive access token is empty." }
             require(ownerId.isNotBlank()) { "THOOP profile owner is empty." }
@@ -40,13 +41,14 @@ internal class GoogleDriveBackupClient(
             val createdAt = System.currentTimeMillis()
             val sha256 = sha256(backup)
             val metadata = JSONObject()
-                .put("name", "thoop-backup-$createdAt.noopbak")
+                .put("name", "thoop-backup-$createdAt.${if (encrypted) "noopenc" else "noopbak"}")
                 .put("parents", JSONArray().put(APP_DATA_FOLDER))
                 .put("appProperties", JSONObject()
                     .put("kind", BACKUP_KIND)
                     .put("ownerId", ownerId)
                     .put("createdAtMs", createdAt.toString())
-                    .put("sha256", sha256))
+                    .put("sha256", sha256)
+                    .put("encryption", if (encrypted) "THOOPENC-v1" else "none"))
 
             val start = Request.Builder()
                 .url(UPLOAD_ENDPOINT)
@@ -67,7 +69,8 @@ internal class GoogleDriveBackupClient(
                 if (!response.isSuccessful) throw driveError("upload backup", response.code, body)
                 parseBackup(JSONObject(body))
             }
-            prune(accessToken, ownerId)
+            // Never delete older disaster-recovery copies before a NEW copy has been
+            // downloaded, decrypted and verified. Retain history rather than prune it.
             uploaded
         }
 
@@ -78,30 +81,52 @@ internal class GoogleDriveBackupClient(
         month: String,
         recordCount: Long,
         schemaVersion: Int,
+        encrypted: Boolean = false,
     ): RemoteBackup = uploadObject(
-        accessToken, archive, ownerId, "thoop-archive-$month.nooparc", ARCHIVE_KIND,
-        mapOf("month" to month, "recordCount" to recordCount.toString(), "schemaVersion" to schemaVersion.toString()),
+        accessToken, archive, ownerId,
+        "thoop-archive-$month.${if (encrypted) "noopenc" else "nooparc"}", ARCHIVE_KIND,
+        mapOf(
+            "month" to month,
+            "recordCount" to recordCount.toString(),
+            "schemaVersion" to schemaVersion.toString(),
+            "encryption" to if (encrypted) "THOOPENC-v1" else "none",
+        ),
     )
 
+    /** Page through the user's full recovery history, not only the most recent ten files. */
     suspend fun list(accessToken: String, ownerId: String): List<RemoteBackup> =
         withContext(Dispatchers.IO) {
             val query = "'$APP_DATA_FOLDER' in parents and trashed = false " +
                 "and appProperties has { key='kind' and value='$BACKUP_KIND' } " +
                 "and appProperties has { key='ownerId' and value='$ownerId' }"
-            val url = HttpUrl.Builder().scheme("https").host("www.googleapis.com")
-                .addPathSegments("drive/v3/files")
-                .addQueryParameter("spaces", APP_DATA_FOLDER)
-                .addQueryParameter("q", query)
-                .addQueryParameter("orderBy", "createdTime desc")
-                .addQueryParameter("pageSize", "10")
-                .addQueryParameter("fields", "files(id,name,createdTime,size,appProperties)").build()
-            val request = Request.Builder().url(url).header("Authorization", "Bearer $accessToken").get().build()
-            http.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw driveError("list backups", response.code, body)
-                val files = JSONObject(body).optJSONArray("files") ?: JSONArray()
-                buildList { for (index in 0 until files.length()) add(parseBackup(files.getJSONObject(index))) }
-            }
+            val found = mutableListOf<RemoteBackup>()
+            var pageToken: String? = null
+            val seenTokens = mutableSetOf<String>()
+            do {
+                val url = HttpUrl.Builder().scheme("https").host("www.googleapis.com")
+                    .addPathSegments("drive/v3/files")
+                    .addQueryParameter("spaces", APP_DATA_FOLDER)
+                    .addQueryParameter("q", query)
+                    .addQueryParameter("orderBy", "createdTime desc")
+                    .addQueryParameter("pageSize", "100")
+                    .addQueryParameter("fields", "nextPageToken,files(id,name,createdTime,size,appProperties)")
+                    .apply { pageToken?.let { addQueryParameter("pageToken", it) } }
+                    .build()
+                val request = Request.Builder().url(url)
+                    .header("Authorization", "Bearer $accessToken").get().build()
+                val next = http.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) throw driveError("list backups", response.code, body)
+                    val json = JSONObject(body)
+                    val files = json.optJSONArray("files") ?: JSONArray()
+                    for (index in 0 until files.length()) found.add(parseBackup(files.getJSONObject(index)))
+                    json.optString("nextPageToken").takeIf(String::isNotBlank)
+                }
+                if (next == null) break
+                check(seenTokens.add(next)) { "Google Drive repeated a backup listing page token." }
+                pageToken = next
+            } while (true)
+            found
         }
 
     suspend fun download(accessToken: String, backupId: String, destination: File) =
@@ -147,20 +172,12 @@ internal class GoogleDriveBackupClient(
         }
     }
 
-    private suspend fun prune(accessToken: String, ownerId: String) {
-        list(accessToken, ownerId).drop(MAX_BACKUPS).forEach { old ->
-            val request = Request.Builder().url("https://www.googleapis.com/drive/v3/files/${old.id}")
-                .header("Authorization", "Bearer $accessToken").delete().build()
-            http.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw driveError("remove old backup", response.code, response.body?.string())
-            }
-        }
-    }
-
     private fun parseBackup(json: JSONObject) = RemoteBackup(
         json.getString("id"), json.optString("name", "THOOP backup"),
         json.optString("createdTime"), json.optString("size").toLongOrNull() ?: 0L,
         json.optJSONObject("appProperties")?.optString("sha256")?.takeIf(String::isNotBlank),
+        json.optJSONObject("appProperties")?.optString("encryption") == "THOOPENC-v1" ||
+            json.optString("name").endsWith(".noopenc"),
     )
     internal fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -183,7 +200,6 @@ internal class GoogleDriveBackupClient(
         private const val BACKUP_KIND = "thoop_full_backup_v1"
         private const val ARCHIVE_KIND = "thoop_monthly_archive_v1"
         private const val BACKUP_MIME = "application/vnd.otidotid.thoop-backup"
-        private const val MAX_BACKUPS = 3
         private const val UPLOAD_ENDPOINT =
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,createdTime,size,appProperties"
         private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()

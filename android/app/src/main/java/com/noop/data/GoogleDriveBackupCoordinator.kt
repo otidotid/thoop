@@ -18,6 +18,7 @@ internal class GoogleDriveBackupCoordinator(
     suspend fun backUpNow(
         accessToken: String,
         ownerId: String,
+        passphrase: CharArray? = null,
     ): GoogleDriveBackupClient.RemoteBackup = withContext(Dispatchers.IO) {
         val directory = File(appContext.cacheDir, CLOUD_BACKUP_DIRECTORY).apply {
             if (!exists() && !mkdirs()) {
@@ -25,6 +26,7 @@ internal class GoogleDriveBackupCoordinator(
             }
         }
         val backupFile = File(directory, "thoop-upload-${System.currentTimeMillis()}.noopbak")
+        val encryptedFile = File(directory, "thoop-encrypted-${System.currentTimeMillis()}.noopenc")
         try {
             val uri = FileProvider.getUriForFile(
                 appContext,
@@ -35,22 +37,41 @@ internal class GoogleDriveBackupCoordinator(
             check(backupFile.isFile && backupFile.length() > 0L) {
                 "THOOP created an empty local backup."
             }
-            val uploaded = driveClient.upload(accessToken, backupFile, ownerId)
-            val expectedSha256 = driveClient.sha256(backupFile)
+            check(DataBackup.containsFoodHistory(backupFile)) {
+                "Complete backup validation failed: food history is missing."
+            }
+            // A manually supplied passphrase enables portable encryption. Older scheduled
+            // backups (without a passphrase) remain compatible until the user upgrades them.
+            val uploadFile = if (passphrase != null) {
+                ArchiveEncryption.encrypt(backupFile, encryptedFile, passphrase)
+                encryptedFile
+            } else backupFile
+            val uploaded = driveClient.upload(accessToken, uploadFile, ownerId, encrypted = passphrase != null)
+            val expectedSha256 = driveClient.sha256(uploadFile)
             check(uploaded.sha256 == expectedSha256) {
                 "Google Drive did not preserve the THOOP backup checksum metadata."
             }
             val verificationFile = File(directory, "thoop-verify-${uploaded.id}.noopbak")
             try {
                 driveClient.download(accessToken, uploaded.id, verificationFile)
-                check(verificationFile.length() == backupFile.length()) {
+                check(verificationFile.length() == uploadFile.length()) {
                     "Google Drive backup verification failed: size mismatch."
                 }
                 check(driveClient.sha256(verificationFile) == expectedSha256) {
                     "Google Drive backup verification failed: SHA-256 mismatch."
                 }
-                check(FileInputStream(verificationFile).use(DataBackup::backupStreamIsIntact)) {
-                    "Google Drive backup verification failed: the uploaded archive is not intact."
+                val verifyCleartext = File(directory, "thoop-verify-clear-${uploaded.id}.noopbak")
+                try {
+                    val validated = if (passphrase != null) {
+                        ArchiveEncryption.decrypt(verificationFile, verifyCleartext, passphrase)
+                        verifyCleartext
+                    } else verificationFile
+                    check(FileInputStream(validated).use(DataBackup::backupStreamIsIntact) &&
+                        DataBackup.containsFoodHistory(validated)) {
+                        "Google Drive backup verification failed: required databases are missing or invalid."
+                    }
+                } finally {
+                    verifyCleartext.delete()
                 }
             } finally {
                 verificationFile.delete()
@@ -58,6 +79,7 @@ internal class GoogleDriveBackupCoordinator(
             uploaded
         } finally {
             backupFile.delete()
+            encryptedFile.delete()
         }
     }
 
@@ -66,7 +88,10 @@ internal class GoogleDriveBackupCoordinator(
         ownerId: String,
     ): List<GoogleDriveBackupClient.RemoteBackup> = driveClient.list(accessToken, ownerId)
 
-    data class BackupPreview(val backup: GoogleDriveBackupClient.RemoteBackup)
+    data class BackupPreview(
+        val backup: GoogleDriveBackupClient.RemoteBackup,
+        val includesFoodHistory: Boolean,
+    )
 
     data class RestoreOutcome(
         val result: DataBackup.ImportResult,
@@ -76,13 +101,14 @@ internal class GoogleDriveBackupCoordinator(
     suspend fun previewBackup(
         accessToken: String,
         backup: GoogleDriveBackupClient.RemoteBackup,
+        passphrase: CharArray? = null,
     ): BackupPreview = withContext(Dispatchers.IO) {
-        val downloaded = downloadForPreview(accessToken, backup.id)
+        val downloaded = downloadBackup(accessToken, backup, passphrase)
         try {
             check(FileInputStream(downloaded).use(DataBackup::backupStreamIsIntact)) {
                 "The selected Google Drive backup is not a valid THOOP backup."
             }
-            BackupPreview(backup)
+            BackupPreview(backup, DataBackup.containsFoodHistory(downloaded))
         } finally {
             downloaded.delete()
         }
@@ -91,6 +117,7 @@ internal class GoogleDriveBackupCoordinator(
     suspend fun restoreBackup(
         accessToken: String,
         backup: GoogleDriveBackupClient.RemoteBackup,
+        passphrase: CharArray? = null,
     ): RestoreOutcome = withContext(Dispatchers.IO) {
         val requiredBytes = minimumFreeBytes(backup.sizeBytes)
         ensureFreeSpace(requiredBytes)
@@ -104,10 +131,19 @@ internal class GoogleDriveBackupCoordinator(
             safetyDirectory,
             "before-cloud-restore-${System.currentTimeMillis()}.noopbak",
         )
-        val restoreFile = downloadForPreview(accessToken, backup.id)
+        val restoreFile = downloadBackup(accessToken, backup, passphrase)
         try {
             check(FileInputStream(restoreFile).use(DataBackup::backupStreamIsIntact)) {
                 "The selected Google Drive backup failed integrity validation."
+            }
+            // ZIP compression ratios vary wildly; do not estimate required disk from the
+            // compressed/encrypted Drive object alone. We stage both databases, then keep
+            // a rollback copy of the currently installed stores during the import.
+            DataBackup.restoreDatabaseBytes(restoreFile)?.let { expandedBytes ->
+                check(expandedBytes <= (Long.MAX_VALUE - MIN_FREE_MARGIN_BYTES) / RESTORE_WORKING_MULTIPLIER) {
+                    "Backup is too large to restore safely."
+                }
+                ensureFreeSpace(expandedBytes * RESTORE_WORKING_MULTIPLIER + MIN_FREE_MARGIN_BYTES)
             }
 
             val safetyUri = FileProvider.getUriForFile(
@@ -154,6 +190,35 @@ internal class GoogleDriveBackupCoordinator(
 
     private fun formatBytes(bytes: Long): String =
         String.format(java.util.Locale.US, "%.1f GB", bytes / 1_073_741_824.0)
+
+    private suspend fun downloadBackup(
+        accessToken: String,
+        backup: GoogleDriveBackupClient.RemoteBackup,
+        passphrase: CharArray?,
+    ): File = withContext(Dispatchers.IO) {
+        val raw = downloadForPreview(accessToken, backup.id)
+        try {
+            backup.sha256?.let { checksum ->
+                check(driveClient.sha256(raw).equals(checksum, ignoreCase = true)) {
+                    "Google Drive backup checksum does not match its uploaded metadata."
+                }
+            }
+            if (!backup.encrypted) return@withContext raw
+            require(passphrase != null && passphrase.isNotEmpty()) {
+                "Enter the recovery passphrase for this encrypted backup."
+            }
+            val clear = File(raw.parentFile, "decrypted-${backup.id}.noopbak")
+            try {
+                ArchiveEncryption.decrypt(raw, clear, passphrase)
+                clear
+            } catch (failure: Throwable) {
+                clear.delete()
+                throw failure
+            }
+        } finally {
+            if (backup.encrypted) raw.delete()
+        }
+    }
 
     suspend fun downloadForPreview(
         accessToken: String,

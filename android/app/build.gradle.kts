@@ -249,7 +249,12 @@ tasks.withType<Test>().configureEach {
     // schema being materialised) and a stable, singly-owned directory to read.
     dependsOn(syncRoomSchemaSnapshot)
     systemProperty("room.schemaLocation", roomSchemaSnapshotDir.get().asFile.absolutePath)
-    inputs.dir(roomSchemaSnapshotDir).withPropertyName("roomSchemas").optional()
+    // Gradle 8.7 validates a directory input before tests run, even when optional() is set.
+    // The Sync task can legitimately have no output on cache hits / after clean; tracking
+    // the task's output FILE COLLECTION avoids an invalid missing-directory input while
+    // preserving Gradle's schema-change tracking and the explicit task dependency above.
+    // SchemaOracleTest itself still fails if the required JSON files are actually absent.
+    inputs.files(syncRoomSchemaSnapshot).withPropertyName("roomSchemas")
 }
 
 // Resolve every external module to the exact version recorded in app/gradle.lockfile. Direct

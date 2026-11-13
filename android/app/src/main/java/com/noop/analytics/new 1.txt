@@ -1,0 +1,672 @@
+PS C:\Projects\thoop-recovery> Remove-Item -Path "*.xcodeproj", "*.xcworkspace", "Package.swift", "Package.resolved", ".build" -Recurse -Force -ErrorAction SilentlyContinue
+PS C:\Projects\thoop-recovery> Get-ChildItem -Path . -Recurse -Include "Info.plist", "*.xcstrings", "*.xcassets", "*.entitlements" | Remove-Item -Recurse -Force
+PS C:\Projects\thoop-recovery> Remove-Item -Path "NOOPWatch" -Recurse -Force -ErrorAction SilentlyContinue
+PS C:\Projects\thoop-recovery> .\gradlew clean assembleDebug
+.\gradlew : The term '.\gradlew' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ .\gradlew clean assembleDebug
++ ~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (.\gradlew:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery> cd android
+PS C:\Projects\thoop-recovery\android> dir
+
+
+    Directory: C:\Projects\thoop-recovery\android
+
+
+Mode                 LastWriteTime         Length Name                                                                                                                                                                             
+----                 -------------         ------ ----                                                                                                                                                                             
+d-----        11/10/2026   9:28 AM                .gradle                                                                                                                                                                          
+d-----         11/9/2026   6:41 PM                app                                                                                                                                                                              
+d-----        10/11/2026  11:26 AM                gradle                                                                                                                                                                           
+-a----        10/11/2026  11:26 AM            302 .gitignore                                                                                                                                                                       
+-a----        10/11/2026  11:26 AM            566 build.gradle.kts                                                                                                                                                                 
+-a----        10/10/2026   6:46 PM           2666 fork-debug.keystore                                                                                                                                                              
+-a----        10/11/2026  11:26 AM           1653 gradle.properties                                                                                                                                                                
+-a----        10/11/2026  11:26 AM           8941 gradlew                                                                                                                                                                          
+-a----        10/11/2026  11:26 AM           2918 gradlew.bat                                                                                                                                                                      
+-a----         11/3/2026   2:27 PM            560 local.properties                                                                                                                                                                 
+-a----        10/11/2026  11:26 AM          14334 README.md                                                                                                                                                                        
+-a----        10/11/2026  11:26 AM            553 settings.gradle.kts                                                                                                                                                              
+-a----        11/10/2026   6:32 PM              0 THOOP-Coach-Full-Labs-Age-Context-patch.ps1                                                                                                                                      
+-a----        10/11/2026   1:03 PM       33739516 thoop-installed-current.apk                                                                                                                                                      
+
+
+PS C:\Projects\thoop-recovery\android> .\gradlew clean assembleDebug
+Starting a Gradle Daemon, 1 incompatible and 1 stopped Daemons could not be reused, use --status for details
+Configuration on demand is an incubating feature.
+> Task :app:checkDemoDebugAarMetadata FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:checkDemoDebugAarMetadata'.
+> Could not resolve all files for configuration ':app:demoDebugRuntimeClasspath'.
+   > Resolved 'com.google.android.libraries.identity.googleid:googleid:1.1.1' which is not part of the dependency lock state
+   > Resolved 'androidx.cursoradapter:cursoradapter:1.0.0' which is not part of the dependency lock state
+   > Resolved 'androidx.appcompat:appcompat-resources:1.2.0' which is not part of the dependency lock state
+   > Resolved 'androidx.biometric:biometric:1.1.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-fido:21.0.0' which is not part of the dependency lock state
+   > Resolved 'androidx.customview:customview:1.0.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-identity-credentials:16.0.0-alpha02' which is not part of the dependency lock state
+   > Resolved 'androidx.appcompat:appcompat:1.2.0' which is not part of the dependency lock state
+   > Resolved 'androidx.credentials:credentials:1.5.0' which is not part of the dependency lock state
+   > Resolved 'androidx.vectordrawable:vectordrawable:1.1.0' which is not part of the dependency lock state
+   > Resolved 'androidx.loader:loader:1.1.0' which is not part of the dependency lock state
+   > Resolved 'androidx.drawerlayout:drawerlayout:1.0.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-auth-base:18.0.10' which is not part of the dependency lock state
+   > Resolved 'androidx.fragment:fragment:1.5.7' which is not part of the dependency lock state
+   > Resolved 'androidx.viewpager:viewpager:1.0.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-tasks:18.2.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-basement:18.4.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-auth-api-phone:18.0.2' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-auth:21.1.1' which is not part of the dependency lock state
+   > Resolved 'androidx.credentials:credentials-play-services-auth:1.5.0' which is not part of the dependency lock state
+   > Resolved 'androidx.vectordrawable:vectordrawable-animated:1.1.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-auth-blockstore:16.4.0' which is not part of the dependency lock state
+   > Resolved 'com.google.android.gms:play-services-base:18.5.0' which is not part of the dependency lock state
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 23s
+4 actionable tasks: 4 executed
+PS C:\Projects\thoop-recovery\android> Projects\thoop-recovery> cd android
+Projects\thoop-recovery> : The module 'Projects' could not be loaded. For more information, run 'Import-Module Projects'.
+At line:1 char:1
++ Projects\thoop-recovery> cd android
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Projects\thoop-recovery>:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CouldNotAutoLoadModule
+ 
+PS C:\Projects\thoop-recovery\android> PS C:\Projects\thoop-recovery\android> dir
+Get-Process : A positional parameter cannot be found that accepts argument 'dir'.
+At line:1 char:1
++ PS C:\Projects\thoop-recovery\android> dir
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:) [Get-Process], ParameterBindingException
+    + FullyQualifiedErrorId : PositionalParameterNotFound,Microsoft.PowerShell.Commands.GetProcessCommand
+ 
+PS C:\Projects\thoop-recovery\android> 
+PS C:\Projects\thoop-recovery\android> 
+PS C:\Projects\thoop-recovery\android>     Directory: C:\Projects\thoop-recovery\android
+Directory: : The term 'Directory:' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:5
++     Directory: C:\Projects\thoop-recovery\android
++     ~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Directory::String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> 
+PS C:\Projects\thoop-recovery\android> 
+PS C:\Projects\thoop-recovery\android> Mode                 LastWriteTime         Length Name                                                                                                                                                                             
+Invalid parameter - LastWriteTime
+PS C:\Projects\thoop-recovery\android> ----                 -------------         ------ ----                                                                                                                                                                             
+>> d-----        11/10/2026   9:28 AM                .gradle                                                                                                                                                                          
+At line:1 char:55
++ ----                 -------------         ------ ----
++                                                       ~
+Missing expression after unary operator '--'.
+At line:2 char:1
++ d-----        11/10/2026   9:28 AM                .gradle
++ ~~~~~~
+Unexpected token 'd-----' in expression or statement.
+At line:1 char:3
++ ----                 -------------         ------ ----
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+At line:1 char:22
++ ----                 -------------         ------ ----
++                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+At line:1 char:24
++ ----                 -------------         ------ ----
++                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+At line:1 char:26
++ ----                 -------------         ------ ----
++                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+At line:1 char:28
++ ----                 -------------         ------ ----
++                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+At line:1 char:30
++ ----                 -------------         ------ ----
++                              ~~~~~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+At line:1 char:32
++ ----                 -------------         ------ ----
++                                ~~~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+At line:1 char:34
++ ----                 -------------         ------ ----
++                                  ~~~~~~~~~~~~~~~~~~~~~
+The '--' operator works only on variables or on properties.
+Not all parse errors were reported.  Correct the reported errors and try again.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : MissingExpressionAfterOperator
+ 
+PS C:\Projects\thoop-recovery\android> d-----         11/9/2026   6:41 PM                app                                                                                                                                                                              
+d----- : The term 'd-----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ d-----         11/9/2026   6:41 PM                app
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (d-----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> d-----        10/11/2026  11:26 AM                gradle                                                                                                                                                                           
+d----- : The term 'd-----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ d-----        10/11/2026  11:26 AM                gradle
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (d-----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026  11:26 AM            302 .gitignore                                                                                                                                                                       
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026  11:26 AM            302 .gitignore
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026  11:26 AM            566 build.gradle.kts                                                                                                                                                                 
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026  11:26 AM            566 build.gradle.kts
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/10/2026   6:46 PM           2666 fork-debug.keystore                                                                                                                                                              
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/10/2026   6:46 PM           2666 fork-debug.keystore
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026  11:26 AM           1653 gradle.properties                                                                                                                                                                
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026  11:26 AM           1653 gradle.properties
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026  11:26 AM           8941 gradlew                                                                                                                                                                          
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026  11:26 AM           8941 gradlew
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026  11:26 AM           2918 gradlew.bat                                                                                                                                                                      
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026  11:26 AM           2918 gradlew.bat
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----         11/3/2026   2:27 PM            560 local.properties                                                                                                                                                                 
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----         11/3/2026   2:27 PM            560 local.properties
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026  11:26 AM          14334 README.md                                                                                                                                                                        
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026  11:26 AM          14334 README.md
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026  11:26 AM            553 settings.gradle.kts                                                                                                                                                              
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026  11:26 AM            553 settings.gradle.kts
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        11/10/2026   6:32 PM              0 THOOP-Coach-Full-Labs-Age-Context-patch.ps1                                                                                                                                      
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        11/10/2026   6:32 PM              0 THOOP-Coach-Full-La ...
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> -a----        10/11/2026   1:03 PM       33739516 thoop-installed-current.apk                                                                                                                                                      
+-a---- : The term '-a----' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ -a----        10/11/2026   1:03 PM       33739516 thoop-installed-cur ...
++ ~~~~~~
+    + CategoryInfo          : ObjectNotFound: (-a----:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> 
+PS C:\Projects\thoop-recovery\android> 
+PS C:\Projects\thoop-recovery\android> .\gradlew clean assembleDebug --write-locks
+Configuration on demand is an incubating feature.
+
+> Task :app:compileDemoDebugKotlin
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:398:9 Parameter 'provider' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:399:9 Parameter 'model' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:401:9 Parameter 'customBaseUrl' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:402:9 Parameter 'customAuthHeader' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/analytics/CoachTrainingIntelligence.kt:9:63 Parameter 'foods' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/analytics/SleepStager.kt:3211:58 Unnecessary non-null assertion (!!) on a non-null receiver of type Double
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/analytics/SleepStager.kt:3213:55 Unnecessary non-null assertion (!!) on a non-null receiver of type Double
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ble/WhoopBleClient.kt:10766:17 'when' is exhaustive so 'else' is redundant here
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/data/GoogleDriveArchive.kt:83:13 Variable 'firstRetainedDay' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:203:51 Parameter 'granted' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:207:36 Parameter 'context' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:207:54 Parameter 'granted' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:211:9 Parameter 'hadLegacyPermissionSignature' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:923:35 Parameter 'context' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:923:53 Parameter 'repo' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/testcentre/TestReportFlow.kt:57:60 Parameter 'title' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/testcentre/TestReportFlow.kt:58:48 Parameter 'osVersion' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/AppRoot.kt:640:9 Variable 'barHeight' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/AppRoot.kt:1227:5 Parameter 'selected' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/AppRoot.kt:1228:5 Parameter 'coachEnabled' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/CoachScreen.kt:302:77 'VIBRATOR_SERVICE: String' is deprecated. Deprecated in Java
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/GoogleAccountCard.kt:312:48 'Login: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Login
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/GoogleAccountCard.kt:353:48 'Logout: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Logout
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/GoogleAccountCard.kt:432:62 Parameter 'failure' is never used, could be renamed to _
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HostedCards.kt:80:83 'ShowChart: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ShowChart
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HrEventVisuals.kt:58:62 'DirectionsWalk: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsWalk
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HrEventVisuals.kt:59:61 'DirectionsRun: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsRun
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HrEventVisuals.kt:60:63 'DirectionsBike: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsBike
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/ProfileScreen.kt:31:28 Parameter 'onOpenSettings' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:658:9 Variable 'showStepsCalibration' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:819:9 Variable 'exportLauncher' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:855:9 Variable 'csvExportLauncher' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:884:9 Variable 'importLauncher' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:364:9 Variable 'activeWorkout' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:474:9 Variable 'oxygenSummary' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:827:9 Variable 'sourcesExpanded' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:2412:40 'BluetoothSearching: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.BluetoothSearching
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:3033:5 Parameter 'heroSourceLabel' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:4562:5 Parameter 'vitalsDay' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:6610:5 Parameter 'effortScale' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:6613:5 Parameter 'effortForDay' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:6700:9 Variable 'selectedLabel' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:7125:9 Variable 'density' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:7257:17 Variable 'dash' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:7287:17 Variable 'topPadDp' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/widget/WidgetSnapshot.kt:263:50 Unnecessary non-null assertion (!!) on a non-null receiver of type Int
+
+> Task :app:compileFullDebugKotlin
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:398:9 Parameter 'provider' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:399:9 Parameter 'model' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:401:9 Parameter 'customBaseUrl' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ai/AiCoach.kt:402:9 Parameter 'customAuthHeader' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/analytics/CoachTrainingIntelligence.kt:9:63 Parameter 'foods' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/analytics/SleepStager.kt:3211:58 Unnecessary non-null assertion (!!) on a non-null receiver of type Double
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/analytics/SleepStager.kt:3213:55 Unnecessary non-null assertion (!!) on a non-null receiver of type Double
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ble/WhoopBleClient.kt:10766:17 'when' is exhaustive so 'else' is redundant here
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/data/GoogleDriveArchive.kt:83:13 Variable 'firstRetainedDay' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:203:51 Parameter 'granted' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:207:36 Parameter 'context' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:207:54 Parameter 'granted' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:211:9 Parameter 'hadLegacyPermissionSignature' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:923:35 Parameter 'context' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt:923:53 Parameter 'repo' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/testcentre/TestReportFlow.kt:57:60 Parameter 'title' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/testcentre/TestReportFlow.kt:58:48 Parameter 'osVersion' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/AppRoot.kt:640:9 Variable 'barHeight' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/AppRoot.kt:1227:5 Parameter 'selected' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/AppRoot.kt:1228:5 Parameter 'coachEnabled' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/CoachScreen.kt:302:77 'VIBRATOR_SERVICE: String' is deprecated. Deprecated in Java
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/GoogleAccountCard.kt:312:48 'Login: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Login
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/GoogleAccountCard.kt:353:48 'Logout: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Logout
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/GoogleAccountCard.kt:432:62 Parameter 'failure' is never used, could be renamed to _
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HostedCards.kt:80:83 'ShowChart: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ShowChart
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HrEventVisuals.kt:58:62 'DirectionsWalk: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsWalk
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HrEventVisuals.kt:59:61 'DirectionsRun: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsRun
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/HrEventVisuals.kt:60:63 'DirectionsBike: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsBike
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/ProfileScreen.kt:31:28 Parameter 'onOpenSettings' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:658:9 Variable 'showStepsCalibration' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:819:9 Variable 'exportLauncher' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:855:9 Variable 'csvExportLauncher' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/SettingsScreen.kt:884:9 Variable 'importLauncher' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:364:9 Variable 'activeWorkout' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:474:9 Variable 'oxygenSummary' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:827:9 Variable 'sourcesExpanded' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:2412:40 'BluetoothSearching: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.BluetoothSearching
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:3033:5 Parameter 'heroSourceLabel' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:4562:5 Parameter 'vitalsDay' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:6610:5 Parameter 'effortScale' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:6613:5 Parameter 'effortForDay' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:6700:9 Variable 'selectedLabel' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:7125:9 Variable 'density' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:7257:17 Variable 'dash' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/ui/TodayScreen.kt:7287:17 Variable 'topPadDp' is never used
+w: file:///C:/Projects/thoop-recovery/android/app/src/main/java/com/noop/widget/WidgetSnapshot.kt:263:50 Unnecessary non-null assertion (!!) on a non-null receiver of type Int
+Persisted dependency lock state for buildscript of project ':'
+Persisted dependency lock state for project ':app'
+
+BUILD SUCCESSFUL in 11m 26s
+76 actionable tasks: 50 executed, 25 from cache, 1 up-to-date
+PS C:\Projects\thoop-recovery\android> explorer .\app\build\outputs\apk\demo\debug\
+PS C:\Projects\thoop-recovery\android> adb devices
+adb : The term 'adb' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ adb devices
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (adb:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+PS C:\Projects\thoop-recovery\android> $env:Path += ";$env:LOCALAPPDATA\Android\Sdk\platform-tools"
+PS C:\Projects\thoop-recovery\android> adb devices
+List of devices attached
+c3228379        device
+
+PS C:\Projects\thoop-recovery\android> adb install -r .\app\build\outputs\apk\demo\debug\app-demo-debug.apk
+Performing Streamed Install
+Success
+PS C:\Projects\thoop-recovery\android> cd ..
+PS C:\Projects\thoop-recovery> git fetch --tags
+PS C:\Projects\thoop-recovery> git describe --tags --abbrev=0
+v12.5.16-synthesis-ai-final
+PS C:\Projects\thoop-recovery> git add -A
+warning: in the working copy of 'THOOP-12NOV-apply-ui-python.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-apply-ui-run.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-apply-ui.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-final-code-blocks.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-implementation-slices.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-safety-20261112-184738/GoogleDriveArchive.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-safety-20261112-184738/TodayScreen.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-safety-20261112-184738/WorkoutsScreen.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-script-backup-20261112-185055/TodayScreen.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-script-backup-20261112-185055/WorkoutsScreen.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-12NOV-source-slices.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-FINAL-Labs-Workout-HC-v4.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-FINAL-current-source.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-battery-ring-power-saving-threshold-v2.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/GoogleDriveArchive.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/GoogleDriveBackupCoordinator.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/WhoopRepository.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-hr-chart-current/src/main/java/com/noop/data/WhoopRepository.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-hr-chart-current/src/main/java/com/noop/ui/HealthScreen.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-workout-local-reconciliation-v2.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'THOOP-workout-local-reconciliation.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'release-notes-v12.5.11-labs-workout-hc-map.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'release-notes-v12.5.12-workout-reconciliation.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'release-notes-v12.5.13-workout-battery-polish.md', LF will be replaced by CRLF the next time Git touches it
+PS C:\Projects\thoop-recovery> git commit -m "chore: remove all Apple ecosystem components and fix Android gradle locks"
+[fix/restore-vo2-vitality-detail-clean b7ae5b73] chore: remove all Apple ecosystem components and fix Android gradle locks
+ 246 files changed, 113671 insertions(+), 232277 deletions(-)
+ delete mode 100644 NOOPWatch/Assets.xcassets/AppIcon.appiconset/AppIcon1024.png
+ delete mode 100644 NOOPWatch/Assets.xcassets/AppIcon.appiconset/Contents.json
+ delete mode 100644 NOOPWatch/Assets.xcassets/Contents.json
+ delete mode 100644 NOOPWatch/Info.plist
+ delete mode 100644 NOOPWatch/Localizable.xcstrings
+ delete mode 100644 NOOPWatch/NOOPWatch.entitlements
+ delete mode 100644 NOOPWatch/NOOPWatchApp.swift
+ delete mode 100644 NOOPWatch/WatchBreatheView.swift
+ delete mode 100644 NOOPWatch/WatchGlanceView.swift
+ delete mode 100644 NOOPWatch/WatchIntervalView.swift
+ delete mode 100644 NOOPWatch/WatchLiveHR.swift
+ delete mode 100644 NOOPWatch/WatchRootView.swift
+ delete mode 100644 NOOPWatch/WatchScoreStore.swift
+ delete mode 100644 NOOPWatch/WatchWorkoutView.swift
+ delete mode 100644 NOOPWatchComplications/Info.plist
+ delete mode 100644 NOOPWatchComplications/Localizable.xcstrings
+ delete mode 100644 NOOPWatchComplications/NOOPWatchComplications.entitlements
+ delete mode 100644 Packages/StrandDesign/Sources/StrandDesign/Resources/Localizable.xcstrings
+ delete mode 100644 Strand.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_16x16.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_16x16@2x.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256@2x.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_32x32.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_32x32@2x.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png
+ delete mode 100644 Strand/Resources/Assets.xcassets/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene1.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene1.imageset/scene1.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene10.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene10.imageset/scene10.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene2.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene2.imageset/scene2.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene3.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene3.imageset/scene3.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene4.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene4.imageset/scene4.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene5.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene5.imageset/scene5.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene6.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene6.imageset/scene6.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene7.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene7.imageset/scene7.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene8.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene8.imageset/scene8.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene9.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/scene9.imageset/scene9.heic
+ delete mode 100644 Strand/Resources/Assets.xcassets/sleepNightHero.imageset/Contents.json
+ delete mode 100644 Strand/Resources/Assets.xcassets/sleepNightHero.imageset/sleepNightHero.heic
+ delete mode 100644 Strand/Resources/Info.plist
+ delete mode 100644 Strand/Resources/Localizable.xcstrings
+ delete mode 100644 Strand/Resources/Strand.entitlements
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/AppIcon-Navy.appiconset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/AppIcon-Navy.appiconset/icon_1024.png
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/AppIcon.appiconset/icon_1024.png
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene1.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene1.imageset/scene1.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene10.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene10.imageset/scene10.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene2.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene2.imageset/scene2.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene3.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene3.imageset/scene3.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene4.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene4.imageset/scene4.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene5.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene5.imageset/scene5.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene6.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene6.imageset/scene6.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene7.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene7.imageset/scene7.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene8.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene8.imageset/scene8.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene9.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/scene9.imageset/scene9.heic
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/sleepNightHero.imageset/Contents.json
+ delete mode 100644 StrandiOS/Resources/Assets.xcassets/sleepNightHero.imageset/sleepNightHero.heic
+ delete mode 100644 StrandiOS/Resources/Info.plist
+ delete mode 100644 StrandiOS/Resources/NOOP.entitlements
+ delete mode 100644 StrandiOSWidgets/Info.plist
+ delete mode 100644 StrandiOSWidgets/NOOPWidgets.entitlements
+ create mode 100644 THOOP-12NOV-apply-ui-python.ps1
+ create mode 100644 THOOP-12NOV-apply-ui-run.ps1
+ create mode 100644 THOOP-12NOV-apply-ui.ps1
+ create mode 100644 THOOP-12NOV-final-code-blocks.txt
+ create mode 100644 THOOP-12NOV-implementation-slices.txt
+ create mode 100644 THOOP-12NOV-safety-20261112-184738/GoogleCloudBackupScheduler.kt
+ create mode 100644 THOOP-12NOV-safety-20261112-184738/GoogleDriveArchive.kt
+ create mode 100644 THOOP-12NOV-safety-20261112-184738/GoogleDriveBackupClient.kt
+ create mode 100644 THOOP-12NOV-safety-20261112-184738/TodayScreen.kt
+ create mode 100644 THOOP-12NOV-safety-20261112-184738/WorkoutsScreen.kt
+ create mode 100644 THOOP-12NOV-script-backup-20261112-185055/TodayScreen.kt
+ create mode 100644 THOOP-12NOV-script-backup-20261112-185055/WorkoutsScreen.kt
+ create mode 100644 THOOP-12NOV-source-slices.txt
+ create mode 100644 THOOP-12NOV-synthesis-visual-backup-20261112-191726.kt
+ create mode 100644 THOOP-FINAL-Labs-Workout-HC-v4.ps1
+ create mode 100644 THOOP-FINAL-current-source.ps1
+ delete mode 100644 THOOP-Final-Safe-VO2-Vitality-Trends-NOOP-12.1.0.patch.txt
+ delete mode 100644 THOOP-Health-Connect-Manual-Import-Source.zip.txt
+ create mode 100644 THOOP-battery-power-saving-current.zip.txt
+ create mode 100644 THOOP-battery-ring-power-saving-threshold-v2.ps1
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/SOURCE-STATE.txt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/build.gradle.kts
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/AndroidManifest.xml
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/analytics/FitnessAgeEngine.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/analytics/LabBookProjection.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/BackupProvenance.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/BackupSettings.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/CycleTrackingStore.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/DataBackup.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/DemoSeeder.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/DeviceBrandCatalog.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/DeviceRegistry.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/DeviceRegistryDao.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/Entities.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/FoodIntake.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/GoogleCloudBackupScheduler.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/GoogleDriveArchive.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/GoogleDriveBackupClient.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/GoogleDriveBackupCoordinator.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/ImportSummary.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/LiftEntities.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/LiftMuscle.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/MoodStore.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/NapStore.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/OuraRedrainCollapse.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/OuraRespScale.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/OuraSerialIdentity.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/OuraStreamMapping.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/PairedDevice.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/SecurePrefs.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/SleepSessionUpsertPolicy.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/StandardHrMapping.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/StorageFootprint.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/StreamPersistence.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/V18AuxCodec.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/WhoopDao.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/WhoopDatabase.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/WhoopLiveCapabilities.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/WhoopRepository.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/data/WhoopSerialIdentity.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ingest/HealthConnectImporter.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ingest/HealthConnectLedger.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ingest/HealthConnectWriter.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/ActiveWorkoutClock.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/ActiveWorkoutStore.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/AppViewModel.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/AutoWorkoutNudge.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/AutoWorkoutPrefs.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/DataSourcesScreen.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/EndWorkoutConfirmation.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/HealthConnectCategorySelector.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/LabBookScreen.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/LabValueFormat.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/LiveWorkoutScreen.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/OnboardingScreen.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/SleepTimeLabels.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/WorkoutEditing.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/WorkoutStart.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/main/java/com/noop/ui/WorkoutsScreen.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ai/AiCoachVisibleWorkoutsTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ai/AiCoachWorkoutBlockTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/AutoWorkoutDetectorTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/AutoWorkoutDetectorTraceTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/FitnessAgeEngineTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/FitnessAgePaceEngineTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/IntelligenceEngineWorkoutBackfillTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/LabBookProjectionTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/ManualWorkoutRescoreRestingHrTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/ManualWorkoutRescoreTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/WorkoutDetectorTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/WorkoutSportTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/analytics/WorkoutTypeClassifierTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ble/BleStatusLabelsTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/data/AutoWorkoutDismissedUnionTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/data/LabMarkerMigrationTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/data/WorkoutHrDeviceKeyTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/data/WorkoutReplacementDataSafetyTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectActiveKcalTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectCoveredDaysTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectDerivedBmiTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectKcalIndexTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectLedgerTest.kt
+ rename HealthConnectPermissionCategoryTest.kt => THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectPermissionCategoryTest.kt (78%)
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectRouteImportTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectSelfWriteSkipTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectStepsDeOverlapTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectVo2MaxExportTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/HealthConnectZoneOffsetTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ingest/LabMarkerCsvImportTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/ActiveWorkoutClockTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/ActiveWorkoutIndicatorTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/ActiveWorkoutPersistenceTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/AutoWorkoutNudgeSourceTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/AutoWorkoutPrefsTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/BathWorkoutTypesTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/ChartSelectionLabelTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/LabValueFormatTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/LastWorkoutsFeedTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/ManualWorkoutSpanTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/TodayWorkoutTapTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/TrendsAxisLabelsTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/WorkoutEditDeviceIdTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/WorkoutEditingTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/WorkoutMetricResolverTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/WorkoutSourceLabelTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/ui/WorkoutZonesTest.kt
+ create mode 100644 THOOP-combined-patch-source-20261111-163409/android/app/src/test/java/com/noop/update/UpdateAvailabilityTest.kt
+ create mode 100644 THOOP-final-current-source.zip.txt
+ create mode 100644 THOOP-hr-chart-current/BASE_COMMIT.txt
+ create mode 100644 THOOP-hr-chart-current/WORKING_TREE_STATUS.txt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/analytics/HeartRateRecovery.kt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/data/Entities.kt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/data/WhoopRepository.kt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/ingest/ExerciseTypes.kt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/ui/AppRoot.kt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/ui/Charts.kt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/ui/HealthScreen.kt
+ create mode 100644 THOOP-hr-chart-current/src/main/java/com/noop/ui/TodayScreen.kt
+ create mode 100644 THOOP-hr-chart-current/src/test/java/com/noop/analytics/HeartRateRecoveryTest.kt
+ create mode 100644 THOOP-noop-prefs-current.xml
+ create mode 100644 THOOP-synthesis-hotfix-block.txt
+ create mode 100644 THOOP-v12.5.11-labs-workout-hc-map-full-debug.apk.sha256
+ create mode 100644 THOOP-v12.5.12-workout-reconciliation-full-debug.apk.sha256
+ create mode 100644 THOOP-v12.5.13-workout-battery-polish-full-debug.apk.sha256
+ create mode 100644 THOOP-v12.5.14-synthesis-workout-ui-full-debug.apk.sha256
+ create mode 100644 THOOP-v12.5.15-synthesis-ai-hotfix-full-debug.apk.sha256
+ create mode 100644 THOOP-v12.5.16-synthesis-ai-final-full-debug.apk.sha256
+ create mode 100644 THOOP-workout-local-reconciliation-v2.ps1
+ create mode 100644 THOOP-workout-local-reconciliation.ps1
+ create mode 100644 THOOP-workout-reconciliation-missing-source.zip.txt
+ create mode 100644 THOOP-workout-reconciliation-source.zip.txt
+ create mode 100644 TodayScreen.before-clean-rebuild-20261112-195042.kt
+ create mode 100644 TodayScreen.before-synthesis-ai-hotfix-20261112-200745.kt
+ create mode 100644 android/THOOP-Coach-Full-Labs-Age-Context-patch.ps1
+ create mode 100644 android/app/src/test/java/com/noop/ui/BottomBarTabsTest.kt.before-permanent-dock-test-fix
+ create mode 100644 release-notes-v12.5.11-labs-workout-hc-map.md
+ create mode 100644 release-notes-v12.5.12-workout-reconciliation.md
+ create mode 100644 release-notes-v12.5.13-workout-battery-polish.md
+PS C:\Projects\thoop-recovery> git tag v13.0.0
+PS C:\Projects\thoop-recovery> git push origin main
+Everything up-to-date
+PS C:\Projects\thoop-recovery> git push origin v13.0.0
+Enumerating objects: 206, done.
+Counting objects: 100% (206/206), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (171/171), done.
+Writing objects: 100% (192/192), 2.16 MiB | 1.59 MiB/s, done.
+Total 192 (delta 21), reused 41 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (21/21), completed with 10 local objects.
+To https://github.com/otidotid/thoop
+ * [new tag]           v13.0.0 -> v13.0.0
+PS C:\Projects\thoop-recovery> cd C:\Projects\thoop-recovery\android
+PS C:\Projects\thoop-recovery\android> cd app\build\outputs\apk\demo

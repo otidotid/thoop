@@ -27,6 +27,10 @@ data class GoogleDriveArchiveRecord(
     val recordCount: Long,
     val schemaVersion: Int,
     val verifiedAtMs: Long,
+    /** False for archives uploaded before passphrase protection was introduced. */
+    val encrypted: Boolean = false,
+    /** Reference to untouched original Drive object after a manual legacy encryption migration. */
+    val legacyDriveFileId: String? = null,
 )
 
 internal class GoogleDriveArchiveManifest(context: Context) {
@@ -46,6 +50,8 @@ internal class GoogleDriveArchiveManifest(context: Context) {
                     recordCount = item.getLong("recordCount"),
                     schemaVersion = item.getInt("schemaVersion"),
                     verifiedAtMs = item.getLong("verifiedAtMs"),
+                    encrypted = item.optBoolean("encrypted", false),
+                    legacyDriveFileId = item.optString("legacyDriveFileId").takeIf { it.isNotBlank() },
                 ))
             }
         }
@@ -58,7 +64,9 @@ internal class GoogleDriveArchiveManifest(context: Context) {
                 .put("month", row.month).put("driveFileId", row.driveFileId)
                 .put("sha256", row.sha256).put("sizeBytes", row.sizeBytes)
                 .put("recordCount", row.recordCount).put("schemaVersion", row.schemaVersion)
-                .put("verifiedAtMs", row.verifiedAtMs))
+                .put("verifiedAtMs", row.verifiedAtMs)
+                .put("encrypted", row.encrypted)
+                .put("legacyDriveFileId", row.legacyDriveFileId))
         }
         val temp = File(file.parentFile, "${file.name}.tmp")
         temp.writeText(array.toString(), Charsets.UTF_8)
@@ -78,8 +86,12 @@ internal class GoogleDriveArchiveManager(
     suspend fun createAndVerifyArchives(
         accessToken: String,
         ownerId: String,
+        recoveryPassphrase: CharArray,
         today: LocalDate = LocalDate.now(),
     ): List<GoogleDriveArchiveRecord> = withContext(Dispatchers.IO) {
+        require(recoveryPassphrase.size >= 12) {
+            "A recovery passphrase with at least 12 characters is required before archiving."
+        }
         val firstRetainedDay = today.minusDays(89)
         val lastArchiveMonth = lastEligibleArchiveMonth(today)
         val existing = manifest.read().associateBy { it.month }.toMutableMap()
@@ -88,7 +100,7 @@ internal class GoogleDriveArchiveManager(
         var month = oldest
         while (!month.isAfter(lastArchiveMonth)) {
             if (existing[month.toString()] == null) {
-                buildUploadVerify(month, accessToken, ownerId).also {
+                buildUploadVerify(month, accessToken, ownerId, recoveryPassphrase).also {
                     manifest.put(it); existing[it.month] = it; created += it
                 }
             }
@@ -104,37 +116,134 @@ internal class GoogleDriveArchiveManager(
         created
     }
 
-    suspend fun openMonthOnline(accessToken: String, month: YearMonth): SQLiteDatabase =
-        withContext(Dispatchers.IO) {
-            val record = manifest.read().firstOrNull { it.month == month.toString() }
-                ?: error("Archived history requires Google Drive and is not available for $month.")
-            val cache = File(appContext.cacheDir, "drive-archive-cache").apply { mkdirs() }
-            val blob = File(cache, "${record.month}.nooparc")
-            val dbFile = File(cache, "${record.month}.sqlite")
-            if (!blob.isFile || driveClient.sha256(blob) != record.sha256) {
-                blob.delete(); driveClient.download(accessToken, record.driveFileId, blob)
+    /**
+     * Manual, one-month migration: verify legacy, encrypt its original bytes, upload as a NEW
+     * Drive object, download/decrypt/open the new object, then atomically update the manifest.
+     * Neither the original Drive object nor any local health record is deleted or modified.
+     */
+    suspend fun encryptLegacyMonth(
+        accessToken: String,
+        ownerId: String,
+        month: YearMonth,
+        recoveryPassphrase: CharArray,
+    ): GoogleDriveArchiveRecord = withContext(Dispatchers.IO) {
+        require(ownerId.isNotBlank() && accessToken.isNotBlank()) { "Google Drive must be connected." }
+        require(recoveryPassphrase.size >= 12) { "Use a recovery passphrase of at least 12 characters." }
+        val old = manifest.read().singleOrNull { it.month == month.toString() }
+            ?: error("No local archive manifest entry for $month.")
+        require(!old.encrypted) { "This month is already encrypted." }
+
+        // Verify the *existing* archive before copying it. Always close the read-only handle.
+        val verifiedOriginal = openMonthOnline(accessToken, month)
+        verifiedOriginal.close()
+        clearTemporaryCache(month)
+
+        val work = File(appContext.cacheDir, "drive-migration-work").apply { mkdirs() }
+        val original = File(work, "$month.legacy.nooparc")
+        val encrypted = File(work, "$month.new.noopenc")
+        val downloaded = File(work, "$month.download.noopenc")
+        val decrypted = File(work, "$month.verify.nooparc")
+        val extracted = File(work, "$month.verify.sqlite")
+        try {
+            listOf(original, encrypted, downloaded, decrypted, extracted).forEach(File::delete)
+            driveClient.download(accessToken, old.driveFileId, original)
+            check(original.length() == old.sizeBytes) { "Legacy archive length changed." }
+            check(driveClient.sha256(original) == old.sha256) { "Legacy archive hash mismatch." }
+            ArchiveEncryption.encrypt(original, encrypted, recoveryPassphrase)
+            val encryptedHash = driveClient.sha256(encrypted)
+            val remote = driveClient.uploadArchive(
+                accessToken, encrypted, ownerId, month.toString(),
+                old.recordCount, old.schemaVersion, encrypted = true,
+            )
+            check(remote.sha256 == encryptedHash) { "New archive metadata checksum mismatch." }
+            driveClient.download(accessToken, remote.id, downloaded)
+            check(downloaded.length() == encrypted.length()) { "Downloaded encrypted archive length mismatch." }
+            check(driveClient.sha256(downloaded) == encryptedHash) { "Encrypted archive download hash mismatch." }
+            ArchiveEncryption.decrypt(downloaded, decrypted, recoveryPassphrase)
+            check(driveClient.sha256(decrypted) == old.sha256) {
+                "Decrypted archive differs from the verified original."
             }
-            check(blob.length() == record.sizeBytes)
-            check(driveClient.sha256(blob) == record.sha256)
-            extractDatabase(blob, dbFile)
-            val opened = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            check(opened.version == record.schemaVersion)
-            check(countRows(opened) == record.recordCount)
-            cache.listFiles()?.filterNot { it.name.startsWith(record.month) }?.forEach(File::delete)
-            opened
+            extractDatabase(decrypted, extracted)
+            SQLiteDatabase.openDatabase(extracted.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                check(db.version == old.schemaVersion) { "Archive schema changed." }
+                check(countRows(db) == old.recordCount) { "Archive row count changed." }
+            }
+            val migrated = old.copy(
+                driveFileId = remote.id,
+                sha256 = encryptedHash,
+                sizeBytes = encrypted.length(),
+                verifiedAtMs = System.currentTimeMillis(),
+                encrypted = true,
+                legacyDriveFileId = old.driveFileId,
+            )
+            manifest.put(migrated)
+            migrated
+        } finally {
+            // Only working copies are removed, not the originals on phone or in Drive.
+            listOf(original, encrypted, downloaded, decrypted, extracted).forEach(File::delete)
         }
+    }
+
+    suspend fun openMonthOnline(
+        accessToken: String,
+        month: YearMonth,
+        recoveryPassphrase: CharArray? = null,
+    ): SQLiteDatabase = withContext(Dispatchers.IO) {
+        val record = manifest.read().firstOrNull { it.month == month.toString() }
+            ?: error("Archived history requires Google Drive and is not available for $month.")
+        if (record.encrypted) require(recoveryPassphrase?.isNotEmpty() == true) {
+            "Recovery passphrase required to open this encrypted archive."
+        }
+        val cache = File(appContext.cacheDir, "drive-archive-cache").apply { mkdirs() }
+        val blob = File(cache, "${record.month}.${if (record.encrypted) "noopenc" else "nooparc"}")
+        val clearArchive = File(cache, "${record.month}.nooparc")
+        val dbFile = File(cache, "${record.month}.sqlite")
+        try {
+            if (!blob.isFile || driveClient.sha256(blob) != record.sha256) {
+                blob.delete()
+                driveClient.download(accessToken, record.driveFileId, blob)
+            }
+            check(blob.length() == record.sizeBytes) { "Archive file size mismatch." }
+            check(driveClient.sha256(blob) == record.sha256) { "Archive checksum mismatch." }
+            val zipInput = if (record.encrypted) {
+                // Never trust a leftover decrypted cache entry from an earlier operation.
+                clearArchive.delete()
+                ArchiveEncryption.decrypt(blob, clearArchive, recoveryPassphrase!!)
+                clearArchive
+            } else blob // Pre-encryption archives remain readable, but are labeled as legacy.
+            dbFile.delete()
+            extractDatabase(zipInput, dbFile)
+            val opened = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+            try {
+                check(opened.version == record.schemaVersion) { "Archive schema mismatch." }
+                check(countRows(opened) == record.recordCount) { "Archive record count mismatch." }
+                cache.listFiles()?.filterNot { it.name.startsWith(record.month) }?.forEach(File::delete)
+                opened
+            } catch (failure: Throwable) {
+                opened.close()
+                throw failure
+            }
+        } catch (failure: Throwable) {
+            // No plaintext or partially extracted SQLite cache survives a failed authentication.
+            clearTemporaryCache(month)
+            throw failure
+        }
+    }
 
     data class ArchivePreview(
         val record: GoogleDriveArchiveRecord,
         val tableCounts: Map<String, Long>,
         val totalRecords: Long,
+        /** Read-only, bounded daily detail from the downloaded archive (not a restore). */
+        val history: List<String> = emptyList(),
     )
 
-    suspend fun previewMonthOnline(accessToken: String, month: YearMonth): ArchivePreview =
-        withContext(Dispatchers.IO) {
+    suspend fun previewMonthOnline(
+        accessToken: String, month: YearMonth, recoveryPassphrase: CharArray? = null,
+    ): ArchivePreview = withContext(Dispatchers.IO) {
             val record = manifest.read().firstOrNull { it.month == month.toString() }
                 ?: error("No verified archive is registered for $month.")
-            val opened = openMonthOnline(accessToken, month)
+            val opened = openMonthOnline(accessToken, month, recoveryPassphrase)
             try {
                 val counts = linkedMapOf<String, Long>()
                 opened.rawQuery(
@@ -149,12 +258,47 @@ internal class GoogleDriveArchiveManager(
                         }
                     }
                 }
-                ArchivePreview(record, counts, counts.values.sum())
+                ArchivePreview(record, counts, counts.values.sum(), readHistoryPreview(opened, counts.keys))
             } finally {
                 opened.close()
                 clearTemporaryCache(month)
             }
         }
+
+    /** Never selects free-text notes, waveform BLOBs, GPS routes, or Coach conversation text. */
+    private fun readHistoryPreview(db: SQLiteDatabase, tables: Set<String>): List<String> = buildList {
+        if ("dailyMetric" in tables) {
+            db.rawQuery(
+                "SELECT day,deviceId,totalSleepMin,avgHrv,recovery,steps FROM dailyMetric " +
+                    "ORDER BY day DESC LIMIT 12", null,
+            ).use { c -> while (c.moveToNext()) {
+                fun n(i: Int): String = if (c.isNull(i)) "–" else c.getString(i)
+                add("${c.getString(0)} · ${c.getString(1)} · Sleep ${n(2)} min · HRV ${n(3)} ms · Recovery ${n(4)} · Steps ${n(5)}")
+            } }
+        }
+        if ("workout" in tables) {
+            db.rawQuery(
+                "SELECT startTs,sport,source,durationS FROM workout ORDER BY startTs DESC LIMIT 10", null,
+            ).use { c -> while (c.moveToNext()) {
+                val day = Instant.ofEpochSecond(c.getLong(0)).atZone(ZoneId.systemDefault()).toLocalDate()
+                val duration = if (c.isNull(3)) "?" else (c.getDouble(3) / 60.0).toInt().toString()
+                add("$day · Workout: ${c.getString(1)} · ${c.getString(2)} · $duration min")
+            } }
+        }
+        if ("sleepSession" in tables) {
+            db.rawQuery("SELECT startTs,endTs,deviceId FROM sleepSession ORDER BY startTs DESC LIMIT 10", null)
+                .use { c -> while (c.moveToNext()) {
+                    val day = Instant.ofEpochSecond(c.getLong(0)).atZone(ZoneId.systemDefault()).toLocalDate()
+                    add("$day · Sleep session · ${c.getString(2)} · ${(c.getLong(1) - c.getLong(0)) / 60} min")
+                } }
+        }
+        if ("metricSeries" in tables) {
+            db.rawQuery("SELECT day,deviceId,`key`,value FROM metricSeries ORDER BY day DESC LIMIT 10", null)
+                .use { c -> while (c.moveToNext()) {
+                    add("${c.getString(0)} · ${c.getString(1)} · ${c.getString(2)}: ${c.getDouble(3)}")
+                } }
+        }
+    }
 
     fun clearTemporaryCache(month: YearMonth? = null) {
         val cache = File(appContext.cacheDir, "drive-archive-cache")
@@ -171,33 +315,55 @@ internal class GoogleDriveArchiveManager(
 
     internal fun lastEligibleArchiveMonth(today: LocalDate): YearMonth =
         YearMonth.from(today.minusDays(89)).minusMonths(1)
-    private suspend fun buildUploadVerify(month: YearMonth, token: String, ownerId: String): GoogleDriveArchiveRecord {
+    private suspend fun buildUploadVerify(
+        month: YearMonth, token: String, ownerId: String, recoveryPassphrase: CharArray,
+    ): GoogleDriveArchiveRecord {
         val work = File(appContext.cacheDir, "drive-archive-work").apply { mkdirs() }
         val dbCopy = File(work, "$month.sqlite")
         val archive = File(work, "$month.nooparc")
-        val verify = File(work, "$month.verify.nooparc")
+        val encryptedArchive = File(work, "$month.noopenc")
+        val verifyEncrypted = File(work, "$month.verify.noopenc")
+        val verifyArchive = File(work, "$month.verify.nooparc")
+        val verifyDb = File(work, "$month.verify.sqlite")
         try {
+            // Do not re-use plaintext or encrypted files left by a prior interrupted attempt.
+            listOf(dbCopy, archive, encryptedArchive, verifyEncrypted, verifyArchive, verifyDb)
+                .forEach(File::delete)
             checkpointAndCopy(dbCopy)
             filterToMonth(dbCopy, month)
             val snapshot = SQLiteDatabase.openDatabase(dbCopy.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            val schema = snapshot.version
-            val count = countRows(snapshot)
-            snapshot.close()
+            val schema: Int
+            val count: Long
+            try { schema = snapshot.version; count = countRows(snapshot) }
+            finally { snapshot.close() }
             zipDatabase(dbCopy, archive, month, count, schema)
-            val checksum = driveClient.sha256(archive)
-            val remote = driveClient.uploadArchive(token, archive, ownerId, month.toString(), count, schema)
+
+            // Encrypt before anything leaves the phone. Drive only receives .noopenc bytes.
+            ArchiveEncryption.encrypt(archive, encryptedArchive, recoveryPassphrase)
+            val checksum = driveClient.sha256(encryptedArchive)
+            val remote = driveClient.uploadArchive(
+                token, encryptedArchive, ownerId, month.toString(), count, schema, encrypted = true,
+            )
             check(remote.sha256 == checksum) { "Google Drive archive metadata checksum mismatch." }
-            driveClient.download(token, remote.id, verify)
-            check(verify.length() == archive.length()) { "Google Drive archive size mismatch." }
-            check(driveClient.sha256(verify) == checksum) { "Google Drive archive SHA-256 mismatch." }
-            val verifyDb = File(work, "$month.verify.sqlite")
-            extractDatabase(verify, verifyDb)
+            driveClient.download(token, remote.id, verifyEncrypted)
+            check(verifyEncrypted.length() == encryptedArchive.length()) { "Google Drive archive size mismatch." }
+            check(driveClient.sha256(verifyEncrypted) == checksum) { "Google Drive archive SHA-256 mismatch." }
+            ArchiveEncryption.decrypt(verifyEncrypted, verifyArchive, recoveryPassphrase)
+            extractDatabase(verifyArchive, verifyDb)
             val opened = SQLiteDatabase.openDatabase(verifyDb.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            check(opened.version == schema) { "Google Drive archive schema mismatch." }
-            check(countRows(opened) == count) { "Google Drive archive record count mismatch." }
-            opened.close(); verifyDb.delete()
-            return GoogleDriveArchiveRecord(month.toString(), remote.id, checksum, archive.length(), count, schema, System.currentTimeMillis())
-        } finally { dbCopy.delete(); archive.delete(); verify.delete() }
+            try {
+                check(opened.version == schema) { "Google Drive archive schema mismatch." }
+                check(countRows(opened) == count) { "Google Drive archive record count mismatch." }
+            } finally { opened.close() }
+            return GoogleDriveArchiveRecord(
+                month.toString(), remote.id, checksum, encryptedArchive.length(), count,
+                schema, System.currentTimeMillis(), encrypted = true,
+            )
+        } finally {
+            // App-private cache only. No plaintext is retained after this manual operation.
+            listOf(dbCopy, archive, encryptedArchive, verifyEncrypted, verifyArchive, verifyDb)
+                .forEach(File::delete)
+        }
     }
 
     private fun checkpointAndCopy(destination: File) {
