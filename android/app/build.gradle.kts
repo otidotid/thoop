@@ -37,8 +37,8 @@ android {
         applicationId = "com.otidotid.thoop"
         minSdk = 26
         targetSdk = 34
-        versionCode = 556
-        versionName = "13.1.0"
+        versionCode = 557
+        versionName = "13.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CLOUD_COACH_BASE_URL", "\"${cloudCoachBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
