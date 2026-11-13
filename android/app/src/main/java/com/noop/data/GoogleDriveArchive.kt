@@ -106,12 +106,15 @@ internal class GoogleDriveArchiveManager(
         var month = oldest
         while (!month.isAfter(lastArchiveMonth)) {
             val coveredThrough = HybridHistoryPolicy.coveredThrough(month, today)
-            val previous = existing[month.toString()]
+            var previous = existing[month.toString()]
+            if (previous != null && !previous.encrypted) {
+                // Make a NEW authenticated encrypted copy of the old archive, download it,
+                // verify it and keep the original Drive object as legacyDriveFileId.
+                // This is safe unattended after the user enrolls their recovery passphrase.
+                previous = encryptLegacyMonth(accessToken, ownerId, month, recoveryPassphrase)
+                existing[month.toString()] = previous
+            }
             if (previous == null || !HybridHistoryPolicy.isCoveredThrough(previous.coveredThrough, coveredThrough)) {
-                // Legacy plaintext archives are never silently replaced; migration remains explicit.
-                require(previous == null || previous.encrypted) {
-                    "Legacy archive $month needs explicit encryption migration before rolling refresh."
-                }
                 if (previous != null) {
                     // Refuse a rolling refresh with the wrong passphrase: older data must stay readable.
                     val verified = openMonthOnline(accessToken, month, recoveryPassphrase)

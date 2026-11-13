@@ -59,6 +59,8 @@ class NoopApplication : Application() {
         // case it exists for is a strap that stopped talking. Scheduled here rather than beside a widget
         // so it does not inherit that widget's lifecycle. KEEP, so this is a no-op once scheduled.
         com.noop.notif.StaleBatteryWorker.ensureScheduled(this)
+        // Rolling offline snapshots and, after one-time secure setup, encrypted daily cloud archives.
+        com.noop.data.AutomaticHybridHistoryScheduler.ensureScheduled(this)
     }
 
     /** Process-wide Room-backed store. One instance shared by the UI and the background service. */

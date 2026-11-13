@@ -30,6 +30,9 @@ import com.noop.data.GoogleDriveBackupCoordinator
 import com.noop.data.GoogleDriveArchiveManager
 import com.noop.data.CompactDailySnapshots
 import com.noop.data.HybridHistoryPolicy
+import com.noop.data.AutomaticHistorySecretStore
+import com.noop.data.AutomaticHistoryStatus
+import com.noop.data.AutomaticHybridHistoryScheduler
 import com.noop.data.DataBackup
 import com.noop.data.CloudBackupCadence
 import com.noop.data.CloudBackupSchedule
@@ -63,6 +66,9 @@ internal fun GoogleAccountCard() {
     }
     val snapshotsManager = remember(context) {
         CompactDailySnapshots(context.applicationContext)
+    }
+    val automaticHistorySecrets = remember(context) {
+        AutomaticHistorySecretStore(context.applicationContext)
     }
 
     val scope = rememberCoroutineScope()
@@ -119,6 +125,13 @@ internal fun GoogleAccountCard() {
     var showPostLoginRestorePrompt by remember {
         mutableStateOf(false)
     }
+    var autoHistoryConfigured by remember(account?.accountId) {
+        mutableStateOf(account?.accountId?.let(automaticHistorySecrets::isConfiguredFor) == true)
+    }
+    var showAutomaticHistorySetup by remember { mutableStateOf(false) }
+    var automaticHistoryStatus by remember {
+        mutableStateOf(AutomaticHistoryStatus(context.applicationContext).message())
+    }
     var archiveRecords by remember { mutableStateOf(archiveManager.archives()) }
     var archivePreview by remember { mutableStateOf<GoogleDriveArchiveManager.ArchivePreview?>(null) }
     var showArchiveBrowser by remember { mutableStateOf(false) }
@@ -174,6 +187,11 @@ internal fun GoogleAccountCard() {
             .onSuccess { token ->
                 driveAccessToken = token
                 driveAuthorized = true
+                account?.accountId?.let { id ->
+                    if (automaticHistorySecrets.isConfiguredFor(id)) {
+                        AutomaticHybridHistoryScheduler.ensureScheduled(context.applicationContext)
+                    }
+                }
                 account?.accountId?.let {
                     drivePrefs.edit().putBoolean("configured.$it", true).apply()
                 }
@@ -258,6 +276,86 @@ internal fun GoogleAccountCard() {
                         showPostLoginRestorePrompt = false
                     },
                 ) { Text("Preview & Restore") }
+            },
+        )
+    }
+
+    // One-time enrollment only. Afterwards encrypted cloud uploads and snapshots run automatically;
+    // there is no recurring Sync or Refresh button.
+    if (showAutomaticHistorySetup) {
+        AlertDialog(
+            onDismissRequest = { if (!driveBusy) {
+                showAutomaticHistorySetup = false
+                archivePassphrase = ""
+                archivePassphraseConfirm = ""
+            } },
+            title = { Text("Set up automatic encrypted history") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    Text(
+                        "Enter your EXISTING archive recovery passphrase (12+ characters). " +
+                            "THOOP will protect a device-only working copy with Android Keystore, " +
+                            "then automatically encrypt and verify rolling archives. " +
+                            "Keep your original passphrase in your password manager for recovery. " +
+                            "No local health records will be removed.",
+                        style = NoopType.footnote, color = Palette.textSecondary,
+                    )
+                    OutlinedTextField(value = archivePassphrase,
+                        onValueChange = { archivePassphrase = it },
+                        label = { Text("Recovery passphrase") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation())
+                    OutlinedTextField(value = archivePassphraseConfirm,
+                        onValueChange = { archivePassphraseConfirm = it },
+                        label = { Text("Confirm recovery passphrase") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation())
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showAutomaticHistorySetup = false
+                    archivePassphrase = ""
+                    archivePassphraseConfirm = ""
+                }) { Text("Cancel") }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !driveBusy && archivePassphrase.length >= 12 &&
+                        archivePassphrase == archivePassphraseConfirm,
+                    onClick = {
+                        val owner = account?.accountId ?: return@TextButton
+                        val token = driveAccessToken ?: return@TextButton
+                        val secret = archivePassphrase.toCharArray()
+                        archivePassphrase = ""
+                        archivePassphraseConfirm = ""
+                        showAutomaticHistorySetup = false
+                        driveBusy = true
+                        errorMessage = null
+                        scope.launch {
+                            try {
+                                // Reject a different passphrase before scheduling background writes.
+                                val existing = archiveManager.archives()
+                                    .filter { it.encrypted }.maxByOrNull { it.month }
+                                if (existing != null) {
+                                    archiveManager.previewMonthOnline(
+                                        token, YearMonth.parse(existing.month), secret,
+                                    )
+                                }
+                                automaticHistorySecrets.save(owner, secret)
+                                autoHistoryConfigured = true
+                                AutomaticHybridHistoryScheduler.scheduleCloud(context.applicationContext)
+                                AutomaticHybridHistoryScheduler.runCloudNow(context.applicationContext)
+                                automaticHistoryStatus = "Automatic encrypted history enabled; first sync queued."
+                                backupStatus = automaticHistoryStatus
+                            } catch (_: Exception) {
+                                errorMessage = "Automatic history setup failed. Check your existing " +
+                                    "archive passphrase and Google Drive connection. No local data changed."
+                            } finally {
+                                secret.fill('\u0000')
+                                driveBusy = false
+                            }
+                        }
+                    },
+                ) { Text("Enable automatic history") }
             },
         )
     }
@@ -625,6 +723,9 @@ internal fun GoogleAccountCard() {
 
                         scope.launch {
                             controller.signOut()
+                            automaticHistorySecrets.clear()
+                            AutomaticHybridHistoryScheduler.stopCloud(context.applicationContext)
+                            autoHistoryConfigured = false
                             account?.accountId?.let { drivePrefs.edit().remove("configured.$it").apply() }
                             account = null
                             driveAccessToken = null
@@ -637,42 +738,33 @@ internal fun GoogleAccountCard() {
             }
 
             if (driveAuthorized && currentAccount != null) {
-                NoopButton(
-                    text = if (driveBusy) "Working with Google Drive..." else "Sync rolling encrypted archives (day 22+)",
-                    fullWidth = true,
-                    enabled = !driveBusy && !busy,
-                    onClick = {
-                        if (driveAccessToken == null) {
-                            errorMessage = "Google Drive authorization expired. Connect Google Drive again."
-                        } else {
-                            archiveOpenMonth = null
-                            archiveOpenDay = null
-                            archiveMigrationMonth = null
-                            archivePassphrase = ""
-                            archivePassphraseConfirm = ""
-                            showArchivePassphraseDialog = true
-                        }
-                    },
+                Text(
+                    if (autoHistoryConfigured) "Automatic encrypted cloud history: enabled" else
+                        "Automatic encrypted cloud history: one-time setup required",
+                    style = NoopType.subhead,
+                    color = if (autoHistoryConfigured) Palette.accent else Palette.textSecondary,
                 )
-                NoopButton(
-                    text = if (driveBusy) "Preparing snapshots..." else "Refresh compact snapshots (days 15–21)",
-                    kind = NoopButtonKind.Secondary,
-                    fullWidth = true,
-                    enabled = !driveBusy,
-                    onClick = {
-                        driveBusy = true
-                        errorMessage = null
-                        scope.launch {
-                            runCatching { snapshotsManager.refresh() }
-                                .onSuccess {
-                                    compactSnapshots = it
-                                    backupStatus = "Saved ${it.size} compact daily summaries locally. Full source data kept."
-                                }
-                                .onFailure { errorMessage = it.message ?: "Could not prepare daily summaries." }
-                            driveBusy = false
-                        }
-                    },
+                Text(
+                    AutomaticHistoryStatus(context.applicationContext).message(),
+                    style = NoopType.footnote, color = Palette.textSecondary,
                 )
+                if (!autoHistoryConfigured) {
+                    NoopButton(
+                        text = "Set up automatic encrypted history once",
+                        kind = NoopButtonKind.Secondary,
+                        fullWidth = true,
+                        enabled = !driveBusy && !busy,
+                        onClick = {
+                            if (driveAccessToken == null) {
+                                errorMessage = "Reconnect Google Drive to finish automatic history setup."
+                            } else {
+                                archivePassphrase = ""
+                                archivePassphraseConfirm = ""
+                                showAutomaticHistorySetup = true
+                            }
+                        },
+                    )
+                }
                 Text(
                     "Cloud history is eligible from day 22 onward. " +
                         "Days 15–21 use the rolling local snapshot window; " +
@@ -706,7 +798,7 @@ internal fun GoogleAccountCard() {
                                 val record = archiveRecords.firstOrNull { it.month == YearMonth.from(day).toString() }
                                 if (record == null) {
                                     errorMessage = "This day has no verified cloud archive yet. " +
-                                        "Use Sync rolling encrypted archives first."
+                                        "Automatic archiving is pending. Check the sync status or reconnect Drive."
                                 } else if (record.encrypted) {
                                     archiveOpenDay = day
                                     archiveOpenMonth = YearMonth.from(day)
@@ -771,28 +863,12 @@ internal fun GoogleAccountCard() {
                                     }
                                 },
                             )
-                            if (!archive.encrypted) {
-                                NoopButton(
-                                    text = "Encrypt a copy of ${archive.month} (keep original)",
-                                    kind = NoopButtonKind.Secondary,
-                                    fullWidth = true,
-                                    enabled = !driveBusy,
-                                    onClick = {
-                                        archiveOpenMonth = null
-                                        archiveOpenDay = null
-                                        archiveMigrationMonth = YearMonth.parse(archive.month)
-                                        archivePassphrase = ""
-                                        archivePassphraseConfirm = ""
-                                        showArchivePassphraseDialog = true
-                                    },
-                                )
-                            }
                         }
                     }
                 }
                 Text(
-                    "Rolling archives cover days 22+ when you manually verify and sync. " +
-                        "Partial months are updated as each new day becomes eligible. " +
+                    "Once set up, encrypted rolling archives update automatically as each new day becomes eligible. " +
+                        "Android may defer uploads until network access is available. " +
                         "Encrypted cloud history does not replace your local data or full backups.",
                     style = NoopType.footnote,
                     color = Palette.textSecondary,
@@ -804,7 +880,7 @@ internal fun GoogleAccountCard() {
                 color = Palette.textPrimary,
             )
             Text(
-                "Rebuilt when this screen opens. All detailed source records stay on your phone.",
+                "Refreshed daily in the background and when this screen opens. All original records stay local.",
                 style = NoopType.footnote,
                 color = Palette.textSecondary,
             )
