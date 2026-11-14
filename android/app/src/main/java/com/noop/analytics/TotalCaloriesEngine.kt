@@ -4,6 +4,8 @@ import kotlin.math.roundToInt
 
 /** Pure device-first Total Calories split for Today and its Calories detail. */
 object TotalCaloriesEngine {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "total-calories-mifflin-activity-v1"
     const val MINUTES_PER_DAY = 1_440
 
     data class Breakdown(
