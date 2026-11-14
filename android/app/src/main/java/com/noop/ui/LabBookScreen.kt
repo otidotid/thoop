@@ -65,6 +65,7 @@ import com.noop.analytics.WindowedPair
 import com.noop.data.ImportSummary
 import com.noop.data.LabMarkerRow
 import com.noop.data.WhoopDao
+import com.noop.ingest.LabCsvAiRecovery
 import com.noop.ingest.LabMarkerCsvImport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -119,6 +120,7 @@ fun LabBookScreen(vm: AppViewModel) {
     var csvImporting by remember { mutableStateOf(false) }
     var csvSummary by remember { mutableStateOf<String?>(null) }
     var csvFailed by remember { mutableStateOf(false) }
+    var aiRepairReview by remember { mutableStateOf<LabCsvAiRecovery.Review?>(null) }
 
     suspend fun reload() {
         val all = mutableListOf<LabMarkerRow>()
@@ -140,6 +142,7 @@ fun LabBookScreen(vm: AppViewModel) {
         csvImporting = true
         csvSummary = null
         csvFailed = false
+        aiRepairReview = null
         scope.launch {
             val summary = withContext(Dispatchers.IO) {
                 runCatching { LabMarkerCsvImport.importCsv(context, uri, vm.repo) }
@@ -154,6 +157,13 @@ fun LabBookScreen(vm: AppViewModel) {
             }
             csvSummary = summary.message
             csvFailed = summary.totalRows == 0
+            if (summary.totalRows == 0 || summary.message.contains("skipped", ignoreCase = true)) {
+                // Repair is best-effort and consent-gated: failures NEVER interrupt
+                // existing parsing, local scoring, or original file access.
+                aiRepairReview = runCatching {
+                    LabCsvAiRecovery.propose(context, uri)
+                }.getOrNull()
+            }
             csvImporting = false
             if (summary.totalRows > 0) vm.refreshFitnessAgeNow { }
             reloadSeq++
@@ -246,6 +256,44 @@ fun LabBookScreen(vm: AppViewModel) {
                         style = NoopType.subhead,
                         color = if (csvFailed) Palette.statusWarning else Palette.statusPositive,
                     )
+                }
+                aiRepairReview?.let { review ->
+                    Text(
+                        review.message,
+                        style = NoopType.footnote,
+                        color = Palette.textSecondary,
+                    )
+                    if (review.pending.isNotEmpty()) {
+                        Text(
+                            "AI recovered candidates (NOT SAVED): " +
+                                review.pending.take(8).joinToString(" • ") { item ->
+                                    "${item.day} ${item.displayName ?: item.markerKey}: ${item.value} ${item.unit}"
+                                },
+                            style = NoopType.subhead,
+                            color = Palette.textPrimary,
+                        )
+                        Text(
+                            "Verify each value against your original lab report before confirming. " +
+                                "AI cannot change formula coefficients or score weights.",
+                            style = NoopType.footnote,
+                            color = Palette.textTertiary,
+                        )
+                        PrimaryActionButton(
+                            "Confirm and save ${review.pending.size} recovered reading(s)",
+                            Icons.Filled.Check,
+                        ) {
+                            scope.launch {
+                                vm.repo.upsertLabMarkers(review.pending)
+                                vm.refreshFitnessAgeNow { }
+                                aiRepairReview = null
+                                csvSummary = "Saved ${review.pending.size} source-verified lab reading(s)."
+                                reloadSeq++
+                            }
+                        }
+                        PrimaryActionButton("Discard AI suggestions", Icons.Filled.Close) {
+                            aiRepairReview = null
+                        }
+                    }
                 }
             }
         }
