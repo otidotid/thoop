@@ -2177,6 +2177,26 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
     }
     var range by remember { mutableStateOf(VitalDetailRange.MONTH) }
 
+    // Read immutable provenance for the MOST RECENT displayed score.
+    // Legacy/imported values may have no formula record; in that case the UI
+    // explicitly shows "not recorded" rather than inventing a method.
+    val scoreTrace by produceState<com.noop.data.ScoreInputProvenanceRow?>(
+        null, key, detail?.readings?.lastOrNull()?.day, activeStrapId,
+    ) {
+        val day = detail?.readings?.lastOrNull()?.day
+        val traceKeys = setOf(
+            "recovery", "strain", "rest", "sleep_performance",
+            "fitness_age", "vo2max_est", "vitality", "body_age", "active_kcal",
+        )
+        value = null
+        if (day != null && key in traceKeys) {
+            for (sourceId in vm.repo.computedSourceIds(activeStrapId ?: vm.activeStrapId)) {
+                val found = runCatching { vm.repo.scoreInputDetails(sourceId, day, key) }.getOrNull()
+                if (found != null) { value = found; break }
+            }
+        }
+    }
+
     // The subtitle tracks how much history the metric has, so we never promise a "historical trend" the
     // view isn't showing: Fitness Age with no reading yet -> what it still needs; ANY metric with a single
     // reading -> that reading (trend to follow); two+ -> the trend. Pre-load falls through to trend.
@@ -2222,6 +2242,34 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             )
             return@ScreenScaffold
         }
+        // Stage 5: same deterministic record that was persisted beside the score.
+        // This is informational and must never alter the computed value.
+        if (key in setOf("recovery", "strain", "rest", "sleep_performance",
+                "fitness_age", "vo2max_est", "vitality", "body_age", "active_kcal") &&
+            detail?.points?.isNotEmpty() == true
+        ) {
+            SectionHeader("Calculation provenance", overline = "THOOP calculation, AI cannot change it")
+            NoopCard {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Formula version: " + (scoreTrace?.algorithmVersion ?: "Not recorded (legacy/imported result)"),
+                        style = NoopType.subhead, color = Palette.textSecondary,
+                    )
+                    Text(
+                        "Input evidence: " + (scoreTrace?.observedInputs
+                            ?: "Exact input snapshot was not recorded for this point. No values are inferred."),
+                        style = NoopType.footnote, color = Palette.textTertiary,
+                    )
+                    if (scoreTrace?.algorithmVersion != null) {
+                        Text(
+                            "Source: " + scoreTrace!!.sourceId,
+                            style = NoopType.footnote, color = Palette.textTertiary,
+                        )
+                    }
+                }
+            }
+        }
+
         if (detail == null || detail.points.isEmpty()) {
             if (key == "active_kcal") {
                 CaloriesBreakdownCard(activeKcal = null, profile = profile, estimated = true)
