@@ -24,8 +24,8 @@ class AiCoachContextTest {
     @Test fun locallyRenderedLabSnapshotCannotReenterProviderHistoryAfterConsentRevocation() {
         val method = AiCoach::class.java.getDeclaredMethod("injectContext", List::class.java, String::class.java)
         method.isAccessible = true
-        val original = listOf(ChatMsg("user", "Earlier question"), ChatMsg("assistant",
-            "Ordinary Coach prose\n\n" + LabInterpretation.LOCAL_APPENDIX_MARKER + "\nPrivate exact lab reading"))
+        val original = listOf(ChatMsg(role = "user", text = "Earlier question"), ChatMsg(role = "assistant",
+            text = "Ordinary Coach prose\n\n" + LabInterpretation.LOCAL_APPENDIX_MARKER + "\nPrivate exact lab reading"))
         @Suppress("UNCHECKED_CAST")
         val outbound = method.invoke(coach(), original, "Data sharing disabled") as List<ChatMsg>
         assertEquals("Ordinary Coach prose", outbound.last().text)
@@ -167,4 +167,5 @@ class AiCoachContextTest {
         assertFalse("no-data sentinel leaked", ctx.contains("No wearable data is available yet"))
     }
 }
+
 

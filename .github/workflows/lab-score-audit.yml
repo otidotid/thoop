@@ -44,6 +44,7 @@ jobs:
           --tests 'com.noop.analytics.Recovery*Test'
       - name: All full-debug JVM tests
         id: full-tests
+        if: ${{ !cancelled() }}
         run: bash ./gradlew testFullDebugUnitTest
       - name: Publish build and test reports
         if: always()
@@ -65,4 +66,5 @@ jobs:
       - name: Existing Coach and optional lab interpretation regression tests
         working-directory: cloud-coach
         run: node --test
+
 
