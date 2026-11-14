@@ -16,6 +16,8 @@ import kotlin.math.exp
  * first `primeDays` observed loads to avoid the artificial low bias of zero-seeding a new wearer.
  */
 object TrainingLoadEngine {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "training-load-ewma-v1"
     data class Configuration(
         val chronicTimeConstantDays: Double = 42.0,
         val acuteTimeConstantDays: Double = 7.0,
