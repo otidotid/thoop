@@ -12,6 +12,8 @@ import kotlin.math.abs
 // mortality-rate doubling time (~8 years per doubling). Body Age = chronological age + Δage; average =
 // own age, healthier = younger. Presented with a ±band and a hard "wellness, not a clinical age" rule.
 object VitalityEngine {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "vitality-loghazard-gompertz-v1"
 
     private const val lnHazardPerYear = 0.6931471805599453 / 8.0   // ln(2)/8 ≈ 0.0866
     private const val overlapShrink = 0.75
