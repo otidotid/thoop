@@ -2130,13 +2130,18 @@ object IntelligenceEngine {
         if (faPts.isNotEmpty()) {
             repo.upsertMetricSeriesWithProvenance(
                 rows = faPts,
-                provenance = vo2MaxProvenanceFromResolvedLab(repo, faPts, computedId),
+                provenance = weeklyScoreProvenance(repo, faPts, computedId, faGate7, profile),
             )
         }
 
         // ── Vitality / Body Age (Phase 7), weekly, keyed to the week's Saturday ──
         val currentVitalityRows = vitalityRows(fa7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
-        if (currentVitalityRows.isNotEmpty()) repo.upsertMetricSeries(currentVitalityRows)
+        if (currentVitalityRows.isNotEmpty()) {
+            repo.upsertMetricSeriesWithProvenance(
+                currentVitalityRows,
+                weeklyScoreProvenance(repo, currentVitalityRows, computedId, fa7, profile),
+            )
+        }
 
         // Older installs have only the first/current Saturday persisted. Backfill the missing historical
         // Saturdays once, then leave the normal current-week path above unchanged.
@@ -2875,38 +2880,100 @@ object IntelligenceEngine {
         val bodyAge = repo.metricSeriesComputedUnion(importedDeviceId, "body_age", from, to)
         if (vo2.size > 1 && vitality.size > 1) return
         val existing = (fitness + vo2 + vitality + bodyAge).mapTo(HashSet()) { it.day to it.key }
+        val sourceHistory = repo.daysMerged(importedDeviceId)
         val rows = weeklyHistoricalRows(repo,
-            repo.daysMerged(importedDeviceId), profile, computedId, newestDay, existing,
+            sourceHistory, profile, computedId, newestDay, existing,
         )
         if (rows.isEmpty()) {
             diag("weekly backfill: no eligible missing historical points")
             return
         }
-        val provenance = rows.groupBy { it.day }.values.flatMap {
-            vo2MaxProvenanceFromResolvedLab(repo, it, computedId)
+        val provenance = rows.groupBy { it.day }.values.flatMap { group ->
+            val anchorDay = group.first().day
+            val fromDay = java.time.LocalDate.parse(anchorDay).minusDays(6).toString()
+            val sevenDays = sourceHistory.filter { it.day in fromDay..anchorDay }
+            weeklyScoreProvenance(repo, group, computedId, sevenDays, profile)
         }
         repo.upsertMetricSeriesWithProvenance(rows, provenance)
         diag("weekly backfill: inserted ${rows.size} point(s) across ${rows.map { it.day }.distinct().size} week(s)")
     }
 
     /**
-     * The production calculation reads the dated Lab Book waist. Source
-     * attribution MUST use that same dated, unit-validated input, not the
-     * profile's independently maintained waistCm. Otherwise a Nes value can
-     * incorrectly be stamped "uth", or vice versa.
+     * Persist input and formula evidence beside EVERY new weekly score.
+     * This is observational metadata: it never feeds back into the score.
+     * Historical source measurements and method labels are captured with
+     * the score so a future profile edit cannot rewrite its explanation.
      */
-    private suspend fun vo2MaxProvenanceFromResolvedLab(
+    private suspend fun weeklyScoreProvenance(
         repo: WhoopRepository,
         rows: List<MetricSeriesRow>,
         computedId: String,
+        gateDays: List<DailyMetric>,
+        profile: UserProfile,
     ): List<ScoreInputProvenanceRow> {
-        val point = rows.firstOrNull { it.key == "vo2max_est" } ?: return emptyList()
-        val measuredWaist = LabCalculationContract.resolveLatest(
-            repo.labMarkersByKey("my-whoop", "waist"),
-            "waist",
-            point.day,
-        )?.normalizedValue
-        return vo2MaxProvenance(rows, measuredWaist ?: 0.0, computedId)
+        if (rows.isEmpty()) return emptyList()
+        val date = rows.first().day
+        val formulaKeys = setOf(
+            "vo2max_est", "fitness_age", "fitness_factor_bmi",
+            "fitness_factor_whtr", "fitness_factor_body_fat",
+            "fitness_factor_metabolic_delta",
+        )
+        val needsLabs = rows.any { it.key in formulaKeys }
+        val waistSource = if (needsLabs) LabCalculationContract.resolveLatest(
+            repo.labMarkersByKey("my-whoop", "waist"), "waist", date,
+        ) else null
+        val waist = waistSource?.normalizedValue
+        val rhrs = gateDays.mapNotNull { it.restingHr?.toDouble() }
+        val strains = gateDays.mapNotNull { it.strain }.filter { it >= 30.0 }
+        val avgStrain = if (strains.isEmpty()) 0.0 else strains.average()
+        val activityIndex = FitnessAgeEngine.physicalActivityIndexFromStrain(strains.size, avgStrain)
+        val parts = ArrayList<String>()
+        parts += "Input window: " + (gateDays.minOfOrNull { it.day } ?: "none") +
+            " through " + (gateDays.maxOfOrNull { it.day } ?: "none")
+        parts += "Age: " + profile.age
+        parts += "Sex: " + profile.sex
+        if (rhrs.isNotEmpty()) parts += "Median resting HR: " + medianOfDoubles(rhrs) + " bpm (" + rhrs.size + " days)"
+        parts += "Activity index (strain proxy): " + activityIndex
+        if (waistSource != null) {
+            parts += "Waist: " + waistSource.normalizedValue + " cm from Lab Book " +
+                waistSource.sourceDay + " [id=" + waistSource.rowId + "]"
+        }
+        val weeklyInputs = "Available scoring inputs (partial): " + parts.joinToString("; ")
+        val hasNes = waist != null && waist > 0.0
+        return rows.mapNotNull { row ->
+            val (version, source, summary) = when (row.key) {
+                "vo2max_est" -> Triple(
+                    if (hasNes) FitnessAgeEngine.ALGORITHM_VERSION else "vo2max-uth-hr-ratio-v1",
+                    if (hasNes) "nes" else "uth",
+                    weeklyInputs + if (hasNes) "; Estimator: Nes waist variant" else
+                        "; Estimator: Uth HRmax/RHR, HRmax age-predicted"
+                )
+                "fitness_age", "fitness_factor_bmi", "fitness_factor_whtr",
+                "fitness_factor_body_fat", "fitness_factor_metabolic_delta" -> Triple(
+                    FitnessAgeEngine.ALGORITHM_VERSION, computedId, weeklyInputs
+                )
+                "vitality", "body_age" -> Triple(
+                    VitalityEngine.ALGORITHM_VERSION, computedId,
+                    "Available scoring inputs (partial): " +
+                        "Input window " + (gateDays.minOfOrNull { it.day } ?: "none") +
+                        " to " + (gateDays.maxOfOrNull { it.day } ?: "none") +
+                        "; RHR days=" + rhrs.size +
+                        "; sleep days=" + gateDays.count { (it.totalSleepMin ?: 0.0) > 0.0 } +
+                        "; HRV days=" + gateDays.count { it.avgHrv != null } +
+                        "; step days=" + gateDays.count { it.steps != null } +
+                        "; VO2max is not currently included in the weekly vitality integration"
+                )
+                else -> return@mapNotNull null
+            }
+            ScoreInputProvenanceRow(
+                deviceId = computedId,
+                day = row.day,
+                key = row.key,
+                sourceId = source,
+                algorithmVersion = version,
+                observedInputs = summary,
+            )
+        }
     }
 
     /** Method metadata for a newly computed VO₂max point. Empty when [rows] contains no VO₂max value.
@@ -2945,7 +3012,7 @@ object IntelligenceEngine {
         if (rows.isNotEmpty()) {
             repo.upsertMetricSeriesWithProvenance(
                 rows = rows,
-                provenance = vo2MaxProvenanceFromResolvedLab(repo, rows, computedId),
+                provenance = weeklyScoreProvenance(repo, rows, computedId, gate7, profile),
             )
         }
         return rows.isNotEmpty()
