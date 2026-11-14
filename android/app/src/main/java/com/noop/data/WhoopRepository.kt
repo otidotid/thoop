@@ -904,6 +904,9 @@ class WhoopRepository(
     suspend fun scoreInputSource(deviceId: String, day: String, key: String): String? =
         dao.scoreInputSource(deviceId, day, key)
 
+    suspend fun scoreInputDetails(deviceId: String, day: String, key: String): ScoreInputProvenanceRow? =
+        dao.scoreInputDetails(deviceId, day, key)
+
     suspend fun upsertMetricSeriesWithProvenance(
         rows: List<MetricSeriesRow>,
         provenance: List<ScoreInputProvenanceRow>,
