@@ -101,27 +101,39 @@ internal object IntelligencePersistence {
         legacySnapshots: Map<String, LegacyScoreSnapshot> = emptyMap(),
     ): List<ScoreInputProvenanceRow> {
         val byCell = LinkedHashMap<Pair<String, String>, ScoreInputProvenanceRow>()
+        val dailyByDay = dailies.associateBy { it.day }
         for (daily in dailies) {
             val source = ownerByDay[daily.day] ?: continue
             if (daily.recovery != null) {
                 val legacy = legacySnapshots[daily.day]
                 val recoverySource = legacy?.recoverySource ?: if (legacy == null) source else null
                 if (recoverySource != null) {
+                    // A preserved legacy score is NOT re-labelled as newly calculated.
+                    val snapshot = if (legacy == null)
+                        ScoreTraceFormatter.forDailyScore("recovery", daily) else null
                     byCell[daily.day to "recovery"] = ScoreInputProvenanceRow(
                         computedId, daily.day, "recovery", recoverySource,
+                        algorithmVersion = snapshot?.version,
+                        observedInputs = snapshot?.measurements,
                     )
                 }
             }
             if (daily.strain != null) {
+                val snapshot = ScoreTraceFormatter.forDailyScore("strain", daily)
                 byCell[daily.day to "strain"] = ScoreInputProvenanceRow(
                     computedId, daily.day, "strain", source,
+                    algorithmVersion = snapshot?.version,
+                    observedInputs = snapshot?.measurements,
                 )
             }
         }
         for (point in metricRows) {
             val source = ownerByDay[point.day] ?: continue
+            val snapshot = ScoreTraceFormatter.forDailyScore(point.key, dailyByDay[point.day])
             byCell[point.day to point.key] = ScoreInputProvenanceRow(
                 computedId, point.day, point.key, source,
+                algorithmVersion = snapshot?.version,
+                observedInputs = snapshot?.measurements,
             )
         }
         return byCell.values.toList()
