@@ -28,6 +28,6 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v4
       - uses: gradle/actions/setup-gradle@v4
       - name: Compile full debug APK
-        run: ./gradlew assembleFullDebug
+        run: bash ./gradlew assembleFullDebug
       - name: All full-debug JVM tests
-        run: ./gradlew testFullDebugUnitTest
+        run: bash ./gradlew testFullDebugUnitTest
