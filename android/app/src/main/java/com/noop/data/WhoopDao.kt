@@ -479,6 +479,10 @@ interface WhoopDao : DeviceRegistryDao {
     )
     suspend fun scoreInputSource(deviceId: String, day: String, key: String): String?
 
+    /** Full immutable score provenance: legacy points may have no version or inputs. */
+    @Query("SELECT * FROM scoreInputProvenance WHERE deviceId = :deviceId AND day = :day AND key = :key LIMIT 1")
+    suspend fun scoreInputDetails(deviceId: String, day: String, key: String): ScoreInputProvenanceRow?
+
     @Query(
         "DELETE FROM scoreInputProvenance " +
             "WHERE deviceId = :deviceId AND day >= :from AND day <= :to " +
