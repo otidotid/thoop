@@ -2130,7 +2130,7 @@ object IntelligenceEngine {
         if (faPts.isNotEmpty()) {
             repo.upsertMetricSeriesWithProvenance(
                 rows = faPts,
-                provenance = vo2MaxProvenance(faPts, profile.waistCm, computedId),
+                provenance = vo2MaxProvenanceFromResolvedLab(repo, faPts, computedId),
             )
         }
 
@@ -2723,9 +2723,20 @@ object IntelligenceEngine {
     suspend fun fitnessAgeRows(repo: WhoopRepository,
         gateDays: List<DailyMetric>, profile: UserProfile, computedId: String, satKey: String,
     ): List<MetricSeriesRow> {
-        suspend fun latestLab(key: String): Double? = repo.metricSeries(
-            com.noop.data.WhoopDao.LAB_BOOK_SOURCE_ID, key, "0000-01-01", satKey,
-        ).lastOrNull()?.value?.takeIf { it.isFinite() && it > 0.0 }
+        // Resolve numeric body measurements from the ORIGINAL Lab Book row,
+        // not the unit-less metricSeries projection. CSV imports can contain
+        // inches/lbs even when the canonical catalog says cm/kg.
+        suspend fun latestLab(key: String): Double? =
+            if (key == "fasting_glucose" || key == "hba1c") {
+                // Presence gate only: these do not enter a numeric Age equation.
+                repo.metricSeries(
+                    com.noop.data.WhoopDao.LAB_BOOK_SOURCE_ID, key, "0000-01-01", satKey,
+                ).lastOrNull()?.value?.takeIf { it.isFinite() && it > 0.0 }
+            } else {
+                LabCalculationContract.resolveLatest(
+                    repo.labMarkersByKey("my-whoop", key), key, satKey,
+                )?.normalizedValue
+            }
         val labWeight = latestLab("weight")
         val labHeight = latestLab("height")
         val labWaist = latestLab("waist")
@@ -2872,10 +2883,30 @@ object IntelligenceEngine {
             return
         }
         val provenance = rows.groupBy { it.day }.values.flatMap {
-            vo2MaxProvenance(it, profile.waistCm, computedId)
+            vo2MaxProvenanceFromResolvedLab(repo, it, computedId)
         }
         repo.upsertMetricSeriesWithProvenance(rows, provenance)
         diag("weekly backfill: inserted ${rows.size} point(s) across ${rows.map { it.day }.distinct().size} week(s)")
+    }
+
+    /**
+     * The production calculation reads the dated Lab Book waist. Source
+     * attribution MUST use that same dated, unit-validated input, not the
+     * profile's independently maintained waistCm. Otherwise a Nes value can
+     * incorrectly be stamped "uth", or vice versa.
+     */
+    private suspend fun vo2MaxProvenanceFromResolvedLab(
+        repo: WhoopRepository,
+        rows: List<MetricSeriesRow>,
+        computedId: String,
+    ): List<ScoreInputProvenanceRow> {
+        val point = rows.firstOrNull { it.key == "vo2max_est" } ?: return emptyList()
+        val measuredWaist = LabCalculationContract.resolveLatest(
+            repo.labMarkersByKey("my-whoop", "waist"),
+            "waist",
+            point.day,
+        )?.normalizedValue
+        return vo2MaxProvenance(rows, measuredWaist ?: 0.0, computedId)
     }
 
     /** Method metadata for a newly computed VO₂max point. Empty when [rows] contains no VO₂max value.
@@ -2914,7 +2945,7 @@ object IntelligenceEngine {
         if (rows.isNotEmpty()) {
             repo.upsertMetricSeriesWithProvenance(
                 rows = rows,
-                provenance = vo2MaxProvenance(rows, profile.waistCm, computedId),
+                provenance = vo2MaxProvenanceFromResolvedLab(repo, rows, computedId),
             )
         }
         return rows.isNotEmpty()
