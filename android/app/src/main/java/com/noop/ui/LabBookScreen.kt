@@ -290,7 +290,7 @@ fun LabBookScreen(vm: AppViewModel) {
                                 reloadSeq++
                             }
                         }
-                        PrimaryActionButton("Discard AI suggestions", Icons.Filled.Close) {
+                        PrimaryActionButton("Discard AI suggestions", Icons.Filled.Delete) {
                             aiRepairReview = null
                         }
                     }
