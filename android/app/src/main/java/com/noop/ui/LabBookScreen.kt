@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.noop.analytics.LabCalculationContract
 import com.noop.analytics.LabBookProjection
 import com.noop.analytics.LabMarkerCategory
 import com.noop.analytics.MarkerCatalog
@@ -447,6 +448,25 @@ private fun MarkerDetailSheet(
                 style = NoopType.subhead,
                 color = Palette.textSecondary,
             )
+
+            // Display the factual Stage 4/5 connection contract. AI may explain a
+            // custom lab marker, but does not get to write any of these scores.
+            val latest = readings.maxByOrNull { it.takenAt }
+            val scoreRelationship = latest?.let {
+                LabCalculationContract.assess(it, java.time.LocalDate.now().toString())
+            }
+            SectionHeader("THOOP score relationship", overline = "verified calculations, not AI-generated")
+            NoopCard {
+                val connected = scoreRelationship?.scoreKeys.orEmpty()
+                val explanation = if (connected.isNotEmpty()) {
+                    "Validated input for: " + connected.sorted().joinToString(", ") +
+                        ". The THOOP engine applies its existing formula; no score comes from AI."
+                } else {
+                    "AI can interpret this lab marker when Coach data sharing is enabled, " +
+                        "but it cannot directly change VO₂ max, Fitness Age, Calories, Vitality or Recovery."
+                }
+                Text(explanation, style = NoopType.subhead, color = Palette.textSecondary)
+            }
 
             // Trend (descriptive arithmetic, never interpretation).
             SectionHeader("Trend", overline = "your readings over time")
