@@ -698,28 +698,48 @@ class AiCoach(
             }
         }
 
-        // --- Complete latest Lab Book snapshot: newest reading for every available marker. ---
-        val latestByMarker = runCatching { latestLabMarkers() }.getOrDefault(emptyList())
-        if (latestByMarker.isNotEmpty()) {
+        // --- Latest three readings for EVERY Lab Book marker, including custom.
+        // Device's Lab Book writes "my-whoop"; active strap may be a different ID.
+        // Only shared under the existing explicit coach-signals consent.
+        val historyByMarker = runCatching { recentLabMarkersByKey() }.getOrDefault(emptyMap())
+        if (historyByMarker.isNotEmpty()) {
             if (sb.isNotEmpty()) sb.append("\n")
-            sb.append("LAB BOOK â€” LATEST READING FOR EVERY AVAILABLE MARKER ")
-            sb.append("(interpret using the stated unit, date, source, report range and uncertainty; ")
-            sb.append("informational only, never a diagnosis or medication instruction):\n")
-            for (row in latestByMarker) {
-                val name = MarkerCatalog.definition(row.markerKey)?.displayName
-                    ?: row.markerKey.replace("_", " ").replaceFirstChar { it.uppercase() }
-                val value = row.value?.let { fmt1(it) + " " + row.unit } ?: (row.valueText ?: "â€”")
-                sb.append("  â€¢ $name [${row.markerKey}]: $value; measured ${row.day}; ")
-                sb.append("category ${row.category}; source ${row.source}")
-                row.referenceText?.takeIf { it.isNotBlank() }?.let { reference ->
-                    sb.append("; report reference: ${reference.replace("\n", " ").take(160)}")
+            sb.append("LAB BOOK — BUILT-IN AND CUSTOM MARKER HISTORY (up to three readings per marker):\n")
+            sb.append("These are real recorded observations, not AI estimates. Interpret all custom markers ")
+            sb.append("with their date, unit, sample condition and reported range. If marker identity is ")
+            sb.append("ambiguous, say so. AI must never invent values, formulas, score weights, ")
+            sb.append("THOOP VO2 max, Fitness Age, Calories, Vitality or Recovery results. ")
+            sb.append("Only the on-device THOOP algorithms calculate scores.\n")
+            val snapshot = java.time.LocalDate.now().toString()
+            for ((key, history) in historyByMarker) {
+                val latest = history.lastOrNull() ?: continue
+                val name = latest.displayName?.takeIf { it.isNotBlank() }
+                    ?: MarkerCatalog.definition(key)?.displayName
+                    ?: key.removePrefix("custom_").replace("_", " ").replaceFirstChar { it.uppercase() }
+                sb.append("  • ").append(name).append(" [").append(key).append("]: ")
+                history.forEachIndexed { index, row ->
+                    if (index > 0) sb.append("; ")
+                    sb.append(row.day).append("=")
+                    if (row.value != null) sb.append(fmt1(row.value)).append(" ").append(row.unit)
+                    else sb.append(row.valueText ?: "not numeric")
                 }
-                row.note?.takeIf { it.isNotBlank() }?.let { note ->
-                    sb.append("; note: ${note.replace("\n", " ").take(160)}")
+                sb.append("; category=").append(latest.category)
+                    .append("; source=").append(latest.source)
+                latest.sampleCondition?.let { sb.append("; sample=").append(it) }
+                latest.hoursSinceMeal?.let { sb.append("; hours since meal=").append(it) }
+                latest.referenceText?.takeIf { it.isNotBlank() }?.let {
+                    sb.append("; report range=").append(it.replace("\n", " ").take(130))
                 }
+                latest.note?.takeIf { it.isNotBlank() }?.let {
+                    sb.append("; note=").append(it.replace("\n", " ").take(130))
+                }
+                val assessment = com.noop.analytics.LabCalculationContract.assess(latest, snapshot)
+                sb.append("; THOOP score input=")
+                    .append(if (assessment.scoreKeys.isEmpty()) "not approved" else assessment.scoreKeys.sorted().joinToString(","))
                 sb.append("\n")
             }
-            sb.append("  â€¢ Missing markers are unknown, not zero and not normal.\n")
+            sb.append("Missing markers are unknown, not zero, and not necessarily normal. ")
+            sb.append("A lab result never authorizes AI to write any numeric THOOP score.\n")
         }
         return sb.toString().trim().takeIf { it.isNotEmpty() }
     }
@@ -742,16 +762,27 @@ class AiCoach(
         return yes.mapValues { it.value.toSet() } to no.mapValues { it.value.toSet() }
     }
 
-    /** The latest reading per Lab Book marker key (stored under the ACTIVE strap deviceId). #1304/#512:
-     *  read under the active strap id — matching Swift `AICoach` (`labMarkers(deviceId: repo.deviceId)`) —
-     *  so a 2nd strap's markers under "whoop-<uuid>" aren't missed. */
-    private suspend fun latestLabMarkers(): List<LabMarkerRow> {
+    /**
+     * Lab Book is a user-global record stored under "my-whoop". Query that
+     * canonical ID FIRST, and also a distinct live strap ID for legacy records.
+     * Preserve up to three dated rows per built-in and custom marker for AI
+     * trend interpretation. The opt-in gate lives in [chatCloud].
+     */
+    private suspend fun recentLabMarkersByKey(): Map<String, List<LabMarkerRow>> {
         val all = ArrayList<LabMarkerRow>()
-        for (category in LabMarkerCategory.entries) {
-            all += runCatching { repo.labMarkersByCategory(activeStrapId(), category.raw) }.getOrDefault(emptyList())
+        for (sourceId in listOf(deviceId, activeStrapId()).distinct()) {
+            for (category in LabMarkerCategory.entries) {
+                all += runCatching { repo.labMarkersByCategory(sourceId, category.raw) }
+                    .getOrDefault(emptyList())
+            }
         }
-        return all.groupBy { it.markerKey }.values.map { rows -> rows.maxByOrNull { it.takenAt }!! }
-            .sortedBy { it.markerKey }
+        return all.distinctBy { it.id }
+            .groupBy { it.markerKey }
+            .toSortedMap(compareBy<String> { !it.startsWith("custom_") }.thenBy { it })
+            .mapValues { (_, readings) ->
+                readings.sortedWith(compareBy<LabMarkerRow> { it.day }.thenBy { it.takenAt })
+                    .takeLast(3)
+            }
     }
 
     /**
