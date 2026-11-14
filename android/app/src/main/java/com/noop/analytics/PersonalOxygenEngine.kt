@@ -17,6 +17,8 @@ import kotlin.math.sqrt
  * This is a wellness estimate, not a medical measurement.
  */
 object PersonalOxygenEngine {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "oxygen-personal-model-v1"
 
     private const val PREFS_NAME = "thoop.personalOxygen"
     private const val MODEL_KEY = "model.v1"
