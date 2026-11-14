@@ -48,6 +48,8 @@ data class AdaptiveExpenditureEstimate(
  * Swift twin: `AdaptiveExpenditureEngine`.
  */
 object AdaptiveExpenditureEngine {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "adaptive-energy-balance-v1"
     /** The textbook 7,700 kcal/kg figure, which assumes the change is adipose; it over-states early loss,
      *  when a real share is glycogen and its bound water. That bias is one reason the output is a range. */
     const val KCAL_PER_KG = 7_700.0
