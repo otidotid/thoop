@@ -446,6 +446,13 @@ data class ScoreInputProvenanceRow(
     val day: String,
     @ColumnInfo(name = "key") val key: String,
     val sourceId: String,
+    /** Version of the deterministic THOOP formula used for THIS stored result.
+     *  Null on legacy/imported points means genuinely unknown, never assumed. */
+    val algorithmVersion: String? = null,
+    /** Observed input summary captured at calculation time; may be partial when
+     *  raw time-series details are not part of this persisted daily row.
+     *  Null on legacy points. Not AI-provided. */
+    val observedInputs: String? = null,
 )
 
 /** Estimator identity persisted beside a `vo2max_est` point in [ScoreInputProvenanceRow.sourceId].
