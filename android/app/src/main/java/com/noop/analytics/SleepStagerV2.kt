@@ -45,6 +45,8 @@ import kotlin.math.sqrt
  * the Swift twin.
  */
 object SleepStagerV2 {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "sleep-stage-v2-v1"
 
     /**
      * Build a 30 s hypnogram for [start, end] with this recipe and return [StageSegment]s tiling the span.
