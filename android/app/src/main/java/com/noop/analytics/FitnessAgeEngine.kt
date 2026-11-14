@@ -15,6 +15,8 @@ package com.noop.analytics
 //     reference RHR and PA-index. The waist term cancels, so the headline number needs only
 //     age/sex/RHR/PA, and an average-fitness person maps to their own age by construction.
 object FitnessAgeEngine {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "fitness-age-nes-waist-metabolic-v1"
 
     // Nes 2011 waist-circumference coefficients (VO₂ = intercept − ageC·age + paiC·PA − wcC·waist − rhrC·RHR)
     private const val menIntercept = 100.27; private const val menAge = 0.296
