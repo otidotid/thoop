@@ -58,6 +58,8 @@ import kotlin.math.roundToInt
 
 /** Resting-HR estimate + transparent recovery score. Mirrors Swift `RecoveryScorer`. */
 object RecoveryScorer {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "recovery-z-logistic-v1"
 
     // ─────────────────────────────────────────────────────────────────────────
     // Constants (recovery.py)
