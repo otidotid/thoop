@@ -13,6 +13,29 @@ class ScoreProvenanceV43MigrationTest {
         assertEquals(43, WhoopDatabase.SCHEMA_VERSION)
     }
 
+    @Test fun migrationOnlyAddsNullableFieldsAndNeverDeletesStoredRecords() {
+        val sql = mutableListOf<String>()
+        val db = java.lang.reflect.Proxy.newProxyInstance(
+            androidx.sqlite.db.SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(androidx.sqlite.db.SupportSQLiteDatabase::class.java),
+        ) { _, method, args ->
+            if (method.name == "execSQL" && args != null && args.isNotEmpty()) {
+                sql += args[0] as String
+            }
+            null
+        } as androidx.sqlite.db.SupportSQLiteDatabase
+        WhoopDatabase.MIGRATION_42_43.migrate(db)
+        assertEquals(
+            listOf(
+                "ALTER TABLE `scoreInputProvenance` ADD COLUMN `algorithmVersion` TEXT",
+                "ALTER TABLE `scoreInputProvenance` ADD COLUMN `observedInputs` TEXT",
+            ),
+            sql,
+        )
+        assertTrue(sql.none { it.contains("DROP", ignoreCase = true) ||
+            it.contains("DELETE", ignoreCase = true) })
+    }
+
     @Test fun legacyProvenanceDefaultsToUnknownVersionNotAnInventedModel() {
         val legacy = ScoreInputProvenanceRow("whoop-noop", "2026-11-14", "recovery", "my-whoop")
         assertEquals(null, legacy.algorithmVersion)
