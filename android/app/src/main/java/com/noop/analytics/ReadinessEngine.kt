@@ -31,6 +31,8 @@ import kotlin.math.sqrt
  * *your own* data, nothing more.
  */
 object ReadinessEngine {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "readiness-multisignal-v1"
 
     // MARK: Output types
 
