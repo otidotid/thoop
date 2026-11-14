@@ -42,6 +42,8 @@ import kotlin.math.roundToLong
  * its own Edwards %HRR thresholds).
  */
 object StrainScorer {
+    /** Stable name for the currently deployed deterministic formula; never assigned by AI. */
+    const val ALGORITHM_VERSION = "strain-hrr-zone-v1"
 
     // ---- Constants (strain.py) ----
 
