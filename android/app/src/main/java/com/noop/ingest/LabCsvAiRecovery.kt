@@ -146,8 +146,10 @@ object LabCsvAiRecovery {
                 rejected++; continue
             }
             val definition = MarkerCatalog.definition(key)
-            val unit = rawUnit.ifBlank { definition?.canonicalUnit.orEmpty() }
-            if (unit.isBlank()) { rejected++; continue }
+            // No inferred unit for AI-rescued records, even when the catalog
+            // has a preferred unit. A unit not present in the report is unknown.
+            if (rawUnit.isBlank()) { rejected++; continue }
+            val unit = rawUnit
             val epoch = runCatching { LocalDate.parse(day).toEpochDay() * 86400L + 43200L }.getOrNull()
             if (epoch == null) { rejected++; continue }
             pending += LabMarkerRow(
