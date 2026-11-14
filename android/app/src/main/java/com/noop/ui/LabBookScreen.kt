@@ -154,6 +154,7 @@ fun LabBookScreen(vm: AppViewModel) {
             csvSummary = summary.message
             csvFailed = summary.totalRows == 0
             csvImporting = false
+            if (summary.totalRows > 0) vm.refreshFitnessAgeNow { }
             reloadSeq++
         }
     }
@@ -313,6 +314,8 @@ fun LabBookScreen(vm: AppViewModel) {
             onSave = { drafts ->
                 scope.launch {
                     vm.repo.upsertLabMarkers(drafts)
+                    // Lab inputs affect THOOP Age/VO2 via the existing deterministic engine.
+                    vm.refreshFitnessAgeNow { }
                     reloadSeq++
                 }
                 showEditor = false
@@ -333,6 +336,7 @@ fun LabBookScreen(vm: AppViewModel) {
             onDelete = { id ->
                 scope.launch {
                     vm.repo.deleteLabMarker(id)
+                    vm.refreshFitnessAgeNow { }
                     reloadSeq++
                 }
             },
@@ -358,6 +362,7 @@ fun LabBookScreen(vm: AppViewModel) {
                     } else {
                         vm.repo.replaceLabMarker(original.id, edited)
                     }
+                    vm.refreshFitnessAgeNow { }
                     reloadSeq++
                     detailKey = edited.markerKey
                     editingRow = null
