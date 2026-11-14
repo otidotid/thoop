@@ -2,9 +2,11 @@ package com.noop.analytics
 
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.math.max
 
-/** Conservative, versioned policy for custom glycaemic markers used by THOOP Age.
+/** Existing, versioned product heuristic for custom glycaemic markers used by THOOP Age.
+ * This is not a clinically validated conversion of glucose into years of age.
  * Raw readings are never changed. This policy only returns an age delta.
  */
 object CustomLabAgePolicy {
@@ -34,7 +36,10 @@ object CustomLabAgePolicy {
         if (reading.condition != SampleCondition.NON_FASTING && reading.condition != SampleCondition.POST_MEAL) {
             return Result(0.0, 0.0, false, "Not a non-fasting glucose reading")
         }
-        val mgDl = when (reading.unit.trim().lowercase()) {
+        if (reading.hoursSinceMeal != null && (!reading.hoursSinceMeal.isFinite() || reading.hoursSinceMeal < 0.0)) {
+            return Result(0.0, 0.0, false, "Invalid meal context")
+        }
+        val mgDl = when (reading.unit.trim().lowercase(Locale.ROOT)) {
             "mg/dl" -> reading.value
             "mmol/l" -> reading.value * 18.0182
             else -> return Result(0.0, 0.0, false, "Unsupported glucose unit")
@@ -43,7 +48,7 @@ object CustomLabAgePolicy {
             return Result(0.0, 0.0, false, "Invalid value or future reading")
         }
 
-        val ageDays = max(0, ChronoUnit.DAYS.between(reading.day, snapshotDay).toInt())
+        val ageDays = max(0L, ChronoUnit.DAYS.between(reading.day, snapshotDay))
         val freshness = when {
             ageDays <= 90 -> 1.0
             ageDays <= 180 -> 0.85
@@ -73,3 +78,4 @@ object CustomLabAgePolicy {
         )
     }
 }
+

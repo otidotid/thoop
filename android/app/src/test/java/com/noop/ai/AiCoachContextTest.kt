@@ -21,6 +21,18 @@ import java.lang.reflect.Proxy
  */
 class AiCoachContextTest {
 
+    @Test fun locallyRenderedLabSnapshotCannotReenterProviderHistoryAfterConsentRevocation() {
+        val method = AiCoach::class.java.getDeclaredMethod("injectContext", List::class.java, String::class.java)
+        method.isAccessible = true
+        val original = listOf(ChatMsg("user", "Earlier question"), ChatMsg("assistant",
+            "Ordinary Coach prose\n\n" + LabInterpretation.LOCAL_APPENDIX_MARKER + "\nPrivate exact lab reading"))
+        @Suppress("UNCHECKED_CAST")
+        val outbound = method.invoke(coach(), original, "Data sharing disabled") as List<ChatMsg>
+        assertEquals("Ordinary Coach prose", outbound.last().text)
+        assertFalse(outbound.any { it.text.contains("Private exact lab reading") })
+        assertTrue(original.last().text.contains("Private exact lab reading"))
+    }
+
     /** AiCoach whose repository throws on ANY dao call — buildContext must stay pure. */
     private fun coach(): AiCoach {
         val dao = Proxy.newProxyInstance(
@@ -155,3 +167,4 @@ class AiCoachContextTest {
         assertFalse("no-data sentinel leaked", ctx.contains("No wearable data is available yet"))
     }
 }
+

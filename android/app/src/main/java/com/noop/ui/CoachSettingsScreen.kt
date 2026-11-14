@@ -84,6 +84,7 @@ fun CoachSettingsScreen(vm: CoachViewModel) {
         // has no equivalent.
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 CoachConsentCard(vm = vm)
+            CoachLabInterpretationConsentCard(vm = vm)
             CoachInstructions(vm = vm)
             MorningBriefCard(vm = vm)
         }
@@ -162,6 +163,28 @@ private fun CoachConsentCard(vm: CoachViewModel) {
                 checked = consent,
                 onCheckedChange = { vm.setConsent(context, it) },
             )
+        }
+    }
+}
+
+@Composable
+private fun CoachLabInterpretationConsentCard(vm: CoachViewModel) {
+    val context = LocalContext.current
+    val consent by vm.consent.collectAsStateWithLifecycle()
+    var granted by remember { mutableStateOf(com.noop.ai.LabInterpretationConsent.read(context)) }
+    NoopCard(padding = 14.dp, tint = Palette.chargeColor) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(stringResource(R.string.coach_lab_interpretation_consent),
+                    style = NoopType.subhead, color = Palette.textPrimary)
+                Text(stringResource(R.string.coach_lab_interpretation_disclosure),
+                    style = NoopType.footnote, color = Palette.textTertiary)
+            }
+            androidx.compose.material3.Switch(checked = granted, enabled = consent,
+                onCheckedChange = {
+                    granted = it
+                    com.noop.ai.LabInterpretationConsent.write(context, it)
+                })
         }
     }
 }
@@ -299,3 +322,4 @@ private fun CoachInstructions(vm: CoachViewModel) {
         }
     }
 }
+

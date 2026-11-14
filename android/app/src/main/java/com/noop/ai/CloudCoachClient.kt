@@ -46,6 +46,8 @@ class CloudCoachClient(
         val intent: String = "chat",
         val nutrition: NutritionEstimate? = null,
         val references: List<String> = emptyList(),
+        /** Untrusted transport payload; only LabInterpretation.validate may consume it. */
+        val labInterpretation: String? = null,
     )
 
     val configured: Boolean get() = baseUrl.startsWith("https://")
@@ -57,6 +59,7 @@ class CloudCoachClient(
         recentMessages: List<ChatMsg>,
         healthContext: String,
         systemPrompt: String,
+        labRequest: LabInterpretation.Request? = null,
     ): Reply = withContext(Dispatchers.IO) {
         check(configured) {
             "THOOP Cloud Coach belum dikonfigurasi. Isi THOOP_CLOUD_COACH_URL di android/local.properties lalu build ulang."
@@ -71,9 +74,13 @@ class CloudCoachClient(
             .put("systemPrompt", systemPrompt)
             .put("recentMessages", JSONArray().apply {
                 recentMessages.takeLast(12).forEach { msg ->
-                    put(JSONObject().put("role", msg.role).put("text", msg.text))
+                    put(JSONObject().put("role", msg.role)
+                        .put("text", LabInterpretation.stripLocalAppendix(msg.text)))
                 }
             })
+        if (labRequest != null) {
+            LabInterpretation.attachIfFits(payload, labRequest)
+        }
         val request = Request.Builder()
             .url("$baseUrl/v1/coach/chat")
             .header("Accept", "application/json")
@@ -120,6 +127,7 @@ class CloudCoachClient(
                 intent = intent,
                 nutrition = nutrition.takeIf { intent == "food_log" },
                 references = references,
+                labInterpretation = json.optJSONObject("labInterpretation")?.toString(),
             )
         }
     }
@@ -167,3 +175,4 @@ private object CloudCoachIdentity {
         return UUID.randomUUID().toString().also { prefs.edit().putString(KEY, it).apply() }
     }
 }
+

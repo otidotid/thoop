@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="coach_lab_interpretation_consent">Share exact Lab Book evidence</string>
+    <string name="coach_lab_interpretation_disclosure">When you ask about labs, send dated readings, exact values, units, source labels, sample conditions, notes and report ranges to your configured Cloud Coach for optional AI interpretation. Requires data sharing and on-device signals sharing. AI commentary is unverified and cannot change scores or records. Off by default.</string>
+</resources>

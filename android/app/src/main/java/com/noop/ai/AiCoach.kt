@@ -98,6 +98,15 @@ class AiCoach(
         require(history.isNotEmpty()) { "Ask a question first." }
         require(history.last().role == "user") { "The last message must be your question." }
 
+        // Both existing opt-ins apply before any lab read or structured export.
+        val exactLabConsent = consent && includeSignals && LabInterpretationConsent.read(ctx)
+        val labRows = if (exactLabConsent) {
+            runCatching { recentLabMarkersByKey().values.flatten() }.getOrDefault(emptyList())
+        } else emptyList()
+        val wantsLabInterpretation = LabInterpretation.isLabQuestion(history.last().text, labRows)
+        val labRequest = if (wantsLabInterpretation) LabInterpretation.prepare(
+            labRows, java.time.LocalDate.now().toString(), exactLabConsent,
+        ) else null
         val todayNutrition = if (consent) {
             runCatching { buildTodayNutritionContext(ctx) }.getOrNull()
         } else null
@@ -118,14 +127,25 @@ class AiCoach(
             NO_CONSENT_NOTE
         }
 
-        CloudCoachClient().ask(
+        val reply = CloudCoachClient().ask(
             context = ctx,
             conversationId = conversationId,
             question = history.last().text,
             recentMessages = history.dropLast(1),
             healthContext = healthContext,
             systemPrompt = resolveSystemPrompt(ctx),
+            labRequest = labRequest,
         )
+        if (labRequest != null) {
+            val current = runCatching { recentLabMarkersByKey().values.flatten() }.getOrDefault(emptyList())
+            val findings = LabInterpretation.validate(reply.labInterpretation, labRequest, current)
+            reply.copy(answer = reply.answer + "\n\n" + LabInterpretation.render(findings, labRequest),
+                labInterpretation = null)
+        } else if (wantsLabInterpretation && labRows.isNotEmpty()) {
+            reply.copy(answer = reply.answer + "\n\nStructured lab interpretation unavailable: " +
+                "this snapshot exceeds the bounded batch or payload limit. Lab Book records and local scores are unchanged.",
+                labInterpretation = null)
+        } else reply.copy(labInterpretation = null)
     }
 
     suspend fun chat(
@@ -727,8 +747,9 @@ class AiCoach(
                 history.forEachIndexed { index, row ->
                     if (index > 0) sb.append("; ")
                     sb.append(row.day).append("=")
-                    if (row.value != null) sb.append(fmt1(row.value)).append(" ").append(row.unit)
+                    if (row.value != null) sb.append(row.value.toString()).append(" ").append(row.unit)
                     else sb.append(row.valueText ?: "not numeric")
+                    sb.append(" (source=").append(row.source.replace("\n", " ")).append(")")
                 }
                 sb.append("; category=").append(latest.category)
                     .append("; source=").append(latest.source)
@@ -802,7 +823,7 @@ class AiCoach(
             .groupBy { it.markerKey }
             .toSortedMap(compareBy<String> { !it.startsWith("custom_") }.thenBy { it })
             .mapValues { (_, readings) ->
-                readings.sortedWith(compareBy<LabMarkerRow> { it.day }.thenBy { it.takenAt })
+                readings.sortedWith(compareBy<LabMarkerRow> { it.day }.thenBy { it.takenAt }.thenBy { it.id })
                     .takeLast(3)
             }
     }
@@ -812,9 +833,10 @@ class AiCoach(
      * Returns a copy of [history]; the original list is not mutated.
      */
     private fun injectContext(history: List<ChatMsg>, context: String): List<ChatMsg> {
-        val firstUserIdx = history.indexOfFirst { it.role == "user" }
-        if (firstUserIdx < 0) return history
-        return history.mapIndexed { i, m ->
+        val safeHistory = history.map { it.copy(text = LabInterpretation.stripLocalAppendix(it.text)) }
+        val firstUserIdx = safeHistory.indexOfFirst { it.role == "user" }
+        if (firstUserIdx < 0) return safeHistory
+        return safeHistory.mapIndexed { i, m ->
             if (i == firstUserIdx) {
                 m.copy(text = "$context\n\n---\n\nMy question: ${m.text}")
             } else m
@@ -1588,3 +1610,4 @@ class AiCoach(
                 "sympathetic / under load; an autonomic-balance proxy, not a clinical figure)."
     }
 }
+

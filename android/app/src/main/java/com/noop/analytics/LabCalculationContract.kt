@@ -11,7 +11,7 @@ import java.util.Locale
  * change a score merely because AI recognized their names.
  */
 object LabCalculationContract {
-    const val VERSION = "lab-score-contract-v1"
+    const val VERSION = "lab-score-contract-v2"
 
     enum class Relationship { EXISTING_INPUT, EVIDENCE_ONLY, INVALID_INPUT }
 
@@ -30,6 +30,7 @@ object LabCalculationContract {
         ScoreContract("fitness_factor_bmi", setOf("weight", "height")),
         ScoreContract("fitness_factor_whtr", setOf("waist", "height")),
         ScoreContract("fitness_factor_body_fat", setOf("body_fat")),
+        ScoreContract("fitness_factor_metabolic_delta", setOf("waist", "weight", "height", "body_fat")),
         ScoreContract("vitality", emptySet()),
         ScoreContract("body_age", emptySet()),
         ScoreContract("total_calories", emptySet()),
@@ -47,6 +48,9 @@ object LabCalculationContract {
         val canonicalUnit: String,
         val normalization: String,
         val contractVersion: String = VERSION,
+        val deviceId: String = "",
+        val source: String = "",
+        val takenAt: Long = 0L,
     )
 
     data class Assessment(
@@ -85,7 +89,7 @@ object LabCalculationContract {
                 )
                 if (policy.eligible) {
                     return Assessment(Relationship.EXISTING_INPUT, setOf("fitness_age"),
-                        "Approved existing glycaemic policy " + policy.evidenceVersion)
+                        "Existing product glycaemic policy (not a clinical age model) " + policy.evidenceVersion)
                 }
             }
             return Assessment(Relationship.EVIDENCE_ONLY, emptySet(),
@@ -117,14 +121,43 @@ object LabCalculationContract {
         return readings.asSequence()
             .filter { it.markerKey == markerKey }
             .filter { runCatching { LocalDate.parse(it.day) }.getOrNull()?.let { day -> !day.isAfter(snapshot) } == true }
-            .sortedWith(compareByDescending<LabMarkerRow> { it.day }.thenByDescending { it.takenAt })
+            .sortedWith(readingOrder)
             .mapNotNull { row ->
                 val original = row.value ?: return@mapNotNull null
                 val resolved = normalized(markerKey, original, row.unit) ?: return@mapNotNull null
                 Resolved(row.id, row.markerKey, row.day, original, row.unit,
-                    resolved.first, resolved.second, resolved.third)
+                    resolved.first, resolved.second, resolved.third,
+                    deviceId = row.deviceId, source = row.source, takenAt = row.takenAt)
             }
             .firstOrNull()
+    }
+
+    // Stable ties make the selected evidence independent of database/input iteration order.
+    private val readingOrder = compareByDescending<LabMarkerRow> { it.day }
+        .thenByDescending { it.takenAt }.thenBy { it.id }
+
+    data class ResolvedGlycemic(val row: LabMarkerRow, val result: CustomLabAgePolicy.Result)
+
+    /** Select original user-assigned evidence only. AI identities cannot activate this policy. */
+    fun resolveCustomGlycemic(readings: List<LabMarkerRow>, snapshotDay: String): ResolvedGlycemic? {
+        val snapshot = runCatching { LocalDate.parse(snapshotDay) }.getOrNull() ?: return null
+        return readings.asSequence()
+            .filter { it.markerKey.startsWith("custom_") && it.evidenceProfileId == "glycemic_non_fasting" }
+            .filter { runCatching { LocalDate.parse(it.day) }.getOrNull()?.let { day -> !day.isAfter(snapshot) } == true }
+            .sortedWith(readingOrder)
+            .mapNotNull { row ->
+                val value = row.value ?: return@mapNotNull null
+                val condition = when (row.sampleCondition) {
+                    "non_fasting" -> CustomLabAgePolicy.SampleCondition.NON_FASTING
+                    "post_meal" -> CustomLabAgePolicy.SampleCondition.POST_MEAL
+                    else -> return@mapNotNull null
+                }
+                val result = CustomLabAgePolicy.nonFastingGlucose(
+                    CustomLabAgePolicy.Reading(value, row.unit, LocalDate.parse(row.day), condition, row.hoursSinceMeal),
+                    snapshot,
+                )
+                if (result.eligible) ResolvedGlycemic(row, result) else null
+            }.firstOrNull()
     }
 
     private fun normalized(key: String, raw: Double?, unitRaw: String): Triple<Double, String, String>? {
@@ -160,3 +193,4 @@ object LabCalculationContract {
         return if (physicallyPlausible) Triple(out, canonical, conversion) else null
     }
 }
+

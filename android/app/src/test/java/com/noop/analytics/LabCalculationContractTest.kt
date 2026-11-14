@@ -116,4 +116,61 @@ class LabCalculationContractTest {
         assertTrue(byKey.getValue("recovery").existingLabInputs.isEmpty())
         assertTrue(byKey.getValue("vitality").existingLabInputs.isEmpty())
     }
+
+    @Test fun exactBodyTiesSelectSameRowRegardlessOfInputOrderAndKeepSourceEvidence() {
+        val a = lab("waist", 36.0, "in").copy(id = "a", source = "csv", takenAt = 12345L)
+        val b = a.copy(id = "b", value = 37.0)
+        val forward = LabCalculationContract.resolveLatest(listOf(a, b), "waist", "2026-11-14")!!
+        val reverse = LabCalculationContract.resolveLatest(listOf(b, a), "waist", "2026-11-14")!!
+        assertEquals(forward, reverse)
+        assertEquals("a", forward.rowId)
+        assertEquals("my-whoop", forward.deviceId)
+        assertEquals("csv", forward.source)
+        assertEquals(12345L, forward.takenAt)
+        assertEquals("in", forward.originalUnit)
+        assertEquals("cm", forward.canonicalUnit)
+        assertEquals(91.44, forward.normalizedValue, 1e-9)
+    }
+
+    private fun glucose(day: String = "2026-11-12") = lab(
+        "custom_random_glucose", 180.0, "mg/dL", day,
+        profile = "glycemic_non_fasting", condition = "post_meal",
+    )
+
+    @Test fun invalidNewestCustomReadingsCannotCrashOrHideOlderEligibleEvidence() {
+        val valid = glucose().copy(id = "valid")
+        val malformed = valid.copy(id = "bad-date", day = "0000-bad", takenAt = Long.MAX_VALUE)
+        val badUnit = valid.copy(id = "bad-unit", day = "2026-11-13", unit = "cm", takenAt = Long.MAX_VALUE)
+        val badCondition = valid.copy(id = "fasting", day = "2026-11-14", sampleCondition = "fasting")
+        val badValue = valid.copy(id = "nan", day = "2026-11-14", value = Double.NaN)
+        val badMeal = valid.copy(id = "meal", day = "2026-11-14", hoursSinceMeal = Double.NaN)
+        val rows = listOf(valid, malformed, badUnit, badCondition, badValue, badMeal)
+        val result = LabCalculationContract.resolveCustomGlycemic(rows, "2026-11-14")!!
+        assertEquals(valid, result.row)
+        assertEquals(0.06666666666666667, result.result.ageDeltaYears, 1e-12)
+        assertEquals(result, LabCalculationContract.resolveCustomGlycemic(rows.reversed(), "2026-11-14"))
+        assertEquals(180.0, valid.value!!, 0.0)
+    }
+
+    @Test fun customPolicyRequiresExplicitOriginalCustomProfileAndPastEligibleSample() {
+        val valid = glucose()
+        val invalid = listOf(
+            valid.copy(evidenceProfileId = null),
+            valid.copy(markerKey = "fasting_glucose"),
+            valid.copy(day = "2026-11-15"),
+            valid.copy(day = "2020-01-01"),
+            valid.copy(value = null),
+        )
+        assertNull(LabCalculationContract.resolveCustomGlycemic(invalid, "2026-11-14"))
+        assertNull(LabCalculationContract.resolveCustomGlycemic(listOf(valid), "invalid"))
+    }
+
+    @Test fun customResolverUsesSampleDayThenTimestampThenStableRowId() {
+        val oldest = glucose("2026-11-11").copy(id = "old", takenAt = Long.MAX_VALUE)
+        val low = glucose().copy(id = "a", takenAt = 2L, value = 180.0)
+        val high = low.copy(id = "b", value = 200.0)
+        val early = low.copy(id = "early", takenAt = 1L)
+        assertEquals("a", LabCalculationContract.resolveCustomGlycemic(listOf(high, oldest, early, low), "2026-11-14")!!.row.id)
+    }
 }
+

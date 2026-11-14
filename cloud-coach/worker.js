@@ -1,3 +1,5 @@
+import { interpretLabsSafely } from "./lab-interpretation.js";
+
 const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
 
 const MAX_REQUEST_BYTES = 128 * 1024;
@@ -110,7 +112,10 @@ export default {
         recentMessages, question, nutritionReferences, healthReferences,
       });
 
-      const aiOutput = await callWorkersAI(env, prompt, question);
+      const [aiOutput, labInterpretation] = await Promise.all([
+        callWorkersAI(env, prompt, question),
+        interpretLabsSafely(env, body.labRequest, body.labConsent),
+      ]);
       const modelAnswer = cleanText(aiOutput.answer, 16000);
       if (!modelAnswer) throw new HttpError(502, "Cloud Coach could not produce a valid response", true);
 
@@ -148,6 +153,7 @@ export default {
         nutrition,
         references: healthReferences.items,
         memorySaved,
+        ...(body.labRequest ? { labInterpretation } : {}),
       });
     } catch (error) {
       const status = error instanceof HttpError ? error.status : classifyErrorStatus(error);
@@ -458,7 +464,8 @@ function classifyIntent(question) {
 
   // Hypothetical meals must never be saved as consumed.
   const preview = /\b(?:what if|if i|should i|can i|planning to|plan to|going to|will eat|want to eat)\b|\b(?:kalau|rencana|ingin makan|mau makan|boleh makan|cocok makan)\b/i;
-  if (preview.test(text)) return "food_preview";
+  const foodContext = /\b(?:eat|eating|food|meal|breakfast|lunch|dinner|snack|calories|protein|carbs|chicken|bread|banana|rice|egg|beef|fish|milk|coffee|noodles|makan|minum|makanan|sarapan|kalori|ayam|nasi|roti|pisang|telur|ikan|mie|susu|tempe|tahu)\b/i;
+  if (preview.test(text) && foodContext.test(text)) return "food_preview";
 
   // Questions about already CONFIRMED intake are not new log requests.
   const summary = /\b(?:what did i eat|what have i eaten|how many calories|calories (?:so far|today)|total (?:calories|protein|carbs|fat)|food logged|no food logged|nothing logged|already logged|nutrition summary|food diary)\b|\b(?:berapa kalori|makanan hari ini|sudah (?:makan|tercatat)|belum (?:tercatat|dicatat)|rekap (?:makanan|kalori)|total kalori)\b/i;
@@ -847,3 +854,4 @@ function jsonResponse(payload, status = 200, extraHeaders = {}) {
     },
   });
 }
+
