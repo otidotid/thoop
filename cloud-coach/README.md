@@ -34,3 +34,8 @@ npm test
 ```
 
 Tests use mocked Workers AI, D1, and fetch, and cover input limits, response compatibility, auth-gate behavior, D1 failover, third-party lookup privacy, food estimation, and upstream errors. These tests **do not** prove real Cloudflare deployment behaviour, latency, identity security, or clinical correctness. Verify a staged Worker with the Android app before rollout.
+
+
+## Intelligence and quota policy
+
+Food logging uses `@cf/openai/gpt-oss-20b` and bypasses the 120B conversational pass. Configure `COACH_RATE_LIMITER`; keys are separated into chat, Labs, and metabolic buckets. Android remains the final authority for Nutrition Review confirmation and persistence.

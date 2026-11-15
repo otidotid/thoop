@@ -220,7 +220,7 @@ test('optional rate limiter refuses excess calls before AI and hashes the edge I
   assert.equal(result.status, 429);
   assert.equal(result.body.retryable, true);
   assert.equal(result.headers.get('retry-after'), '60');
-  assert.equal(key.length, 64);
+  assert.match(key, /^chat:[a-f0-9]{64}$/);
   assert.ok(!key.includes('203.0.113.45'));
 });
 
@@ -328,13 +328,12 @@ test('malformed first nutrition JSON gets one compact structured retry', async (
   const result = await reply(post({ ...base, question: 'I ate 2 bananas and chicken', localHour: 12 }), {
     AI: { run: async () => {
       count++;
-      if (count === 1) return { response: 'Your lunch has been saved.' };
-      if (count === 2) return { response: 'Here are the estimated calories but no JSON.' };
+      if (count === 1) return { response: 'Here are the estimated calories but no JSON.' };
       return { response: '{"foodName":"chicken and bananas","caloriesKcal":350,"confidence":"low"}' };
     } },
     DISABLE_EXTERNAL_REFERENCES: 'true',
   });
-  assert.equal(count, 3);
+  assert.equal(count, 2);
   assert.equal(result.status, 200);
   assert.equal(result.body.intent, 'food_log');
   assert.equal(result.body.nutrition.caloriesKcal, 350);

@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
         // launch-critical setup so a 100MB+ whole-DB zip can never block app startup. Cheap (two prefs
         // reads) when the feature is off, which is the default.
         runCatching { BackupSync.reschedule(applicationContext) }
+        runCatching { com.noop.ingest.HealthConnectAutoImport.reschedule(applicationContext) }
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { BackupSync.catchUpIfDue(applicationContext) }
         }

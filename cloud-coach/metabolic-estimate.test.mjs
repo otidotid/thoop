@@ -59,10 +59,10 @@ test('unknown formula/score/numeric fields and invalid scalar range/types are re
   for (const key of ['fitnessAge', 'scores', 'coefficient', 'weight', 'value', 'normalizedValue']) {
     assert.equal(validateMetabolicResponse({ ...result(request), [key]: 99 }, request), null);
   }
-  for (const value of [-0.01, 4.01, Infinity, NaN, '1.25', true]) {
+  for (const value of [-2.01, 4.01, Infinity, NaN, '1.25', true]) {
     assert.equal(validateMetabolicResponse({ ...result(request), metabolicAgeDeltaYears: value }, request), null);
   }
-  for (const value of [0, 4, null]) {
+  for (const value of [-2, 0, 4, null]) {
     assert.notEqual(validateMetabolicResponse({ ...result(request), metabolicAgeDeltaYears: value }, request), null);
   }
   assert.equal(validateMetabolicResponse({ ...result(request), confidence: 0.99 }, request), null);

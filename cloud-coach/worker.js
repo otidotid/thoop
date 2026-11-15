@@ -2,11 +2,12 @@ import { interpretLabsSafely, validLabRequest } from "./lab-interpretation.js";
 import { estimateMetabolicSafely, validMetabolicRequest, METABOLIC_MODEL, METABOLIC_PROMPT_VERSION } from "./metabolic-estimate.js";
 
 const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
+const FOOD_AI_MODEL = "@cf/openai/gpt-oss-20b";
 
 const MAX_REQUEST_BYTES = 128 * 1024;
 const REFERENCE_TIMEOUT_MS = 3500;
 const MAIN_AI_TIMEOUT_MS = 65000;
-const NUTRITION_AI_TIMEOUT_MS = 15000;
+const NUTRITION_AI_TIMEOUT_MS = 25000;
 
 class HttpError extends Error {
   constructor(status, message, retryable = false) {
@@ -46,7 +47,9 @@ export default {
         // Optional Cloudflare rate-limiting binding. Hash the edge-provided IP
         // before passing it to the limiter; never log or persist the raw IP.
         const edgeIp = request.headers.get("cf-connecting-ip") || "unknown";
-        const result = await env.COACH_RATE_LIMITER.limit({ key: await sha256(edgeIp) });
+        const bucket = url.pathname === "/v1/labs/metabolic" ? "metabolic"
+          : url.pathname === "/v1/labs/interpret" ? "labs" : "chat";
+        const result = await env.COACH_RATE_LIMITER.limit({ key: `${bucket}:${await sha256(edgeIp)}` });
         if (!result.success) {
           return jsonResponse({ error: "Too many requests", retryable: true }, 429, { "Retry-After": "60" });
         }
@@ -114,7 +117,7 @@ export default {
 
       // Keep food logging compatible with the Android Nutrition Review contract.
       // A follow-up may refer to a meal in the previous user turn.
-      const intent = resolveFoodLogIntent(question, recentMessages);
+      const intent = await resolveFoodLogIntent(env, question, recentMessages);
       const foodStatement = intent === "food_log"
         ? foodStatementForReview(question, recentMessages)
         : question;
@@ -131,18 +134,17 @@ export default {
         recentMessages, question, nutritionReferences, healthReferences,
       });
 
-      const [aiOutput, labInterpretation] = await Promise.all([
-        callWorkersAI(env, prompt, question),
+      const [aiOutput, nutrition, labInterpretation] = await Promise.all([
+        intent === "food_log"
+          ? Promise.resolve({ answer: "I've prepared a nutrition estimate for the foods you described." })
+          : callWorkersAI(env, prompt, question),
+        intent === "food_log"
+          ? estimateNutritionSafely(env, foodStatement, nutritionReferences, body.localHour)
+          : Promise.resolve(null),
         interpretLabsSafely(env, body.labRequest, body.labConsent),
       ]);
       const modelAnswer = cleanText(aiOutput.answer, 16000);
       if (!modelAnswer) throw new HttpError(502, "Cloud Coach could not produce a valid response", true);
-
-      // Structured nutrition is mandatory for Android's SAVE TO CALORIES INTAKE review.
-      // The Worker cannot save food to the phone's SQLite database.
-      const nutrition = intent === "food_log"
-        ? await estimateNutritionSafely(env, foodStatement, nutritionReferences, body.localHour)
-        : null;
       const answer = finalizeCoachAnswer(modelAnswer, intent, nutrition);
       let memorySaved = false;
       if (env.DB) {
@@ -393,7 +395,9 @@ async function estimateNutritionSafely(env, question, references, localHour) {
     const prompt = [
       "Estimate nutrition for the food the user explicitly said they consumed.",
       "Return ONLY one JSON object with no markdown and no extra text.",
-      "Use null when a nutrient cannot be reasonably estimated.",
+      "Use conservative standard-serving estimates when exact values are unavailable and disclose assumptions.",
+      "Do not return zero or null calories for recognizable caloric food.",
+      "Ignore references that do not clearly match the consumed food.",
       "Use a calorie range and lower confidence for mixed dishes or uncertain portions.",
       "Never claim a source that is not present in the supplied references.",
       "Required keys: foodName, servingDescription, servingGrams, caloriesKcal, minimumCaloriesKcal, maximumCaloriesKcal, proteinGrams, carbohydrateGrams, fatGrams, fiberGrams, confidence, assumptions, sources.",
@@ -410,9 +414,9 @@ async function estimateNutritionSafely(env, question, references, localHour) {
         { role: "user", content: prompt },
       ],
       reasoning_effort: "low",
-      max_tokens: 900,
+      max_tokens: 1000,
       temperature: 0.15,
-    }, NUTRITION_AI_TIMEOUT_MS);
+    }, NUTRITION_AI_TIMEOUT_MS, FOOD_AI_MODEL);
     // An answer-shaped model reply must not silently bypass the Android
     // Nutrition Review card. Retry once with a minimal contract instead.
     let first = null;
@@ -434,9 +438,9 @@ async function estimateNutritionSafely(env, question, references, localHour) {
         },
       ],
       reasoning_effort: "low",
-      max_tokens: 450,
+      max_tokens: 600,
       temperature: 0.1,
-    }, NUTRITION_AI_TIMEOUT_MS);
+    }, NUTRITION_AI_TIMEOUT_MS, FOOD_AI_MODEL);
     return normalizeNutrition(extractFirstJsonObject(extractWorkersText(repair)), question, localHour);
   } catch (error) {
     console.warn("Nutrition estimate unavailable", String(error));
@@ -519,11 +523,28 @@ function findPriorFoodStatement(recentMessages) {
   return "";
 }
 
-function resolveFoodLogIntent(question, recentMessages) {
+async function classifyIntentWithAI(env, question) {
+  try {
+    const result = await runAIWithDeadline(env.AI, {
+      input: [{ role: "user", content: [
+        "Return exactly one label: food_log, food_preview, nutrition_summary, or chat.",
+        "Understand Indonesian, English, slang, mixed language, abbreviations, and reasonable typos.",
+        "food_log means consumed food or drink, including a short food list with a natural portion.",
+        `Message: ${cleanText(question, 1200)}`,
+      ].join("\n") }],
+      max_output_tokens: 24,
+      reasoning: { effort: "low" },
+    }, 8000, FOOD_AI_MODEL);
+    return normalizeIntent(extractWorkersAIText(result).trim().toLowerCase());
+  } catch (_) { return "chat"; }
+}
+
+async function resolveFoodLogIntent(env, question, recentMessages) {
   const direct = classifyIntent(question);
-  return direct === "chat" && isFoodLogFollowUp(question) && findPriorFoodStatement(recentMessages)
-    ? "food_log"
-    : direct;
+  if (direct !== "chat") return direct;
+  if (isFoodLogFollowUp(question) && findPriorFoodStatement(recentMessages)) return "food_log";
+  const foodShorthand = /\b(?:seporsi|sporsi|sepiring|semangkuk|sekotak|sepotong|sebuah|segelas|scoop|skup|bungkus|porsi|gram|gr|kg|ml|buah|butir|potong|piring|mangkuk|kotak)\b|\d+(?:[.,]\d+)?\s*(?:g|gr|gram|kg|ml)\b/i.test(question);
+  return question.length <= 220 && foodShorthand ? classifyIntentWithAI(env, question) : "chat";
 }
 
 function foodStatementForReview(question, recentMessages) {
@@ -550,11 +571,11 @@ function finalizeCoachAnswer(rawAnswer, intent, nutrition) {
   return rawAnswer;
 }
 
-async function runAIWithDeadline(ai, parameters, timeoutMs) {
+async function runAIWithDeadline(ai, parameters, timeoutMs, model = WORKERS_AI_MODEL) {
   let timer;
   try {
     return await Promise.race([
-      ai.run(WORKERS_AI_MODEL, parameters),
+      ai.run(model, parameters),
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new HttpError(503, "Cloud Coach AI took too long", true)), timeoutMs);
       }),
@@ -731,6 +752,7 @@ async function lookupNutritionReferences(question) {
   const found = foodNames.find((name) =>
     new RegExp(`(^|[^a-z])${name}([^a-z]|$)`, "i").test(lower));
   if (!found) return "";
+  if (/\b(?:nasi uduk|nasi padang|ayam geprek|martabak|gado[- ]gado|ketoprak|lontong sayur|pempek|soto|bakso|siomay)\b/i.test(lower)) return "";
 
   const url = new URL("https://world.openfoodfacts.org/cgi/search.pl");
   url.searchParams.set("search_terms", found);
