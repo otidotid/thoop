@@ -135,9 +135,12 @@ fun DataSourcesScreen(vm: AppViewModel) {
     }
     var hcAutoImportHours by remember { mutableStateOf(HealthConnectAutoImport.intervalHours(context)) }
     var hcAutoImportMenu by remember { mutableStateOf(false) }
-    var hcAutoPendingHours by remember { mutableStateOf<Int?>(null) }
+    val hcAutoSelection = remember { HealthConnectAutoImportSelection() }
     var hcAutoAccess by remember { mutableStateOf(HealthConnectAutoImportPolicy.Access.DISABLED) }
     var hcAutoStatus by remember { mutableStateOf(HealthConnectAutoImport.status(context)) }
+    DisposableEffect(hcAutoSelection) {
+        onDispose { hcAutoSelection.dispose() }
+    }
     DisposableEffect(context) {
         val autoPrefs = HealthConnectAutoImport.preferences(context)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -148,17 +151,25 @@ fun DataSourcesScreen(vm: AppViewModel) {
         onDispose { autoPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     LaunchedEffect(hcAutoImportHours, hcReadCategories) {
-        hcAutoAccess = HealthConnectAutoImport.access(context)
-        if (hcAutoAccess != HealthConnectAutoImportPolicy.Access.READY)
-            HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
+        val generation = hcAutoSelection.snapshot()
+        val access = HealthConnectAutoImport.access(context)
+        hcAutoSelection.applyIfCurrent(generation) {
+            hcAutoAccess = access
+            if (access != HealthConnectAutoImportPolicy.Access.READY)
+                HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(access))
+        }
     }
     val autoLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(autoLifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) scope.launch {
-                hcAutoAccess = HealthConnectAutoImport.access(context)
-                if (hcAutoAccess != HealthConnectAutoImportPolicy.Access.READY)
-                    HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
+                val generation = hcAutoSelection.snapshot()
+                val access = HealthConnectAutoImport.access(context)
+                hcAutoSelection.applyIfCurrent(generation) {
+                    hcAutoAccess = access
+                    if (access != HealthConnectAutoImportPolicy.Access.READY)
+                        HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(access))
+                }
             }
         }
         autoLifecycle.lifecycle.addObserver(observer)
@@ -337,32 +348,39 @@ fun DataSourcesScreen(vm: AppViewModel) {
     val hcAutoPermissionLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract(),
     ) {
-        val requestedHours = hcAutoPendingHours
-        hcAutoPendingHours = null
-        scope.launch {
-            hcAutoAccess = HealthConnectAutoImport.access(context, enabling = true)
-            if (requestedHours != null && hcAutoAccess == HealthConnectAutoImportPolicy.Access.READY)
-                HealthConnectAutoImport.setIntervalHours(context, requestedHours)
-            else HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
+        val request = hcAutoSelection.finishPermissionRequest()
+        if (request != null) scope.launch {
+            val access = HealthConnectAutoImport.access(context, enabling = true)
+            hcAutoSelection.applyIfCurrent(request.generation) {
+                hcAutoAccess = access
+                if (access == HealthConnectAutoImportPolicy.Access.READY)
+                    HealthConnectAutoImport.setIntervalHours(context, request.hours)
+                else HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(access))
+            }
         }
     }
     fun configureAutoImport(hours: Int) {
+        val request = hcAutoSelection.select(hours)
         if (hours == 0) {
-            hcAutoPendingHours = null
+            hcAutoAccess = HealthConnectAutoImportPolicy.Access.DISABLED
             HealthConnectAutoImport.setIntervalHours(context, 0)
             return
         }
         scope.launch {
-            hcAutoAccess = HealthConnectAutoImport.access(context, enabling = true)
-            when (hcAutoAccess) {
-                HealthConnectAutoImportPolicy.Access.READY -> HealthConnectAutoImport.setIntervalHours(context, hours)
-                HealthConnectAutoImportPolicy.Access.READ_PERMISSION_REQUIRED,
-                HealthConnectAutoImportPolicy.Access.BACKGROUND_PERMISSION_REQUIRED -> {
-                    hcAutoPendingHours = hours
-                    hcAutoPermissionLauncher.launch(HealthConnectImporter.permissionsFor(hcReadCategories) +
-                        HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
+            val access = HealthConnectAutoImport.access(context, enabling = true)
+            hcAutoSelection.applyIfCurrent(request.generation) {
+                hcAutoAccess = access
+                when (access) {
+                    HealthConnectAutoImportPolicy.Access.READY -> HealthConnectAutoImport.setIntervalHours(context, request.hours)
+                    HealthConnectAutoImportPolicy.Access.READ_PERMISSION_REQUIRED,
+                    HealthConnectAutoImportPolicy.Access.BACKGROUND_PERMISSION_REQUIRED -> {
+                        if (hcAutoSelection.beginPermissionRequest(request)) {
+                            hcAutoPermissionLauncher.launch(HealthConnectImporter.permissionsFor(hcReadCategories) +
+                                HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
+                        }
+                    }
+                    else -> HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(access))
                 }
-                else -> HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
             }
         }
     }
@@ -511,6 +529,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
                 HealthConnectCategorySelector(
                     selected = hcReadCategories,
                     onSelectionChange = { categories ->
+                        hcAutoSelection.invalidate()
                         hcReadCategories = categories
                         HealthConnectImporter.setSelectedCategories(context, categories)
                     },

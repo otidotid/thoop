@@ -295,13 +295,25 @@ object HealthConnectImporter {
         // Null means "whatever the user has selected", resolved AFTER the grant-based migration below. A
         // non-lazy default is evaluated at CALL time, before the migration could widen it.
         categories: Set<ImportCategory>? = null,
+        // Background replacement must never publish an aggregate from only part of a selected read.
+        requireCompleteRead: Boolean = false,
     ): ImportSummary {
         if (sdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
             return ImportSummary.failure(SOURCE, "Health Connect is not available on this device.")
         }
 
-        val client = client(context)
+        return importFromClient(context, repo, client(context), heightCm, categories, requireCompleteRead)
+    }
 
+    /** Same read/aggregation/persistence path as [import], with an injectable provider for local tests. */
+    internal suspend fun importFromClient(
+        context: Context,
+        repo: WhoopRepository,
+        client: HealthConnectClient,
+        heightCm: Double = 0.0,
+        categories: Set<ImportCategory>? = null,
+        requireCompleteRead: Boolean = false,
+    ): ImportSummary {
         // Verify the permissions really are granted (the UI may have been dismissed).
         val granted = try {
             client.permissionController.getGrantedPermissions()
@@ -690,6 +702,13 @@ object HealthConnectImporter {
             return ImportSummary.failure(SOURCE, "Health Connect read failed: ${e.message}")
         }
 
+        // No hydration, repository or success-stamp write precedes this boundary. A failed second
+        // page or data type must not replace a complete saved day with an incomplete background sum.
+        if (requireCompleteRead && failedSelectedReads > 0) {
+            return ImportSummary.failure(SOURCE,
+                "Some selected Health Connect data could not be read. No existing data was changed; retry to complete the import.")
+        }
+
         // Zero-fill the whole hydration window and write it, BEFORE the "nothing found" bail below:
         // `acc` holds only the aggregate types, so a user whose Health Connect has water and nothing
         // else would otherwise return early and never see a drop of it. Writing the zeros is what makes
@@ -850,6 +869,7 @@ object HealthConnectImporter {
         }
 
         // Persist. Register the devices we write under so name() lookups resolve.
+        var acceptedWorkouts: List<WorkoutRow> = emptyList()
         try {
             if (appleRows.isNotEmpty()) {
                 repo.upsertDevice(HC_DEVICE, name = "Health Connect")
@@ -868,7 +888,7 @@ object HealthConnectImporter {
                 repo.upsertSleepSessions(sleepRows)
             }
             if (workouts.isNotEmpty()) {
-                repo.saveCandidateWorkoutsNoOverlap(workouts)
+                acceptedWorkouts = repo.saveCandidateWorkoutsNoOverlap(workouts)
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -889,14 +909,17 @@ object HealthConnectImporter {
         val counts = buildMap {
             if (appleRows.isNotEmpty()) put("appleDaily", appleRows.size)
             if (dailyRows.isNotEmpty()) put("dailyMetric", dailyRows.size)
-            if (workouts.isNotEmpty()) put("workout", workouts.size)
+            if (acceptedWorkouts.isNotEmpty()) put("workout", acceptedWorkouts.size)
         }
 
         // Day range across everything we touched (aggregates + workout start days).
         val touchedDays = sortedSetOf<String>().apply {
             addAll(appleRows.map { it.day })
             addAll(dailyRows.map { it.day })
-            addAll(workoutDays)   // #1002: same keys the workouts were bucketed under
+            val acceptedKeys = acceptedWorkouts.mapTo(hashSetOf()) { Triple(it.deviceId, it.startTs, it.sport) }
+            workouts.forEachIndexed { index, workout ->
+                if (Triple(workout.deviceId, workout.startTs, workout.sport) in acceptedKeys) add(workoutDays[index])
+            }
         }
         val firstDay = touchedDays.firstOrNull()
         val lastDay = touchedDays.lastOrNull()
@@ -906,7 +929,7 @@ object HealthConnectImporter {
         // there" cannot be told from "Health Connect never imported it" without this: the log had per-source
         // row counts but nothing about WHEN they last moved. Mirrors the sync.lastWriteOkAt pattern the
         // strap-write path already uses. Best-effort - a stamp failure must not sink a good import.
-        recordImportRun(context, rows = total, throughDay = lastDay)
+        if (failedSelectedReads == 0) recordImportRun(context, rows = total, throughDay = lastDay)
         return ImportSummary(
             source = SOURCE,
             counts = counts,

@@ -81,7 +81,7 @@ class HealthConnectAutoImportWorker(appContext: Context, params: WorkerParameter
         val app = applicationContext as? NoopApplication ?: return Result.failure()
         val execution = HealthConnectAutoImportPolicy.execute(
             HealthConnectAutoImport.access(applicationContext), runAttemptCount,
-        ) { HealthConnectImporter.import(applicationContext, app.repository) }
+        ) { HealthConnectImporter.import(applicationContext, app.repository, requireCompleteRead = true) }
         HealthConnectAutoImport.writeStatus(applicationContext, execution.message)
         return when (execution.outcome) {
             HealthConnectAutoImportPolicy.Outcome.SUCCESS -> Result.success()

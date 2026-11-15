@@ -27,7 +27,7 @@ class GoogleCloudBackupFailureTest {
     private val paused = mutableListOf<CloudBackupSchedule>()
 
     @Before fun configure() {
-        val context = RuntimeEnvironment.getApplication<Application>()
+        val context: Context = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("thoop_google_cloud_backup", Context.MODE_PRIVATE).edit().clear().commit()
         prefs = GoogleCloudBackupPreferences(context)
         prefs.write(schedule)

@@ -17,6 +17,9 @@ metabolic input introduced in Preview 5.
   separate background-read grant before accessing records. The UI requests that access only when the
   user enables automatic import. Unsupported providers retain manual import. Failed/partial reads
   produce retry/failure status instead of a false successful import.
+  An incomplete scheduled read aborts before any saved aggregate is replaced, including a failure on
+  a later page. Manual best-effort behavior remains available. The latest interval selection wins,
+  so a delayed permission check cannot turn scheduling back on after the user chooses Off.
 - The dock editor scrolls within a bounded viewport while Reset and Done remain reachable. Explicitly
   removing all optional items remains saved; missing/invalid settings still use Preview 5 defaults.
 - Navigation tests exercise the actual customizable navigation contract. Metabolic tests cover −2,
