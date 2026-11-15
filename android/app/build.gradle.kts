@@ -37,7 +37,7 @@ android {
         applicationId = "com.otidotid.thoop"
         minSdk = 26
         targetSdk = 34
-        versionCode = 559
+        versionCode = 560
         versionName = "13.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -30,6 +30,7 @@ import com.noop.analytics.HydrationStore
 import com.noop.analytics.RouteMath
 import com.noop.data.AppleDaily
 import com.noop.data.DailyMetric
+import com.noop.data.HealthConnectDailyReadMask
 import com.noop.data.ImportSummary
 import com.noop.data.MetricSeriesRow
 import com.noop.data.SleepSession
@@ -67,7 +68,8 @@ import kotlin.reflect.KClass
  * The UI requests only the selected categories before [import] is called. Partial grants are valid:
  * the importer reads granted types inside those categories and skips everything else. If Health
  * Connect is unavailable or none of the selected permissions is granted, it returns
- * [ImportSummary.failure].
+ * [ImportSummary.failure]. A failed selected read or later page also returns failure before any write;
+ * partial permission grants remain valid when every granted, selected read completes.
  */
 object HealthConnectImporter {
 
@@ -295,8 +297,8 @@ object HealthConnectImporter {
         // Null means "whatever the user has selected", resolved AFTER the grant-based migration below. A
         // non-lazy default is evaluated at CALL time, before the migration could widen it.
         categories: Set<ImportCategory>? = null,
-        // Background replacement must never publish an aggregate from only part of a selected read.
-        requireCompleteRead: Boolean = false,
+        // Compatibility flag: incomplete selected reads now fail closed for every import.
+        requireCompleteRead: Boolean = true,
     ): ImportSummary {
         if (sdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
             return ImportSummary.failure(SOURCE, "Health Connect is not available on this device.")
@@ -306,13 +308,14 @@ object HealthConnectImporter {
     }
 
     /** Same read/aggregation/persistence path as [import], with an injectable provider for local tests. */
+    @Suppress("UNUSED_PARAMETER") // Compatibility flag no longer permits unsafe partial persistence.
     internal suspend fun importFromClient(
         context: Context,
         repo: WhoopRepository,
         client: HealthConnectClient,
         heightCm: Double = 0.0,
         categories: Set<ImportCategory>? = null,
-        requireCompleteRead: Boolean = false,
+        requireCompleteRead: Boolean = true,
     ): ImportSummary {
         // Verify the permissions really are granted (the UI may have been dismissed).
         val granted = try {
@@ -356,6 +359,7 @@ object HealthConnectImporter {
         // on BOTH here so switching a category off stops its reads immediately without requiring the
         // user to visit Android's Health Connect settings and revoke the old grant manually (#645).
         var failedSelectedReads = 0
+        val completedReadTypes = hashSetOf<KClass<out Record>>()
         suspend fun <T : Record> readSelected(
             type: KClass<T>,
             range: TimeRangeFilter = filter,
@@ -365,7 +369,7 @@ object HealthConnectImporter {
             // permanent activity/exercise-only boundary.
             if (type !in IMPORT_READ_ALLOWLIST || type !in selectedRecordTypes) return false
             val completed = readAll(client, type, range, selfPackage, onRecord)
-            if (!completed) failedSelectedReads++
+            if (completed) completedReadTypes += type else failedSelectedReads++
             return completed
         }
 
@@ -703,11 +707,18 @@ object HealthConnectImporter {
         }
 
         // No hydration, repository or success-stamp write precedes this boundary. A failed second
-        // page or data type must not replace a complete saved day with an incomplete background sum.
-        if (requireCompleteRead && failedSelectedReads > 0) {
+        // page or data type must not replace a complete saved day with an incomplete sum, including
+        // the manual path's workout/distance accumulators. Skipped, ungranted types are not failures.
+        if (failedSelectedReads > 0) {
             return ImportSummary.failure(SOURCE,
                 "Some selected Health Connect data could not be read. No existing data was changed; retry to complete the import.")
         }
+        val dailyReadMask = HealthConnectDailyReadMask(
+            steps = StepsRecord::class in completedReadTypes,
+            activeKcal = ActiveCaloriesBurnedRecord::class in completedReadTypes,
+            basalKcal = TotalCaloriesBurnedRecord::class in completedReadTypes &&
+                ActiveCaloriesBurnedRecord::class in completedReadTypes,
+        )
 
         // Zero-fill the whole hydration window and write it, BEFORE the "nothing found" bail below:
         // `acc` holds only the aggregate types, so a user whose Health Connect has water and nothing
@@ -869,11 +880,12 @@ object HealthConnectImporter {
         }
 
         // Persist. Register the devices we write under so name() lookups resolve.
+        var writtenAppleRows: List<AppleDaily> = emptyList()
         var acceptedWorkouts: List<WorkoutRow> = emptyList()
         try {
-            if (appleRows.isNotEmpty()) {
+            if (appleRows.isNotEmpty() && dailyReadMask.hasObservedFields) {
                 repo.upsertDevice(HC_DEVICE, name = "Health Connect")
-                repo.upsertAppleDaily(appleRows)
+                writtenAppleRows = repo.upsertHealthConnectDaily(appleRows, dailyReadMask)
             }
             if (metricSeriesRows.isNotEmpty()) repo.upsertMetricSeries(metricSeriesRows)
             if (dailyRows.isNotEmpty()) {
@@ -907,14 +919,14 @@ object HealthConnectImporter {
         }
 
         val counts = buildMap {
-            if (appleRows.isNotEmpty()) put("appleDaily", appleRows.size)
+            if (writtenAppleRows.isNotEmpty()) put("appleDaily", writtenAppleRows.size)
             if (dailyRows.isNotEmpty()) put("dailyMetric", dailyRows.size)
             if (acceptedWorkouts.isNotEmpty()) put("workout", acceptedWorkouts.size)
         }
 
         // Day range across everything we touched (aggregates + workout start days).
         val touchedDays = sortedSetOf<String>().apply {
-            addAll(appleRows.map { it.day })
+            addAll(writtenAppleRows.map { it.day })
             addAll(dailyRows.map { it.day })
             val acceptedKeys = acceptedWorkouts.mapTo(hashSetOf()) { Triple(it.deviceId, it.startTs, it.sport) }
             workouts.forEachIndexed { index, workout ->
@@ -965,11 +977,10 @@ object HealthConnectImporter {
      * Read every page of [type] within [filter], invoking [onRecord] for each record.
      * Loops on the response page token so we never miss records past the first page.
      *
-     * Returns TRUE when the type was read to completion, FALSE when it was skipped by the catch below.
-     * Every accumulating caller ignores this: for them a failed type is simply absent, which costs that
-     * type's contribution and nothing else. It matters for a caller whose write REPLACES rather than adds
-     * (#949 hydration), because there "read nothing" and "there is nothing" are the same empty map — and
-     * treating a swallowed error as an authoritative zero would wipe the stored figure.
+     * Returns TRUE only when every page completed, including an authoritative empty result. FALSE is
+     * tracked by the import's readSelected helper: any selected read failure aborts before persistence. A failed
+     * later page can already have contributed scratch values to accumulators, so those values must be
+     * discarded at that shared boundary rather than saved as complete totals or source deletions.
      */
     private suspend fun <T : Record> readAll(
         client: HealthConnectClient,
@@ -999,10 +1010,8 @@ object HealthConnectImporter {
             } while (pageToken != null)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            // One record type failing (e.g. a device/SDK validation quirk like "count must not be less
-            // than 1" seen on some Health Connect builds) must NOT abort the whole import — log it and
-            // keep whatever was read, so every other data type still comes in (issue #34). The reads
-            // accumulate into shared buckets, so a partial type is simply absent, never corrupt.
+            // Keep this failure explicit even when earlier pages supplied records. readSelected tracks
+            // it and the shared failure boundary discards all scratch accumulation before any write.
             android.util.Log.w("HealthConnect", "read of ${type.simpleName} failed; skipping: ${e.message}")
             return false
         }

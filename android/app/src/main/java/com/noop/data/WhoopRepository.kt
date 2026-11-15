@@ -1263,6 +1263,40 @@ class WhoopRepository(
     }
     suspend fun upsertAppleDaily(rows: List<AppleDaily>) = dao.upsertAppleDaily(rows)
 
+    /** HC-only patch semantics; the shared AppleDaily replacement primitive remains unchanged. */
+    internal suspend fun upsertHealthConnectDaily(
+        rows: List<AppleDaily>,
+        readMask: HealthConnectDailyReadMask,
+    ): List<AppleDaily> {
+        val incoming = rows.toList()
+        if (incoming.isEmpty()) return emptyList()
+        require(incoming.all { it.deviceId == HealthConnectDailyReadMask.SOURCE_ID }) {
+            "Health Connect daily writes cannot target another source."
+        }
+        require(incoming.map { it.day }.distinct().size == incoming.size) {
+            "Health Connect daily writes require unique days."
+        }
+        require(incoming.all { runCatching { LocalDate.parse(it.day).toString() == it.day }.getOrDefault(false) }) {
+            "Health Connect daily writes require valid ISO dates."
+        }
+        if (!readMask.hasObservedFields) return emptyList()
+        return transactor.run {
+            // Read inside the same transaction as the upsert: an import must retain the latest stored
+            // unobserved values, including a concurrent update that completed while the provider read.
+            val previous = dao.appleDaily(HealthConnectDailyReadMask.SOURCE_ID,
+                incoming.minOf { it.day }, incoming.maxOf { it.day }).associateBy { it.day }
+            val merged = incoming.mapNotNull { row ->
+                val old = previous[row.day]
+                val updated = readMask.merge(row, old)
+                // Total-only grants cannot establish basal without observed active calories. Avoid
+                // creating a new empty row when no storable value was actually established.
+                updated.takeIf { old != null || it.steps != null || it.activeKcal != null || it.basalKcal != null }
+            }
+            if (merged.isNotEmpty()) dao.upsertAppleDaily(merged)
+            merged
+        }
+    }
+
     // MARK: - Live Sessions (silent guardian, v22). The runner banks the row at start (endTs null) and
     // again at end (totals); the summary reads the recent rows for its guarded-count / streak line.
     suspend fun upsertLiveSession(row: LiveSessionRow) = dao.upsertLiveSession(

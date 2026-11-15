@@ -5,6 +5,7 @@ on:
     branches:
       - feature/lab-marks-ai-integration-v1
       - fix/preview5-regressions
+      - fix/health-connect-field-preservation
   workflow_dispatch:
 
 permissions:
@@ -39,6 +40,7 @@ jobs:
           --tests 'com.noop.data.GoogleDriveBackupClientTest'
           --tests 'com.noop.data.GoogleCloudBackupFailureTest'
           --tests 'com.noop.ingest.HealthConnectAutoImportPolicyTest'
+          --tests 'com.noop.ingest.HealthConnectImport*Test'
           --tests 'com.noop.ui.BottomBar*Test'
           --tests 'com.noop.ui.CoachTabVisibilityTest'
           --tests 'com.noop.data.MetabolicEstimatePersistenceTest'
