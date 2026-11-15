@@ -81,6 +81,7 @@ class IntelligenceEngineJacocoBudgetTest {
         val helperRaw = source.substring(bodyOpen, bodyClose + 1)
 
         val orderedOperations = listOf(
+            "Lab snapshot" to Regex("""\bcaptureWeeklyLabs\s*\("""),
             "fitnessAgeRows" to Regex("""\bfitnessAgeRows\s*\("""),
             // Discriminating, not a bare `diag(`: the helper now emits three diagnostics, and the point of
             // this list is that each one stays in its place relative to the reads and writes around it. A
@@ -92,8 +93,9 @@ class IntelligenceEngineJacocoBudgetTest {
             "Fitness upsert" to Regex(
                 """\brepo\s*\.\s*upsertMetricSeriesWithProvenance\s*\(\s*rows\s*=\s*faPts\b""",
             ),
-            "Vitality compute" to Regex("""\bVitalityEngine\s*\.\s*compute\s*\("""),
-            "Vitality upsert" to Regex("""\brepo\s*\.\s*upsertMetricSeries\s*\(\s*listOf\s*\("""),
+            "Vitality compute" to Regex("""\bvitalityRows\s*\(\s*fa7\b"""),
+            "Vitality upsert" to Regex("""\brepo\s*\.\s*upsertMetricSeriesWithProvenance\s*\(\s*currentVitalityRows\b"""),
+            "missing weekly history" to Regex("""\bbackfillWeeklyFitnessAndVitalityIfNeeded\s*\("""),
             "Apple Health read" to Regex("""\brepo\s*\.\s*appleDaily\s*\(\s*WhoopRepository\s*\.\s*APPLE_HEALTH_SOURCE\b"""),
             "Health Connect read" to Regex("""\brepo\s*\.\s*appleDaily\s*\(\s*WhoopRepository\s*\.\s*HEALTH_CONNECT_SOURCE\b"""),
             "gravity samples" to Regex("""\brepo\s*\.\s*gravitySamplesForDevice\s*\("""),
@@ -158,19 +160,21 @@ class IntelligenceEngineJacocoBudgetTest {
             trace = { events.add("trace") },
         )
 
-        assertEquals("diag", events.first())
-        assertEquals("apple:apple-health", events[1])
-        assertEquals("apple:health-connect", events[2])
+        val weeklyReads = expectedEmptyWeeklyReadSequence()
+        assertEquals("weekly input reads, diagnostics and empty history fill retain their order",
+            weeklyReads, events.take(weeklyReads.size))
+        assertEquals("apple:apple-health", events[weeklyReads.size])
+        assertEquals("apple:health-connect", events[weeklyReads.size + 1])
         // Cold cache: every day is folded, so every day pays BOTH the witness and the read it guards.
         assertEquals(60, events.count { it == "gravityFp" })
         assertEquals(60, events.count { it == "gravity" })
         // Each day asks for the witness BEFORE the read it might skip; a read that came first would make
         // the cache pointless while still passing a count.
-        assertEquals("gravityFp", events[3])
-        assertEquals("gravity", events[4])
-        // Three diagnostics now: the fitness gate first, the motion-cache readout once the reads are done,
-        // and the phase line last of all.
-        assertEquals(3, events.count { it == "diag" })
+        assertEquals("gravityFp", events[weeklyReads.size + 2])
+        assertEquals("gravity", events[weeklyReads.size + 3])
+        // The empty-history fixture reports the fitness gate and backfill, followed by the motion-cache
+        // readout after gravity reads, then the final phase line.
+        assertEquals(4, events.count { it == "diag" })
         val calibration = events.indexOf("calibration")
         assertTrue("calibration must follow every gravity read",
             calibration > events.indexOfLast { it == "gravity" })
@@ -195,7 +199,37 @@ class IntelligenceEngineJacocoBudgetTest {
         } catch (failure: InvocationTargetException) {
             assertSame(sentinel, failure.cause)
         }
-        assertEquals(listOf("diag", "apple:apple-health"), failureEvents)
+        assertEquals(weeklyReads + "apple:apple-health", failureEvents)
+
+        val labSentinel = IllegalStateException("lab read failed")
+        val labEvents = arrayListOf<String>()
+        try {
+            invokeExtractedBlock(
+                repo = recordingRepository(labEvents, labFailure = labSentinel),
+                diag = { labEvents.add("diag") },
+                persistCalibration = { labEvents.add("calibration") },
+                trace = { labEvents.add("trace") },
+            )
+            fail("Lab-source read failures must propagate before scores, callbacks or diagnostics")
+        } catch (failure: InvocationTargetException) {
+            assertSame(labSentinel, failure.cause)
+        }
+        assertEquals(listOf("lab:weight"), labEvents)
+
+        val historySentinel = IllegalStateException("computed history read failed")
+        val historyEvents = arrayListOf<String>()
+        try {
+            invokeExtractedBlock(
+                repo = recordingRepository(historyEvents, computedHistoryFailure = historySentinel),
+                diag = { historyEvents.add("diag") },
+                persistCalibration = { historyEvents.add("calibration") },
+                trace = { historyEvents.add("trace") },
+            )
+            fail("Computed history failures must propagate before the backfill diagnostic or step callbacks")
+        } catch (failure: InvocationTargetException) {
+            assertSame(historySentinel, failure.cause)
+        }
+        assertEquals(weeklyReads.take(weeklyReads.indexOf("days:strap-noop") + 1), historyEvents)
     }
 
     /**
@@ -234,12 +268,36 @@ class IntelligenceEngineJacocoBudgetTest {
     private fun recordingRepository(
         events: MutableList<String>,
         appleFailure: RuntimeException? = null,
+        labFailure: RuntimeException? = null,
+        computedHistoryFailure: RuntimeException? = null,
     ): WhoopRepository {
         val dao = Proxy.newProxyInstance(
             WhoopDao::class.java.classLoader,
             arrayOf(WhoopDao::class.java),
         ) { _, method, arguments ->
             when (method.name) {
+                "labMarkersByKey" -> {
+                    events.add("lab:${arguments!![1]}")
+                    if (labFailure != null) throw labFailure
+                    emptyList<Any>()
+                }
+                "labMarkersByCategory" -> {
+                    events.add("labs:${arguments!![1]}")
+                    emptyList<Any>()
+                }
+                "metricSeries" -> {
+                    events.add("metric:${arguments!![0]}:${arguments[1]}")
+                    emptyList<Any>()
+                }
+                "days" -> {
+                    events.add("days:${arguments!![0]}")
+                    if (arguments[0] == "strap-noop" && computedHistoryFailure != null) throw computedHistoryFailure
+                    emptyList<Any>()
+                }
+                "editedSleepSessions" -> {
+                    events.add("edits:${arguments!![0]}")
+                    emptyList<Any>()
+                }
                 "appleDaily" -> {
                     events.add("apple:${arguments!![0]}")
                     if (appleFailure != null) throw appleFailure
@@ -259,6 +317,24 @@ class IntelligenceEngineJacocoBudgetTest {
             }
         } as WhoopDao
         return WhoopRepository(dao)
+    }
+
+    /** The current helper captures inputs and checks missing history even when no weekly score is ready. */
+    private fun expectedEmptyWeeklyReadSequence(): List<String> = buildList {
+        listOf("weight", "height", "waist", "body_fat").forEach { add("lab:$it") }
+        add("metric:lab-book:fasting_glucose")
+        add("metric:lab-book:hba1c")
+        add("labs:other")
+        add("diag")
+        for (key in listOf("fitness_age", "vo2max_est", "vitality", "body_age")) {
+            add("metric:strap-noop:$key")
+            add("metric:my-whoop-noop:$key")
+        }
+        // daysMerged retains both imported and computed history across the active/canonical union.
+        // Omitting the computed reads would no longer guard the history used by the backfill.
+        listOf("strap", "my-whoop", "strap-noop", "my-whoop-noop", "activity-file").forEach { add("days:$it") }
+        listOf("strap-noop", "my-whoop-noop").forEach { add("edits:$it") }
+        add("diag")
     }
 
     /**

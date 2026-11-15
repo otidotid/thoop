@@ -4,8 +4,6 @@ import com.noop.R
 import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import android.content.Context
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -965,18 +963,10 @@ private fun DeviceCard(
 @Composable
 private fun BatteryTube(pct: Int, charging: Boolean) {
     val clamped = pct.coerceIn(0, 100)
-    val context = LocalContext.current
     val density = LocalDensity.current
-    val reduceMotion = remember(context) {
-        runCatching {
-            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-        }.getOrDefault(false)
-    }
-    val batterySaver = remember(context) {
-        (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isPowerSaveMode == true
-    }
+    val poseStill = rememberPoseStill()
     val fullyCharged = charging && clamped >= 100
-    val animateCharging = charging && !fullyCharged && !reduceMotion && !batterySaver
+    val animateCharging = charging && !fullyCharged && !poseStill
     val animatedFraction by animateFloatAsState(
         targetValue = clamped / 100f,
         animationSpec = tween(durationMillis = 500),

@@ -466,6 +466,7 @@ class WhoopRepository(
     private val transactor: Transactor = object : Transactor {
         override suspend fun <R> run(block: suspend () -> R): R = block()
     },
+    private val metabolicStore: MetabolicEstimateStore? = null,
 ) {
     private val _autoWorkoutInvalidations = MutableSharedFlow<Pair<Long, Long>>(extraBufferCapacity = 32)
     val autoWorkoutInvalidations = _autoWorkoutInvalidations.asSharedFlow()
@@ -494,12 +495,18 @@ class WhoopRepository(
     private var readoutRevisions = ReadoutDataRevisions()
     private val stepRevisionIndex = StepDataRevisionIndex()
 
-    constructor(db: WhoopDatabase) : this(
+    constructor(db: WhoopDatabase, context: Context? = null) : this(
         dao = db.whoopDao(),
         transactor = object : Transactor {
             override suspend fun <R> run(block: suspend () -> R): R = db.withTransaction { block() }
         },
+        metabolicStore = context?.let { MetabolicEstimateStore(it) },
     )
+
+    internal suspend fun metabolicEstimateFor(sourceId: String, day: String, profile: com.noop.analytics.UserProfile) =
+        metabolicStore?.current(this, sourceId, day, profile)
+
+    internal suspend fun <T> withMetabolicCalculationTransaction(block: suspend () -> T): T = transactor.run(block)
 
     // MARK: - Device
 
@@ -2172,9 +2179,10 @@ class WhoopRepository(
      * #797: BOUNDED reactive merged daily metrics for the dashboard. Same per-day merge as
      * [daysMergedFlow] (imported wins, computed gap-fills, edited days keep the correction), but each
      * SOURCE is capped to the most-recent [RECENT_DAYS_CAP] rows before the merge, so a years-deep import
-     * stops re-merging the WHOLE history on every DB change (the heavy refresh #797 is about). The cap is
-     * generous enough to cover every current dashboard surface (Trends' deepest range, the 7-day Fitness
-     * Age / Vitality windows). Rows come back oldest-first, IDENTICAL ordering to [daysMergedFlow], so the
+     * stops re-merging the WHOLE history on every DB change (the heavy refresh #797 is about). The cap
+     * follows the 90-row online-first working set, including the 7-day Fitness Age / Vitality windows.
+     * It bounds this reactive read only; older persisted history is not deleted. Rows come back
+     * oldest-first, IDENTICAL ordering to [daysMergedFlow], so the
      * consumer (Today / illness watch / Trends) is unchanged apart from no longer carrying ancient days the
      * UI never shows. Edited-day precedence still reads the userEdited sessions (not day-capped: the set is
      * already tiny), so a hand-edited recent night keeps winning.
@@ -2621,8 +2629,8 @@ class WhoopRepository(
 
         /** #797: dashboard merge window cap (days). The bounded [recentDaysMergedFlow] keeps at most this
          *  many most-recent days per source, so a years-deep import stops re-merging the whole history on
-         *  every DB change. ~2 years comfortably covers the deepest Trends range + the rolling 7-day
-         *  Fitness Age / Vitality windows, so no current surface loses data. */
+         *  every DB change. The online-first policy uses 90 rows per source; full/archive history
+         *  is read separately. This is a dashboard query limit, never a storage-retention rule. */
         const val RECENT_DAYS_CAP = OnlineFirstWindow.LOCAL_DAYS
 
         /** Canonical source ids the resolver cross-references. The strap's real id is passed in. */
@@ -2733,7 +2741,7 @@ class WhoopRepository(
         }
 
         /** Build a repository backed by the process-wide singleton database. */
-        fun from(context: Context): WhoopRepository = WhoopRepository(WhoopDatabase.get(context))
+        fun from(context: Context): WhoopRepository = WhoopRepository(WhoopDatabase.get(context), context.applicationContext)
 
         // MARK: - Compact per-epoch JSON (v18 motionJSON / sleepStateJSON), byte-equivalent with Swift's
         // JSONEncoder/JSONDecoder on [Double] / [Int]: a bare `[..]` array, whole doubles emitted WITHOUT a

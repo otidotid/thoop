@@ -3,6 +3,7 @@ package com.noop.ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -24,9 +25,45 @@ class StrapLogArchiveTest {
 
     private val t0Ms = 1_790_000_000_000L
 
+    private val liveProcesses = HashMap<String, StrapLogArchive>()
+
+    // A real process exit closes its OS file handles, even when app cleanup never runs. Close only
+    // the raw unbuffered stream: do not flush an archive backlog or invoke archive-level cleanup.
+    private fun processExited(archive: StrapLogArchive) {
+        val field = StrapLogArchive::class.java.getDeclaredField("out").apply { isAccessible = true }
+        (field.get(archive) as? java.io.FileOutputStream)?.close()
+        field.set(archive, null)
+    }
+
+    @After fun releaseProcessHandles() {
+        liveProcesses.values.forEach(::processExited)
+        liveProcesses.clear()
+    }
+
     private fun process(dir: File, seconds: Long, budget: Long = StrapLogArchive.BUDGET_BYTES,
-                        segment: Long = StrapLogArchive.SEGMENT_BYTES) =
-        StrapLogArchive(dir, budget, segment, t0Ms + seconds * 1000)
+                        segment: Long = StrapLogArchive.SEGMENT_BYTES): StrapLogArchive {
+        liveProcesses.remove(dir.absolutePath)?.let(::processExited)
+        return StrapLogArchive(dir, budget, segment, t0Ms + seconds * 1000).also {
+            liveProcesses[dir.absolutePath] = it
+        }
+    }
+
+    // Directory write bits are not a portable refusal mechanism (notably on Windows or as root).
+    // A file occupying the directory path makes opening any child fail on every supported host.
+    private fun blockedStorage(): File = File(folder.newFolder(), "archive").apply {
+        writeText("storage unavailable")
+    }
+
+    private fun assertStorageStillBlocked(dir: File) {
+        assertTrue("the obstruction is unchanged and no log file can exist", dir.isFile)
+        assertEquals("storage unavailable", dir.readText())
+    }
+
+    private fun unlockStorage(dir: File) {
+        assertStorageStillBlocked(dir)
+        assertTrue("remove the test obstruction", dir.delete())
+        assertTrue("create the available archive directory", dir.mkdirs())
+    }
 
     private fun iso(seconds: Long) = Instant.ofEpochSecond(t0Ms / 1000 + seconds).toString()
 
@@ -50,18 +87,14 @@ class StrapLogArchiveTest {
     /** The locked-storage scenario the Swift oracle ran: nothing can be written (a phone before its first unlock),
      *  40 lines against a 250-byte budget, then storage opens and 64 more follow. */
     private fun lockedScenario(): Pair<String, String> {
-        val dir = folder.newFolder()
-        try {
-            dir.setWritable(false)
-            val locked = process(dir, 0, 250, 100)
-            for (i in 1..40) locked.append(String.format(java.util.Locale.US, "locked %02d", i))
-            val held = locked.exportText()
-            dir.setWritable(true)
-            for (i in 1..64) locked.append(String.format(java.util.Locale.US, "open %02d", i))
-            return held to process(dir, 100, 250, 100).exportText()
-        } finally {
-            dir.setWritable(true)
-        }
+        val dir = blockedStorage()
+        val locked = process(dir, 0, 250, 100)
+        for (i in 1..40) locked.append(String.format(java.util.Locale.US, "locked %02d", i))
+        val held = locked.exportText()
+        assertStorageStillBlocked(dir)
+        unlockStorage(dir)
+        for (i in 1..64) locked.append(String.format(java.util.Locale.US, "open %02d", i))
+        return held to process(dir, 100, 250, 100).exportText()
     }
 
     @Test
@@ -86,50 +119,41 @@ class StrapLogArchiveTest {
      *  reach disk the moment a file opens, so a later restart keeps them too. */
     @Test
     fun linesThatCannotBeWrittenWaitAndReachDiskOnceStorageOpens() {
-        val dir = folder.newFolder()
-        try {
-            dir.setWritable(false)
-            val locked = process(dir, 0, segment = 200)
-            val early = (1..100).map { String.format(java.util.Locale.US, "locked %03d", it) }
-            early.forEach(locked::append)
-            assertTrue("nothing can be written yet", dir.listFiles()!!.isEmpty())
-            assertEquals(early.joinToString("\n"), locked.exportText())
-            dir.setWritable(true)
-            val later = (1..64).map { String.format(java.util.Locale.US, "unlocked %02d", it) }
-            later.forEach(locked::append)
-            assertEquals((early + later).joinToString("\n"), locked.exportText())
-            assertEquals(
-                "===== previous app session, 164 line(s), rolled at ${iso(10)} (this launch) =====\n" +
-                    (early + later).joinToString("\n") + "\n===== current app session =====\n",
-                process(dir, 10, segment = 200).exportText())
-        } finally {
-            dir.setWritable(true)
-        }
+        val dir = blockedStorage()
+        val locked = process(dir, 0, segment = 200)
+        val early = (1..100).map { String.format(java.util.Locale.US, "locked %03d", it) }
+        early.forEach(locked::append)
+        assertStorageStillBlocked(dir)
+        assertEquals(early.joinToString("\n"), locked.exportText())
+        unlockStorage(dir)
+        val later = (1..64).map { String.format(java.util.Locale.US, "unlocked %02d", it) }
+        later.forEach(locked::append)
+        assertEquals((early + later).joinToString("\n"), locked.exportText())
+        assertEquals(
+            "===== previous app session, 164 line(s), rolled at ${iso(10)} (this launch) =====\n" +
+                (early + later).joinToString("\n") + "\n===== current app session =====\n",
+            process(dir, 10, segment = 200).exportText())
     }
 
     /** While nothing can be written, memory holds the newest lines within the budget; once they reach disk the run
      *  says it lost its head. */
     @Test
     fun anUnwrittenBacklogStaysWithinTheBudgetAndSaysItsHeadWasClipped() {
-        val dir = folder.newFolder()
-        try {
-            dir.setWritable(false)
-            val locked = process(dir, 0, budget = 1_000, segment = 200)
-            for (i in 1..200) locked.append(String.format(java.util.Locale.US, "locked %03d", i))
-            val held = locked.exportText()
-            assertTrue(held.toByteArray(Charsets.UTF_8).size <= 1_000)
-            assertTrue("the newest line is kept", held.endsWith("locked 200"))
-            assertFalse("the oldest line is the first to go", held.contains("locked 001"))
-            dir.setWritable(true)
-            for (i in 1..64) locked.append(String.format(java.util.Locale.US, "open %02d", i))
-            assertTrue(process(dir, 10, budget = 1_000, segment = 200).exportText().contains("head clipped"))
-        } finally {
-            dir.setWritable(true)
-        }
+        val dir = blockedStorage()
+        val locked = process(dir, 0, budget = 1_000, segment = 200)
+        for (i in 1..200) locked.append(String.format(java.util.Locale.US, "locked %03d", i))
+        val held = locked.exportText()
+        assertStorageStillBlocked(dir)
+        assertTrue(held.toByteArray(Charsets.UTF_8).size <= 1_000)
+        assertTrue("the newest line is kept", held.endsWith("locked 200"))
+        assertFalse("the oldest line is the first to go", held.contains("locked 001"))
+        unlockStorage(dir)
+        for (i in 1..64) locked.append(String.format(java.util.Locale.US, "open %02d", i))
+        assertTrue(process(dir, 10, budget = 1_000, segment = 200).exportText().contains("head clipped"))
     }
 
-    /** THE ONE THAT MATTERS: every line reaches disk as it is logged, so a process killed without warning (it is
-     *  never closed here) leaves all of them for the next run's export — none held back for a batch. */
+    /** Every line reaches disk as logged. The simulated kill closes OS handles only, without any
+     *  archive-level flush or cleanup, so the next run must retain every line already written. */
     @Test
     fun everyLineSurvivesARestartWithoutAClose() {
         val dir = folder.newFolder()

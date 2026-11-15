@@ -23,7 +23,8 @@ object LabInterpretation {
     enum class Availability { AVAILABLE, UNAVAILABLE }
     enum class Identity { IDENTIFIED, UNCERTAIN }
     enum class Confidence { LOW, MODERATE, HIGH }
-    enum class Failure { NONE, MISSING, INVALID_RESPONSE, SOURCE_CHANGED, UNAVAILABLE }
+    enum class Failure { NONE, MISSING, INVALID_RESPONSE, SOURCE_CHANGED, UNAVAILABLE,
+        CONSENT_REVOKED, OVERSIZED, AMBIGUOUS_SOURCE, INVALID_REQUEST }
 
     data class Request internal constructor(
         val requestId: String,
@@ -165,12 +166,35 @@ object LabInterpretation {
     fun unavailable(request: Request, failure: Failure = Failure.UNAVAILABLE): Result =
         Result(findings = request.originals.map { missing(it, request.snapshotDay, failure) })
 
+    /** Local failures retain one explicit finding for every original observation. */
+    fun unavailableRows(rows: List<LabMarkerRow>, snapshotDay: String, failure: Failure): Result =
+        Result(findings = rows.map { missing(it, snapshotDay, failure) })
+
     /** User-facing appendix from validated fields only; prose remains unverified AI commentary. */
-    fun render(result: Result, request: Request): String {
-        val out = StringBuilder(LOCAL_APPENDIX_MARKER + "\nAI lab interpretation (unverified; no score changes)\n")
+    fun render(result: Result, request: Request): String = renderPage(result, request.originals)
+
+    /** Pages affect display only; all source-validated findings remain available to local rules. */
+    fun renderPage(
+        result: Result,
+        originals: List<LabMarkerRow>,
+        page: Int = 0,
+        pageSize: Int = 16,
+        batchCount: Int = 1,
+    ): String {
+        val width = pageSize.coerceIn(1, 32)
+        val pages = ((originals.size + width - 1) / width).coerceAtLeast(1)
+        val selected = page.coerceIn(0, pages - 1)
+        val start = selected * width
+        val shown = originals.drop(start).take(width)
+        val available = result.findings.count { it.availability == Availability.AVAILABLE }
+        val out = StringBuilder(LOCAL_APPENDIX_MARKER +
+            "\nAI lab interpretation (unverified; THOOP owns calculations)\n" +
+            "Snapshot: ${originals.size} observations; $available available; " +
+            "${result.findings.size - available} unavailable; $batchCount bounded request(s).\n" +
+            "Page ${selected + 1} of $pages; showing ${shown.size} observation(s).\n")
         val byId = result.findings.associateBy { it.rowId }
-        for (row in request.originals) {
-            val finding = byId[row.id] ?: missing(row, request.snapshotDay, Failure.MISSING)
+        for (row in shown) {
+            val finding = byId[row.id] ?: missing(row, row.day, Failure.MISSING)
             val label = oneLine(row.displayName?.takeIf { it.isNotBlank() } ?: row.markerKey)
             val measurement = row.value?.toString() ?: row.valueText ?: "not recorded"
             val entry = buildString {
@@ -192,14 +216,18 @@ object LabInterpretation {
                     append(". Eligibility does not mean this record was used in a score.\n")
                 }
             }
-            if (out.length + entry.length > 10_000) {
-                out.append("\nDisplay limit reached; additional supplied observations are not shown in this appendix. Original records remain unchanged.\n")
-                break
-            }
             out.append(entry)
         }
+        if (pages > 1) out.append("\nTo display another page, ask 'lab page N' (1 through $pages). " +
+            "Every original observation was included in the batch plan; unavailable observations are counted explicitly.\n")
         return out.toString().trim()
     }
+
+    /** A display page never changes source evidence, eligibility or computed values. */
+    fun requestedPage(question: String): Int = Regex(
+        "(?:lab\\s+(?:interpretation\\s+)?page|halaman\\s+lab)\\s+(\\d{1,6})",
+        RegexOption.IGNORE_CASE,
+    ).find(question)?.groupValues?.get(1)?.toIntOrNull()?.minus(1)?.coerceAtLeast(0) ?: 0
 
     private fun oneLine(value: String): String = value.map { if (it.isISOControl()) ' ' else it }.joinToString("")
 

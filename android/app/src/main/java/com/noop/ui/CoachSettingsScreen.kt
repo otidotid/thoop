@@ -85,6 +85,7 @@ fun CoachSettingsScreen(vm: CoachViewModel) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 CoachConsentCard(vm = vm)
             CoachLabInterpretationConsentCard(vm = vm)
+            MetabolicSettingsCard()
             CoachInstructions(vm = vm)
             MorningBriefCard(vm = vm)
         }

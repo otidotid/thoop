@@ -61,8 +61,9 @@ class WorkoutReplacementDataSafetyTest {
 
     @Test fun relabelDeletesTheActualArchivedComputedNamespace() = runBlocking {
         val calls = mutableListOf<Call>()
-        val repo = WhoopRepository(dao(calls))
         val legacy = row("whoop-archived-noop", "detected", "whoop-archived-noop")
+        // The original is a real overlap; the relabel must exclude only that natural key.
+        val repo = WhoopRepository(dao(calls, existingWorkouts = listOf(legacy)))
 
         repo.relabelDetected(legacy, sport = "Running", strapDeviceId = "whoop-active")
 
@@ -117,15 +118,62 @@ class WorkoutReplacementDataSafetyTest {
         assertEquals(listOf("upsertWorkouts"), calls.map { it.name })
     }
 
+    @Test fun rejectedOverlapLeavesDetectedOriginalAndManualReplacementUnchanged() = runBlocking {
+        val calls = mutableListOf<Call>()
+        val original = row("whoop-archived-noop", "detected", "whoop-archived-noop")
+        val manual = row("whoop-active", "Running", "manual")
+        val sleeping = SleepSession("whoop-active", manual.startTs, manual.endTs)
+        val repo = WhoopRepository(dao(calls, existingSleeps = listOf(sleeping)))
+
+        repo.saveManualWorkout(manual, replacing = original)
+
+        assertTrue("a rejected candidate must not write, dismiss or delete either row", calls.isEmpty())
+    }
+
+    @Test fun relabelRejectsAnotherSourcesWorkoutWithoutDismissingTheOriginal() = runBlocking {
+        val calls = mutableListOf<Call>()
+        val original = row("whoop-archived-noop", "detected", "whoop-archived-noop")
+        val conflict = row("health-connect", "Cycling", "health-connect")
+        val repo = WhoopRepository(dao(calls, existingWorkouts = listOf(original, conflict)))
+
+        repo.relabelDetected(original, "Running", "whoop-active")
+
+        assertTrue("cross-source overlap must not write, dismiss or delete either workout", calls.isEmpty())
+    }
+
+    @Test fun relabelRejectsAnotherDevicesSleepWithoutDismissingTheOriginal() = runBlocking {
+        val calls = mutableListOf<Call>()
+        val original = row("whoop-archived-noop", "detected", "whoop-archived-noop")
+        val sleep = SleepSession("archived-sleep-source", original.startTs, original.endTs)
+        val repo = WhoopRepository(dao(calls, existingWorkouts = listOf(original), existingSleeps = listOf(sleep)))
+
+        repo.relabelDetected(original, "Running", "whoop-active")
+
+        assertTrue("cross-device sleep overlap must preserve the detected original", calls.isEmpty())
+    }
+
     private fun dao(
         calls: MutableList<Call>,
         onDeleteBySport: () -> Unit = {},
         onDeleteByKey: () -> Unit = {},
         failUpsert: Boolean = false,
+        existingSleeps: List<SleepSession> = emptyList(),
+        existingWorkouts: List<WorkoutRow> = emptyList(),
     ): WhoopDao = Proxy.newProxyInstance(
         WhoopDao::class.java.classLoader,
         arrayOf(WhoopDao::class.java),
     ) { _, method, args ->
+        // The production overlap guard now reads the registry and current sessions first.
+        // Keep these reads explicit while recording every mutation for the ordering assertions.
+        if (method.name == "pairedDevices") return@newProxyInstance emptyList<PairedDeviceRow>()
+        if (method.name == "sleepSessions") return@newProxyInstance existingSleeps.filter { it.deviceId == args!![0] }
+        if (method.name == "workouts") return@newProxyInstance emptyList<WorkoutRow>()
+        if (method.name == "workoutsOverlapping") return@newProxyInstance existingWorkouts.filter {
+            it.startTs < args!![1] as Long && it.endTs > args[0] as Long
+        }
+        if (method.name == "sleepSessionsOverlapping") return@newProxyInstance existingSleeps.filter {
+            it.effectiveStartTs < args!![1] as Long && it.endTs > args[0] as Long
+        }
         calls += Call(method.name, args?.toList().orEmpty())
         when (method.name) {
             "upsertWorkouts" -> if (failUpsert) throw IllegalStateException("write failed") else Unit

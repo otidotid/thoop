@@ -50,7 +50,7 @@ class Spo2MissingCaptionTest {
     private fun repoRoot(): File {
         val userDir = File(System.getProperty("user.dir") ?: ".")
         val candidates = listOf(userDir, File(userDir, ".."), File(userDir, "../.."))
-        val found = candidates.firstOrNull { File(it, "Strand/Resources/Localizable.xcstrings").isFile }
+        val found = candidates.firstOrNull { File(it, "Strand/Screens/VitalSignsSummary.swift").isFile }
         assertNotNull(
             "repo root not found from user.dir=$userDir — this guard cannot run, and a skip reads as a " +
                 "pass. Add this host's working dir rather than letting it slide.",
@@ -65,14 +65,16 @@ class Spo2MissingCaptionTest {
      * `Vital.missingCaption` is documented as the "Kotlin twin of `BodyVitalReading.missingCaption`
      * (VitalSignsSummary.swift) — same wording", and nothing enforced it: Apple wrapped these in
      * `String(localized:)` while Android used raw Kotlin literals, so the two could drift silently and
-     * a German phone got English on exactly one platform. Reading both catalogues is the only check
-     * available here: a Kotlin test cannot import the Swift side at any cost, compiled or not.
+     * a German phone got English on exactly one platform. Reading the actual Swift producer and the
+     * Android resources pins the wording without requiring an Apple runtime or an absent catalogue.
      */
     @Test
-    fun bothCaptionsMatchTheSwiftCatalogueWordForWord() {
+    fun bothCaptionsMatchTheSwiftProducerWordForWord() {
         val root = repoRoot()
         val androidXml = File(root, "android/app/src/main/res/values/strings.xml").readText()
-        val xcstrings = File(root, "Strand/Resources/Localizable.xcstrings").readText()
+        // This fork does not carry the Apple localization catalogue. Verify the actual
+        // Swift producer rather than making a missing, unused catalogue stand in for runtime text.
+        val swift = File(root, "Strand/Screens/VitalSignsSummary.swift").readText()
 
         val expected = mapOf(
             "l10n_health_screen_no_spo_import_or_health_value_408f8c55" to "No SpO₂ import or Health value",
@@ -84,8 +86,8 @@ class Spo2MissingCaptionTest {
                 androidXml.contains("<string name=\"$key\">$en</string>"),
             )
             assertTrue(
-                "the Swift catalogue has no entry for \"$en\" — the twin captions have drifted apart",
-                xcstrings.contains("\"$en\""),
+                "the Swift producer no longer emits localized \"$en\" — the twin captions drifted apart",
+                swift.contains("String(localized: \"$en\")"),
             )
         }
     }

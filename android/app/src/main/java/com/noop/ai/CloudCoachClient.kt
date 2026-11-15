@@ -9,10 +9,16 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.io.IOException
+import kotlin.coroutines.resume
 
 /** Single transport for THOOP Cloud Coach. Memory and conversation summaries stay server-side. */
 class CloudCoachClient(
@@ -23,6 +29,8 @@ class CloudCoachClient(
         .build(),
     private val baseUrl: String = BuildConfig.CLOUD_COACH_BASE_URL.trim().trimEnd('/'),
 ) {
+    @Volatile private var labServiceUnavailable = false
+    @Volatile private var metabolicServiceUnavailable = false
     data class NutritionEstimate(
         val mealType: String,
         val foodName: String,
@@ -51,6 +59,99 @@ class CloudCoachClient(
     )
 
     val configured: Boolean get() = baseUrl.startsWith("https://")
+
+    /** An isolated, cancellable lab request: no conversation identity, history or memory payload. */
+    suspend fun interpretLabs(
+        labRequest: LabInterpretation.Request,
+        consent: () -> Boolean,
+    ): String? = suspendCancellableCoroutine { continuation ->
+        if (!configured || labServiceUnavailable || !consent()) {
+            continuation.resume(null)
+        } else {
+            val payload = JSONObject().put("labConsent", true).put("labRequest", JSONObject(labRequest.json))
+            val request = Request.Builder().url("$baseUrl/v1/labs/interpret")
+                .header("Accept", "application/json")
+                .post(payload.toString().toRequestBody(JSON)).build()
+            val call = client.newCall(request)
+            call.timeout().timeout(20, TimeUnit.SECONDS)
+            continuation.invokeOnCancellation { call.cancel() }
+            // Re-read at the actual dispatch boundary, after preparing the request body.
+            if (!continuation.isActive || !consent()) {
+                call.cancel()
+                if (continuation.isActive) continuation.resume(null)
+            } else call.enqueue(object : Callback {
+                override fun onFailure(call: Call, error: IOException) {
+                    if (continuation.isActive) continuation.resume(null)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (response.code in setOf(401, 403, 404, 429, 503)) labServiceUnavailable = true
+                        val result = if (!response.isSuccessful) null else runCatching {
+                            val body = response.body ?: return@runCatching null
+                            if (body.contentLength() > 128 * 1024) return@runCatching null
+                            val source = body.source()
+                            // Bound streaming/unknown-length bodies before allocating a response String.
+                            if (source.request(128 * 1024L + 1)) return@runCatching null
+                            JSONObject(source.readUtf8()).optJSONObject("labInterpretation")?.toString()
+                        }.getOrNull()
+                        if (continuation.isActive) continuation.resume(result)
+                    }
+                }
+            })
+        }
+    }
+
+    /** One separately consented scalar estimate. Its envelope cannot override the expected model/prompt. */
+    suspend fun metabolicEstimate(
+        metabolicRequest: MetabolicEstimate.Request,
+        consent: () -> Boolean,
+    ): String? = suspendCancellableCoroutine { continuation ->
+        fun permitted() = runCatching { consent() }.getOrDefault(false)
+        if (!configured || metabolicServiceUnavailable || !permitted()) {
+            continuation.resume(null)
+        } else {
+            val payload = JSONObject().put("labConsent", true).put("metabolicConsent", true)
+                .put("metabolicRequest", JSONObject(metabolicRequest.json))
+            // The snapshot has its own 120k-byte cap; include the complete transport envelope here.
+            if (payload.toString().toByteArray(Charsets.UTF_8).size > 128 * 1024) {
+                continuation.resume(null)
+            } else {
+                val request = Request.Builder().url("$baseUrl/v1/labs/metabolic")
+                    .header("Accept", "application/json")
+                    .post(payload.toString().toRequestBody(JSON)).build()
+                val call = client.newCall(request)
+                call.timeout().timeout(20, TimeUnit.SECONDS)
+                continuation.invokeOnCancellation { call.cancel() }
+                if (!continuation.isActive || !permitted()) {
+                    call.cancel()
+                    if (continuation.isActive) continuation.resume(null)
+                } else call.enqueue(object : Callback {
+                    override fun onFailure(call: Call, error: IOException) {
+                        if (continuation.isActive) continuation.resume(null)
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        response.use {
+                            if (response.code in setOf(401, 403, 404, 429, 503)) metabolicServiceUnavailable = true
+                            val wire = if (!response.isSuccessful) null else runCatching {
+                                val body = response.body ?: return@runCatching null
+                                if (body.contentLength() > 128 * 1024) return@runCatching null
+                                val source = body.source()
+                                if (source.request(128 * 1024L + 1)) return@runCatching null
+                                val envelope = JSONObject(source.readUtf8())
+                                if (envelope.keys().asSequence().toSet() != setOf("metabolicEstimate", "model", "promptVersion") ||
+                                    envelope.get("model") != MetabolicEstimate.MODEL ||
+                                    envelope.get("promptVersion") != MetabolicEstimate.PROMPT_VERSION) return@runCatching null
+                                envelope.optJSONObject("metabolicEstimate")?.toString()
+                            }.getOrNull()
+                            if (continuation.isActive) continuation.resume(if (permitted()) wire else null)
+                        }
+                    }
+                })
+            }
+        }
+    }
 
     suspend fun ask(
         context: Context,

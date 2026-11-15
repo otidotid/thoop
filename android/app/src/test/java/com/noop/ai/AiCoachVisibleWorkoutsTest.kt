@@ -119,20 +119,27 @@ class AiCoachVisibleWorkoutsTest {
 
     @Test fun theWindowIsPassedThroughRatherThanIgnored() {
         // Both bounds reach the DAO: a stub that returned rows regardless would hide a window bug.
-        var seenFrom = -1L
-        var seenTo = -1L
+        val seenWindows = ArrayList<Pair<Long, Long>>()
+        // Keep the fixture inside the retained working set. Epoch 1000 is clamped by THOOP's
+        // intentional bounded-read policy and cannot pin forwarding of a current request.
+        val from = System.currentTimeMillis() / 1_000L - 3_600L
+        val to = from + 1_800L
         val dao = Proxy.newProxyInstance(
             WhoopDao::class.java.classLoader, arrayOf(WhoopDao::class.java),
         ) { _, method, args ->
             when (method.name) {
-                "workouts" -> { seenFrom = args[1] as Long; seenTo = args[2] as Long; emptyList<WorkoutRow>() }
+                "workouts" -> {
+                    seenWindows += (args[1] as Long) to (args[2] as Long)
+                    emptyList<WorkoutRow>()
+                }
                 "dismissedWorkouts" -> emptyList<DismissedWorkout>()
                 "pairedDevices" -> emptyList<PairedDeviceRow>()
                 else -> throw UnsupportedOperationException(method.name)
             }
         } as WhoopDao
-        runBlocking { AiCoach(WhoopRepository(dao)) { strap }.visibleWorkoutRows(1_000L, 2_000L) }
-        assertEquals(1_000L, seenFrom)
-        assertEquals(2_000L, seenTo)
+        runBlocking { AiCoach(WhoopRepository(dao)) { strap }.visibleWorkoutRows(from, to) }
+        assertTrue("the selector must perform workout reads", seenWindows.isNotEmpty())
+        assertTrue("every source must receive both requested bounds: $seenWindows",
+            seenWindows.all { it == (from to to) })
     }
 }

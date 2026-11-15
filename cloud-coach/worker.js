@@ -1,4 +1,5 @@
-import { interpretLabsSafely } from "./lab-interpretation.js";
+import { interpretLabsSafely, validLabRequest } from "./lab-interpretation.js";
+import { estimateMetabolicSafely, validMetabolicRequest, METABOLIC_MODEL, METABOLIC_PROMPT_VERSION } from "./metabolic-estimate.js";
 
 const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
 
@@ -25,7 +26,7 @@ export default {
         return jsonResponse({ service: "THOOP Cloud Coach", status: "ok" });
       }
 
-      if (url.pathname !== "/v1/coach/chat") {
+      if (!["/v1/coach/chat", "/v1/labs/interpret", "/v1/labs/metabolic"].includes(url.pathname)) {
         return jsonResponse({ error: "Not found" }, 404);
       }
       if (request.method !== "POST") {
@@ -59,6 +60,24 @@ export default {
         throw new HttpError(415, "Content-Type must be application/json");
       }
       const body = await readJsonBody(request);
+      if (url.pathname === "/v1/labs/metabolic") {
+        if (body.labConsent !== true || body.metabolicConsent !== true)
+          throw new HttpError(403, "Lab and experimental metabolic consent are required");
+        if (Object.keys(body).some(key => !["labConsent", "metabolicConsent", "metabolicRequest"].includes(key)) ||
+            !validMetabolicRequest(body.metabolicRequest)) throw new HttpError(400, "Invalid metabolic estimate request");
+        return jsonResponse({
+          metabolicEstimate: await estimateMetabolicSafely(env, body.metabolicRequest, true, true),
+          model: METABOLIC_MODEL,
+          promptVersion: METABOLIC_PROMPT_VERSION,
+        });
+      }
+      if (url.pathname === "/v1/labs/interpret") {
+        // A bounded batch has no user/conversation identifier and cannot read or write D1 memory.
+        if (body.labConsent !== true) throw new HttpError(403, "Lab sharing consent is required");
+        if (Object.keys(body).some(key => !["labConsent", "labRequest"].includes(key)) ||
+            !validLabRequest(body.labRequest)) throw new HttpError(400, "Invalid lab interpretation request");
+        return jsonResponse({ labInterpretation: await interpretLabsSafely(env, body.labRequest, true) });
+      }
       const rawUserId = requiredText(body.userId, "userId", 200);
       const question = requiredText(body.question, "question", 8000);
       const conversationId = cleanText(body.conversationId, 100) || crypto.randomUUID();

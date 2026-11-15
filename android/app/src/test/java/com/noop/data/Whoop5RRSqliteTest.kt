@@ -34,6 +34,11 @@ class Whoop5RRSqliteTest {
     private val gravity = mutableListOf<GravitySample>()
     private val id = "my-whoop"
 
+    // Repository sleep reads intentionally use the newest 90 calendar days. These scorer fixtures
+    // exercise live nightly inputs, so keep their dates inside that window as the calendar advances.
+    private fun recentScoringNow(): Long = java.time.LocalDate.now().minusDays(2)
+        .atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toEpochSecond()
+
     @Before fun open() {
         db = DriverManager.getConnection("jdbc:sqlite::memory:")
         sql("CREATE TABLE rrInterval(deviceId TEXT NOT NULL, ts INTEGER NOT NULL, rrMs INTEGER NOT NULL, " +
@@ -163,7 +168,8 @@ class Whoop5RRSqliteTest {
                 "dayStreamFingerprint" -> query(DAY_STREAM_FINGERPRINT_SQL,
                     listOf("deviceId", "from", "to").zip(args.take(3)).toMap()) { it.getString(1) }.single()
                 "stepSamples", "ppgHrSamples", "spo2Samples",
-                "skinTempSamples", "respSamples", "sleepStateSamples", "events" -> emptyList<Any>()
+                "skinTempSamples", "respSamples", "sleepStateSamples", "events",
+                "labMarkersByKey", "labMarkersByCategory", "metricSeries" -> emptyList<Any>()
                 "deleteAutoDetectedWorkoutOverlap" -> 0
                 else -> error("Unimplemented DAO call: ${method.name}")
             }
@@ -266,7 +272,7 @@ class Whoop5RRSqliteTest {
         val owner = "physical-strap"
         registry(model, owner = owner)
         activate(owner)
-        val now = 1_780_272_000L
+        val now = recentScoringNow()
         val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
         val end = now - Math.floorMod(now + offset, 86_400L)
         val start = end - 3_600L
@@ -431,7 +437,7 @@ class Whoop5RRSqliteTest {
         registry("WHOOP")
         registry("5.0 MG", owner = "new-five")
         activate("new-five")
-        val now = 1_780_272_000L
+        val now = recentScoringNow()
         val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
         val end = now - Math.floorMod(now + offset, 86_400L)
         val start = end - 3_600L
@@ -506,7 +512,7 @@ class Whoop5RRSqliteTest {
         registry("WHOOP")
         registry("5.0 MG", owner = "new-five")
         activate("new-five")
-        val now = 1_781_136_000L
+        val now = recentScoringNow()
         val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
         val midnight = now - Math.floorMod(now + offset, 86_400L)
         val end = midnight - 86_400L

@@ -65,7 +65,7 @@ class NoopApplication : Application() {
 
     /** Process-wide Room-backed store. One instance shared by the UI and the background service. */
     val repository: WhoopRepository by lazy {
-        WhoopRepository(WhoopDatabase.get(this))
+        WhoopRepository.from(this)
     }
 
     /** Process-wide device registry over the same Room DB — the single source of the active device id. */

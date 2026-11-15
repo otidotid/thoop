@@ -471,7 +471,7 @@ sealed class SyncChipState {
 internal fun shortSyncAgo(unixSec: Long, nowSec: Long): String {
     val secs = (nowSec - unixSec).coerceAtLeast(0)
     return when {
-        secs < 60 -> "Synced"
+        secs < 60 -> "<1m"
         secs < 3600 -> "${secs / 60}m"
         secs < 86_400 -> "${secs / 3600}h"
         else -> "${secs / 86_400}d"

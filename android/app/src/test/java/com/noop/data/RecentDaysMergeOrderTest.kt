@@ -2,6 +2,11 @@ package com.noop.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
+import java.lang.reflect.Proxy
+import java.time.LocalDate
 
 /**
  * #797: the bounded dashboard merge ([WhoopRepository.recentDaysMergedFlow]) caps each source to the
@@ -54,11 +59,39 @@ class RecentDaysMergeOrderTest {
     }
 
     @Test
-    fun recentDaysCapIsAGenerousBound() {
-        // Guards against an accidental too-small cap that would drop the deepest Trends range. ~2 years.
-        assert(WhoopRepository.RECENT_DAYS_CAP >= 730) {
-            "RECENT_DAYS_CAP must cover the deepest dashboard range"
+    fun recentDaysCapMatchesTheExplicitOnlineFirstWorkingSet() {
+        // The dashboard was deliberately changed to a 90-day working set. This is a read bound,
+        // not a retention rule; full-history preservation is pinned separately below.
+        assertEquals(90, OnlineFirstWindow.LOCAL_DAYS)
+        assertEquals(OnlineFirstWindow.LOCAL_DAYS, WhoopRepository.RECENT_DAYS_CAP)
+    }
+
+    @Test fun boundedDashboardReadDoesNotRemoveOlderStoredHistory() = runBlocking {
+        val history = (0 until 730).map { offset ->
+            row(LocalDate.of(2024, 1, 1).plusDays(offset.toLong()).toString(), "my-whoop", 480.0)
         }
+        val requestedCaps = mutableListOf<Int>()
+        val dao = Proxy.newProxyInstance(WhoopDao::class.java.classLoader, arrayOf(WhoopDao::class.java)) { _, method, args ->
+            when (method.name) {
+                "recentDaysFlow" -> {
+                    val cap = args!![1] as Int
+                    requestedCaps += cap
+                    flowOf(if (args[0] == "my-whoop") history.takeLast(cap).reversed() else emptyList())
+                }
+                "days" -> if (args!![0] == "my-whoop") history else emptyList<DailyMetric>()
+                "editedSleepSessionsFlow" -> flowOf(emptyList<SleepSession>())
+                "editedSleepSessions" -> emptyList<SleepSession>()
+                else -> error("unexpected DAO call ${method.name}; bounded reads must never delete history")
+            }
+        } as WhoopDao
+        val repository = WhoopRepository(dao)
+
+        val dashboard = repository.recentDaysMergedFlow("my-whoop").first()
+        assertEquals(90, dashboard.size)
+        assertEquals(history.takeLast(90), dashboard)
+        assertEquals(listOf(90, 90, 90), requestedCaps)
+        assertEquals(history, repository.daysMerged("my-whoop"))
+        assertEquals(730, history.size)
     }
 
     @Test

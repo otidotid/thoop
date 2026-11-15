@@ -2,6 +2,8 @@ package com.noop.ingest
 
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
@@ -35,12 +37,16 @@ class HealthConnectPermissionCategoryTest {
     }
 
     @Test
-    fun activityOnlyRequestsActivityButNotExerciseRecoveryOrBodyComposition() {
+    fun legacyActivityOnlyKeyMeansWorkoutOnlyWithoutActivityOrHealthReads() {
         val permissions = HealthConnectImporter.permissionsFor(activityOnly)
 
-        assertTrue(HealthPermission.getReadPermission(StepsRecord::class) in permissions)
-        assertFalse(HealthPermission.getReadPermission(ExerciseSessionRecord::class) in permissions)
-        assertFalse(HealthPermission.getReadPermission(DistanceRecord::class) in permissions)
+        assertEquals(setOf(
+            HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+            HealthPermission.getReadPermission(DistanceRecord::class),
+        ), permissions)
+        assertFalse(HealthPermission.getReadPermission(StepsRecord::class) in permissions)
+        assertFalse(HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class) in permissions)
+        assertFalse(HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class) in permissions)
         assertFalse(HealthPermission.getReadPermission(HeartRateRecord::class) in permissions)
         assertFalse(HealthPermission.getReadPermission(WeightRecord::class) in permissions)
     }
@@ -49,6 +55,13 @@ class HealthConnectPermissionCategoryTest {
     fun allScopeAddsExerciseButNeverRecoveryOrBodyComposition() {
         val permissions = HealthConnectImporter.permissionsFor(allActivity)
 
+        assertEquals(setOf(
+            HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+            HealthPermission.getReadPermission(DistanceRecord::class),
+            HealthPermission.getReadPermission(StepsRecord::class),
+            HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        ), permissions)
         assertTrue(HealthPermission.getReadPermission(StepsRecord::class) in permissions)
         assertTrue(HealthPermission.getReadPermission(ExerciseSessionRecord::class) in permissions)
         assertTrue(HealthPermission.getReadPermission(DistanceRecord::class) in permissions)
@@ -135,7 +148,7 @@ class HealthConnectPermissionCategoryTest {
         )
 
         assertEquals(
-            setOf(StepsRecord::class),
+            setOf(ExerciseSessionRecord::class),
             HealthConnectImporter.readableRecordTypes(
                 categories = activityOnly,
                 grantedPermissions = granted,
@@ -194,9 +207,12 @@ class HealthConnectPermissionCategoryTest {
             asked = activityPermissions,
             categories = allActivity,
         )
-        assertTrue(
-            HealthPermission.getReadPermission(ExerciseSessionRecord::class) in newlyNeeded,
-        )
+        assertEquals(setOf(
+            HealthPermission.getReadPermission(StepsRecord::class),
+            HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        ), newlyNeeded)
+        assertFalse(HealthPermission.getReadPermission(ExerciseSessionRecord::class) in newlyNeeded)
         assertFalse(
             HealthPermission.getReadPermission(HeartRateRecord::class) in newlyNeeded,
         )

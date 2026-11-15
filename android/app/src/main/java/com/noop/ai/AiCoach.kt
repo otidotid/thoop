@@ -24,6 +24,7 @@ import com.noop.ui.UnitPrefs
 import com.noop.ui.WorkoutEditing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -98,15 +99,17 @@ class AiCoach(
         require(history.isNotEmpty()) { "Ask a question first." }
         require(history.last().role == "user") { "The last message must be your question." }
 
-        // Both existing opt-ins apply before any lab read or structured export.
-        val exactLabConsent = consent && includeSignals && LabInterpretationConsent.read(ctx)
-        val labRows = if (exactLabConsent) {
-            runCatching { recentLabMarkersByKey().values.flatten() }.getOrDefault(emptyList())
-        } else emptyList()
+        // Re-read all three grants at every batch dispatch; never capture a stale affirmative grant.
+        fun labConsentNow() = consent && includeSignals && AiKeyStore.readConsent(ctx) &&
+            NoopPrefs.coachSignals(ctx) && LabInterpretationConsent.read(ctx)
+        val exactLabConsent = labConsentNow()
+        val labRows = if (exactLabConsent) try {
+            allLabMarkersByKey().values.flatten()
+        } catch (cancel: CancellationException) { throw cancel }
+        catch (_: Exception) { emptyList() } else emptyList()
         val wantsLabInterpretation = LabInterpretation.isLabQuestion(history.last().text, labRows)
-        val labRequest = if (wantsLabInterpretation) LabInterpretation.prepare(
-            labRows, java.time.LocalDate.now().toString(), exactLabConsent,
-        ) else null
+        val labPlan = if (wantsLabInterpretation && exactLabConsent && labRows.isNotEmpty())
+            LabInterpretationBatcher.plan(labRows, java.time.LocalDate.now().toString()) else null
         val todayNutrition = if (consent) {
             runCatching { buildTodayNutritionContext(ctx) }.getOrNull()
         } else null
@@ -127,23 +130,31 @@ class AiCoach(
             NO_CONSENT_NOTE
         }
 
-        val reply = CloudCoachClient().ask(
+        val cloud = CloudCoachClient()
+        val reply = cloud.ask(
             context = ctx,
             conversationId = conversationId,
             question = history.last().text,
             recentMessages = history.dropLast(1),
             healthContext = healthContext,
             systemPrompt = resolveSystemPrompt(ctx),
-            labRequest = labRequest,
         )
-        if (labRequest != null) {
-            val current = runCatching { recentLabMarkersByKey().values.flatten() }.getOrDefault(emptyList())
-            val findings = LabInterpretation.validate(reply.labInterpretation, labRequest, current)
-            reply.copy(answer = reply.answer + "\n\n" + LabInterpretation.render(findings, labRequest),
+        if (labPlan != null) {
+            val findings = LabInterpretationBatcher.run(labPlan, ::labConsentNow,
+                { allLabMarkersByKey().values.flatten() }, { cloud.interpretLabs(it, ::labConsentNow) })
+            val metabolicNote = if (com.noop.data.MetabolicEstimateStore(ctx).enabled()) {
+                try {
+                    MetabolicReviewService(ctx, repo, activeStrapId(), activeStrapId).applyValidated(findings, labPlan.originals).message
+                } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+                catch (_: Exception) { "Metabolic review unavailable. Original Lab Book readings are unchanged." }
+            } else ""
+            reply.copy(answer = reply.answer + "\n\n" + LabInterpretation.renderPage(
+                findings, labPlan.originals, LabInterpretation.requestedPage(history.last().text),
+                batchCount = labPlan.requests.size) + if (metabolicNote.isEmpty()) "" else "\n\n" + metabolicNote,
                 labInterpretation = null)
-        } else if (wantsLabInterpretation && labRows.isNotEmpty()) {
-            reply.copy(answer = reply.answer + "\n\nStructured lab interpretation unavailable: " +
-                "this snapshot exceeds the bounded batch or payload limit. Lab Book records and local scores are unchanged.",
+        } else if (wantsLabInterpretation && exactLabConsent) {
+            reply.copy(answer = reply.answer + "\n\n" + LabInterpretation.LOCAL_APPENDIX_MARKER +
+                "\nStructured lab interpretation unavailable: no readable Lab Book observations in this snapshot.",
                 labInterpretation = null)
         } else reply.copy(labInterpretation = null)
     }
@@ -698,21 +709,35 @@ class AiCoach(
 
         // --- Current THOOP Age and body-composition factors: read-only persisted results. ---
         val activeId = activeStrapId()
-        val ageRows = linkedMapOf(
-            "THOOP Age" to "fitness_age",
-            "Estimated VO2 Max" to "vo2max_est",
-            "BMI factor" to "fitness_factor_bmi",
-            "Waist-to-height ratio factor" to "fitness_factor_whtr",
-            "Body-fat factor" to "fitness_factor_body_fat",
-            "Metabolic impact (years)" to "fitness_factor_metabolic_delta",
-        ).mapNotNull { (label, key) ->
-            runCatching { repo.latestMetricComputedUnion(activeId, key) }.getOrNull()
-                ?.let { Triple(label, it.day, it.value) }
+        val ageRows = repo.withMetabolicCalculationTransaction {
+            val currentAge = runCatching { repo.latestMetricComputedUnion(activeId, "fitness_age") }.getOrNull()
+            linkedMapOf(
+                "THOOP Age" to "fitness_age",
+                "Estimated VO2 Max" to "vo2max_est",
+                "BMI factor" to "fitness_factor_bmi",
+                "Waist-to-height ratio factor" to "fitness_factor_whtr",
+                "Body-fat factor" to "fitness_factor_body_fat",
+                "Metabolic impact (years)" to "fitness_factor_metabolic_delta",
+            ).mapNotNull { (label, key) ->
+                val row = runCatching {
+                    if (key == "fitness_age") currentAge
+                    else if (key == "fitness_factor_metabolic_delta") currentAge?.let { age ->
+                        val factor = repo.metricSeries(age.deviceId, key, age.day, age.day)
+                            .firstOrNull { it.deviceId == age.deviceId && it.day == age.day }
+                        com.noop.analytics.currentFitnessAgeMetabolicFactor(
+                            age.deviceId, age.day,
+                            repo.scoreInputDetails(age.deviceId, age.day, "fitness_age"), factor,
+                            repo.scoreInputDetails(age.deviceId, age.day, key),
+                        )
+                    } else repo.latestMetricComputedUnion(activeId, key)
+                }.getOrNull()
+                row?.let { Triple(label, it.day, it.value) }
+            }
         }
         if (ageRows.isNotEmpty()) {
             if (sb.isNotEmpty()) sb.append("\n")
             sb.append("THOOP AGE AND BODY-COMPOSITION CONTEXT ")
-            sb.append("(read-only values calculated on-device; explain them but never recalculate or replace THOOP Age):\n")
+            sb.append("(saved THOOP outputs; may include an opted-in experimental AI metabolic input. Explain them but never recalculate or replace THOOP Age in chat):\n")
             for ((label, day, value) in ageRows) {
                 sb.append("  â€¢ $label: ${fmt1(value)} (snapshot $day)\n")
             }
@@ -811,20 +836,22 @@ class AiCoach(
      * Preserve up to three dated rows per built-in and custom marker for AI
      * trend interpretation. The opt-in gate lives in [chatCloud].
      */
-    private suspend fun recentLabMarkersByKey(): Map<String, List<LabMarkerRow>> {
+    private suspend fun recentLabMarkersByKey(): Map<String, List<LabMarkerRow>> =
+        allLabMarkersByKey().mapValues { (_, readings) -> readings.takeLast(3) }
+
+    /** Structured processing reads every original history row. The ordinary prompt remains summary-only. */
+    private suspend fun allLabMarkersByKey(): Map<String, List<LabMarkerRow>> {
         val all = ArrayList<LabMarkerRow>()
         for (sourceId in listOf(deviceId, activeStrapId()).distinct()) {
             for (category in LabMarkerCategory.entries) {
-                all += runCatching { repo.labMarkersByCategory(sourceId, category.raw) }
-                    .getOrDefault(emptyList())
+                all += repo.labMarkersByCategory(sourceId, category.raw)
             }
         }
-        return all.distinctBy { it.id }
+        return all
             .groupBy { it.markerKey }
             .toSortedMap(compareBy<String> { !it.startsWith("custom_") }.thenBy { it })
             .mapValues { (_, readings) ->
                 readings.sortedWith(compareBy<LabMarkerRow> { it.day }.thenBy { it.takenAt }.thenBy { it.id })
-                    .takeLast(3)
             }
     }
 

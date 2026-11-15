@@ -33,6 +33,10 @@ jobs:
         run: >-
           bash ./gradlew testFullDebugUnitTest
           --tests 'com.noop.ai.LabInterpretation*Test'
+          --tests 'com.noop.ai.MetabolicEstimateTest'
+          --tests 'com.noop.ai.CloudCoach*TransportTest'
+          --tests 'com.noop.data.MetabolicEstimatePersistenceTest'
+          --tests 'com.noop.analytics.MetabolicFitnessAgeIntegrationTest'
           --tests 'com.noop.ai.AiCoachContextTest'
           --tests 'com.noop.analytics.*Lab*Test'
           --tests 'com.noop.analytics.WeeklyLabSnapshotTest'

@@ -26,7 +26,7 @@ class GlowRingFlatArcTest {
         repeat(4) {
             val f = java.io.File(root, "android/app/src/main/java/com/noop/ui/Components.kt")
             if (f.isFile) {
-                val src = f.readText()
+                val src = f.readText().replace("\r\n", "\n")
                 val body = src.substringAfter("fun GlowRing(", "")
                     .substringBefore("\n@Composable\nfun RecoveryRing(", "")
                 check(body.isNotBlank()) { "GlowRing body not found — the anchors moved, fix this test" }

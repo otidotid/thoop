@@ -6,18 +6,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CoachTabVisibilityTest {
-    @Test fun coachEnabledKeepsSelectedCoach() {
+    @Test fun legacySelectionCannotHideThePermanentThoopTabs() {
         val visible = visibleBarDestinationsFor(listOf(Destination.Coach, Destination.Sleep), true)
-        assertEquals(listOf(Destination.Coach, Destination.Sleep), visible)
+        assertEquals(listOf(Destination.Today, Destination.Trends, Destination.Workouts, Destination.Coach), visible)
     }
 
-    @Test fun coachDisabledDropsOnlyCoach() {
+    @Test fun legacyCoachToggleCannotRemoveThePermanentCoachDestination() {
         val visible = visibleBarDestinationsFor(
             listOf(Destination.Health, Destination.Coach, Destination.Sleep),
             false,
         )
-        assertFalse(Destination.Coach in visible)
-        assertEquals(listOf(Destination.Health, Destination.Sleep), visible)
-        assertTrue(Destination.Sleep in visible)
+        assertTrue(Destination.Coach in visible)
+        assertEquals(listOf(Destination.Today, Destination.Trends, Destination.Workouts, Destination.Coach), visible)
+        assertFalse(Destination.Sleep in visible)
+        assertEquals(visible.size, visible.distinct().size)
     }
 }

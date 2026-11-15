@@ -25,6 +25,43 @@ test('interpretation requires explicit consent and deployment opt-in', async () 
   assert.equal(calls, 0);
 });
 
+test('isolated batch endpoint needs consent, accepts no conversation payload, and never touches D1', async () => {
+  let dbCalls = 0;
+  let aiCalls = 0;
+  const e = env(response());
+  e.DB = { prepare: () => { dbCalls++; throw Error('Lab endpoint must not access memory'); } };
+  e.AI.run = async () => { aiCalls++; return { response: JSON.stringify(response()) }; };
+  const post = body => new Request('https://example.test/v1/labs/interpret', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const ok = await worker.fetch(post({ labConsent: true, labRequest: request }), e);
+  assert.equal(ok.status, 200);
+  assert.deepEqual((await ok.json()).labInterpretation, response());
+  assert.equal(dbCalls, 0);
+  assert.equal(aiCalls, 1);
+  const denied = await worker.fetch(post({ labConsent: false, labRequest: request }), e);
+  assert.equal(denied.status, 403);
+  const accidentalHistory = await worker.fetch(post({ labConsent: true, labRequest: request,
+    userId: 'private-identity', recentMessages: [{ text: 'private-history' }] }), e);
+  assert.equal(accidentalHistory.status, 400);
+  assert.equal(aiCalls, 1);
+  assert.equal(dbCalls, 0);
+});
+
+test('isolated batches remain optional for old or disabled Workers', async () => {
+  let aiCalls = 0;
+  const e = env(response());
+  e.ENABLE_LAB_INTERPRETATION = 'false';
+  e.AI.run = async () => { aiCalls++; throw Error('disabled'); };
+  const result = await worker.fetch(new Request('https://example.test/v1/labs/interpret', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ labConsent: true, labRequest: request }),
+  }), e);
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), { labInterpretation: null });
+  assert.equal(aiCalls, 0);
+});
+
 test('arbitrary custom marker retains original units/source/value in untrusted data request', async () => {
   let prompt;
   const e = { ENABLE_LAB_INTERPRETATION: 'true', AI: { run: async (_, input) => {
@@ -69,6 +106,21 @@ test('invalid or oversized request and raw persistent IDs never reach AI', async
 test('provider errors and malformed output are optional failures', async () => {
   assert.equal(await interpretLabsSafely({ ENABLE_LAB_INTERPRETATION: 'true', AI: { run: async () => { throw Error('offline'); } } }, request, true), null);
   assert.equal(await interpretLabsSafely({ ENABLE_LAB_INTERPRETATION: 'true', AI: { run: async () => ({ response: 'not JSON' }) } }, request, true), null);
+});
+
+test('global response bound measures UTF8 bytes before accepting otherwise valid model fields', async () => {
+  const secondRef = 'd'.repeat(64);
+  const many = { ...request, observations: [request.observations[0],
+    { ...request.observations[0], recordRef: secondRef }] };
+  const text = '\u4E00';
+  const largeFinding = { ...finding, interpretation: text.repeat(2000),
+    evidence: Array(4).fill(text.repeat(1000)), limitations: Array(4).fill(text.repeat(1000)) };
+  const result = { ...response(), findings: [largeFinding, { ...largeFinding, recordRef: secondRef }] };
+  assert.notEqual(validateLabResponse(result, many), null);
+  const raw = JSON.stringify(result);
+  assert.ok(raw.length < 60000);
+  assert.ok(new TextEncoder().encode(raw).length > 60000);
+  assert.equal(await interpretLabsSafely(env(result), many, true), null);
 });
 
 test('optional analysis times out instead of holding chat indefinitely', async t => {

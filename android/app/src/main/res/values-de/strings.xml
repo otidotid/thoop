@@ -2853,4 +2853,9 @@
     <string name="raw_diag_ecg_probe_stop">EKG-Aufzeichnung stoppen</string>
     <string name="raw_diag_ecg_probe_running">Auf diesem Strap läuft möglicherweise noch eine Aufzeichnung. Das Ergebnis steht im Strap-Log.</string>
     <string name="l10n_sleep_screen_move_relative_to_tonight_fd71d87b">Bewegung, relativ zu dieser Nacht</string>
+    <string name="l10n_settings_screen_weight_from_health_connect_caption_5ca6ea7d">Aus Health Connect · %1$s</string>
+    <string name="l10n_settings_screen_weight_from_health_connect_none_dd3f4884">Aus Health Connect · noch kein Gewicht</string>
+    <string name="l10n_settings_screen_use_weight_from_health_connect_c1fe3e2a">Gewicht aus Health Connect verwenden</string>
+    <string name="l10n_settings_screen_use_weight_from_health_connect_detail_40238f8a">Nach jeder Synchronisierung übernimmt dein Profil das neueste Gewicht aus Health Connect. Deaktiviere diese Option, um es manuell festzulegen.</string>
+    <string name="today_card_total_calories_subtitle">Gesamtkalorien</string>
 </resources>

@@ -1,5 +1,6 @@
 package com.noop.ui
 
+import com.noop.data.BackupSettingsCodec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -67,26 +68,25 @@ class GaugeNumeralStyleTest {
     }
 
     /**
-     * The preference stays OUT of the backup whitelist, like the theme mode it sits beside.
+     * Numeral weight remains local. THOOP separately carries the stable theme choice in backups.
      *
      * `.noopbak` is a byte-identical cross-platform contract carrying profile, units and anything that
-     * changes a NUMBER. A display choice is device-local and means nothing restored onto another device,
-     * so adding it would widen that contract for no gain.
+     * changes a NUMBER. The later THOOP layout/appearance backup feature deliberately included theme,
+     * while the gauge numeral weight was not added to that contract.
      */
     @Test fun thePreferenceIsNotInTheBackupWhitelist() {
-        val backup = backupSource()
         assertFalse(
             "appearance.gaugeNumerals must not join the .noopbak contract",
-            backup.contains("appearance.gaugeNumerals"),
+            "appearance.gaugeNumerals" in BackupSettingsCodec.WHITELIST,
         )
-        assertFalse(
-            "and its sibling theme preference is not in it either, which is the precedent",
-            backup.contains("theme.appearance"),
+        assertEquals(
+            "the user's existing theme restore contract must remain intact",
+            BackupSettingsCodec.Kind.STRING,
+            BackupSettingsCodec.WHITELIST["theme.appearance"],
         )
     }
 
     private fun todaySource(): String = read("android/app/src/main/java/com/noop/ui/TodayScreen.kt")
-    private fun backupSource(): String = read("android/app/src/main/java/com/noop/data/BackupSettings.kt")
 
     private fun read(relative: String): String {
         var root = java.io.File(System.getProperty("user.dir") ?: ".").canonicalFile

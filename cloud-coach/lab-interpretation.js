@@ -70,7 +70,7 @@ export async function interpretLabsSafely(env, request, consent) {
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 12000); }),
     ]);
     const raw = typeof result?.response === "string" ? result.response : "";
-    if (!raw || raw.length > MAX_BYTES) return null;
+    if (!raw || new TextEncoder().encode(raw).length > MAX_BYTES) return null;
     return validateLabResponse(JSON.parse(raw), request);
   } catch {
     // Failure must never interrupt ordinary Coach chat or local calculation.

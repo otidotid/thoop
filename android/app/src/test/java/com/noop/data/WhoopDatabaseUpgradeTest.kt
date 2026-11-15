@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,7 +61,16 @@ class WhoopDatabaseUpgradeTest {
 
     @Test
     fun previousReleasedSchemaOpensThroughTheProductionMigrationChain() {
-        helper.createDatabase(databaseName, previousVersion).close()
+        helper.createDatabase(databaseName, previousVersion).apply {
+            execSQL("INSERT INTO labMarker (id,deviceId,markerKey,category,day,takenAt,value,unit,source,note,referenceText," +
+                "displayName,sampleCondition,hoursSinceMeal,evidenceProfileId,evidenceVersion) VALUES " +
+                "('source-lab','my-whoop','custom_glucose','other','2026-11-12',1794480123,175.25,'mg/dL','manual'," +
+                "'original note','report range','Random glucose','post_meal',2.0,'glycemic_non_fasting','recorded-policy')")
+            execSQL("INSERT INTO metricSeries (deviceId,day,`key`,value) VALUES " +
+                "('my-whoop-noop','2026-11-12','fitness_age',42.25)")
+            execSQL("INSERT INTO scoreInputProvenance (deviceId,day,`key`,sourceId) VALUES " +
+                "('my-whoop-noop','2026-11-12','fitness_age','original-source')")
+        }.close()
 
         val migrated = Room.databaseBuilder(
             instrumentation.targetContext,
@@ -78,9 +88,66 @@ class WhoopDatabaseUpgradeTest {
                 check(it.moveToFirst()) { "PRAGMA user_version returned no row" }
                 assertEquals(WhoopDatabase.SCHEMA_VERSION, it.getInt(0))
             }
+            db.query("SELECT value,unit,source,note,referenceText,displayName,sampleCondition,hoursSinceMeal," +
+                "evidenceProfileId,evidenceVersion FROM labMarker WHERE id='source-lab'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(175.25, it.getDouble(0), 0.0)
+                assertEquals(listOf("mg/dL", "manual", "original note", "report range", "Random glucose", "post_meal"),
+                    (1..6).map(it::getString))
+                assertEquals(2.0, it.getDouble(7), 0.0)
+                assertEquals("glycemic_non_fasting", it.getString(8))
+                assertEquals("recorded-policy", it.getString(9))
+            }
+            db.query("SELECT value FROM metricSeries WHERE deviceId='my-whoop-noop' AND `key`='fitness_age'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(42.25, it.getDouble(0), 0.0)
+            }
+            db.query("SELECT sourceId,algorithmVersion,observedInputs FROM scoreInputProvenance " +
+                "WHERE deviceId='my-whoop-noop' AND `key`='fitness_age'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("original-source", it.getString(0))
+                assertTrue("legacy method version remains unknown", it.isNull(1))
+                assertTrue("legacy evidence remains unknown", it.isNull(2))
+            }
         } finally {
             migrated.close()
         }
+    }
+
+    /** Both additive metadata migrations must preserve original numeric and qualitative measurements. */
+    @Test
+    fun preMetadataSchemaPreservesNumericAndQualitativeOriginalLabRows() {
+        val oldName = "noop-room-pre-metadata.db"
+        helper.createDatabase(oldName, 41).apply {
+            execSQL("INSERT INTO labMarker (id,deviceId,markerKey,category,day,takenAt,value,unit,source,note) VALUES " +
+                "('numeric','my-whoop','waist','bodyMeasurement','2026-11-12',1794480123,36.0,'in','csv','source note')")
+            execSQL("INSERT INTO labMarker (id,deviceId,markerKey,category,day,takenAt,valueText,unit,source) VALUES " +
+                "('qualitative','my-whoop','custom_screen','other','2026-11-12',1794480124,'negative','qualitative','manual')")
+        }.close()
+        val migrated = Room.databaseBuilder(instrumentation.targetContext, WhoopDatabase::class.java, oldName)
+            .addMigrations(*WhoopDatabase.ALL_MIGRATIONS).allowMainThreadQueries().build()
+        try {
+            migrated.openHelper.writableDatabase.query(
+                "SELECT id,value,valueText,unit,source,note,displayName,sampleCondition,hoursSinceMeal," +
+                    "evidenceProfileId,evidenceVersion FROM labMarker ORDER BY id",
+            ).use { cursor ->
+                assertEquals(2, cursor.count)
+                assertTrue(cursor.moveToFirst())
+                assertEquals("numeric", cursor.getString(0))
+                assertEquals(36.0, cursor.getDouble(1), 0.0)
+                assertEquals("in", cursor.getString(3))
+                assertEquals("csv", cursor.getString(4))
+                assertEquals("source note", cursor.getString(5))
+                for (column in 6..10) assertTrue(cursor.isNull(column))
+                assertTrue(cursor.moveToNext())
+                assertEquals("qualitative", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+                assertEquals("negative", cursor.getString(2))
+                assertEquals("qualitative", cursor.getString(3))
+                assertEquals("manual", cursor.getString(4))
+                for (column in 6..10) assertTrue(cursor.isNull(column))
+            }
+        } finally { migrated.close() }
     }
 
     /** A version bump is not complete until its exact Room export is preserved for the next upgrade. */
@@ -112,7 +179,7 @@ class WhoopDatabaseUpgradeTest {
         Files.createTempFile("noop-room-schemas-", ".zip").also { archive ->
             archive.toFile().deleteOnExit()
             ZipOutputStream(Files.newOutputStream(archive)).use { zip ->
-                for (version in previousVersion..WhoopDatabase.SCHEMA_VERSION) {
+                for (version in (previousVersion - 1)..WhoopDatabase.SCHEMA_VERSION) {
                     val asset = "${WhoopDatabase::class.java.canonicalName}/$version.json"
                     val resource = "roomSchemas/$asset"
                     val input = checkNotNull(javaClass.classLoader?.getResourceAsStream(resource)) {

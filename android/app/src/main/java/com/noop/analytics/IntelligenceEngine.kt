@@ -2124,25 +2124,28 @@ object IntelligenceEngine {
         for (d in dailies) faGateByDay[d.day] = d
         val faGate7 = faGateByDay.values.sortedBy { it.day }.takeLast(7)
         val weeklyDay = saturdayKeyOnOrBefore(newestDay)
-        val weeklyLabs = captureWeeklyLabs(repo, weeklyDay)
-        val faPts = fitnessAgeRows(weeklyLabs, faGate7, profile, computedId, weeklyDay)
-        // Strap-log proof: the RHR-night count the engine sees for the gate , should equal the "N of last 7
-        // nights" the readiness card shows; `computed` says whether the value was (re)written this pass.
-        diag("fitnessAge gate day=$newestDay rhrNights=${faGate7.mapNotNull { it.restingHr }.size} activityDays=${faGate7.mapNotNull { it.strain }.size} computed=${faPts.isNotEmpty()}")
-        if (faPts.isNotEmpty()) {
-            repo.upsertMetricSeriesWithProvenance(
-                rows = faPts,
-                provenance = weeklyScoreProvenance(weeklyLabs, faPts, computedId, faGate7, profile),
-            )
-        }
+        // Serialize captured evidence and its outputs with manual refresh/experiment revocation.
+        repo.withMetabolicCalculationTransaction {
+            val weeklyLabs = captureWeeklyLabs(repo, weeklyDay, profile, computedId)
+            val faPts = fitnessAgeRows(weeklyLabs, faGate7, profile, computedId, weeklyDay)
+            // Strap-log proof: the RHR-night count the engine sees for the gate , should equal the "N of last 7
+            // nights" the readiness card shows; `computed` says whether the value was (re)written this pass.
+            diag("fitnessAge gate day=$newestDay rhrNights=${faGate7.mapNotNull { it.restingHr }.size} activityDays=${faGate7.mapNotNull { it.strain }.size} computed=${faPts.isNotEmpty()}")
+            if (faPts.isNotEmpty()) {
+                repo.upsertMetricSeriesWithProvenance(
+                    rows = faPts,
+                    provenance = weeklyScoreProvenance(weeklyLabs, faPts, computedId, faGate7, profile),
+                )
+            }
 
-        // ── Vitality / Body Age (Phase 7), weekly, keyed to the week's Saturday ──
-        val currentVitalityRows = vitalityRows(fa7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
-        if (currentVitalityRows.isNotEmpty()) {
-            repo.upsertMetricSeriesWithProvenance(
-                currentVitalityRows,
-                weeklyScoreProvenance(weeklyLabs, currentVitalityRows, computedId, fa7, profile),
-            )
+            // ── Vitality / Body Age (Phase 7), weekly, keyed to the week's Saturday ──
+            val currentVitalityRows = vitalityRows(fa7, profile, computedId, saturdayKeyOnOrBefore(newestDay))
+            if (currentVitalityRows.isNotEmpty()) {
+                repo.upsertMetricSeriesWithProvenance(
+                    currentVitalityRows,
+                    weeklyScoreProvenance(weeklyLabs, currentVitalityRows, computedId, fa7, profile),
+                )
+            }
         }
 
         // Older installs have only the first/current Saturday persisted. Backfill the missing historical
@@ -2731,9 +2734,10 @@ object IntelligenceEngine {
         val body: Map<String, LabCalculationContract.Resolved> = emptyMap(),
         val primaryGlycemicPresence: List<MetricSeriesRow> = emptyList(),
         val customGlycemic: LabCalculationContract.ResolvedGlycemic? = null,
+        val metabolicEstimate: com.noop.ai.MetabolicEstimate.Accepted? = null,
     )
 
-    private suspend fun captureWeeklyLabs(repo: WhoopRepository, snapshotDay: String): WeeklyLabInputs {
+    private suspend fun captureWeeklyLabs(repo: WhoopRepository, snapshotDay: String, profile: UserProfile, computedId: String): WeeklyLabInputs {
         val body = listOf("weight", "height", "waist", "body_fat").mapNotNull { key ->
             LabCalculationContract.resolveLatest(repo.labMarkersByKey("my-whoop", key), key, snapshotDay)
                 ?.let { key to it }
@@ -2746,13 +2750,14 @@ object IntelligenceEngine {
         val custom = if (primary.isNotEmpty()) null else LabCalculationContract.resolveCustomGlycemic(
             repo.labMarkersByCategory("my-whoop", "other"), snapshotDay,
         )
-        return WeeklyLabInputs(body, primary, custom)
+        return WeeklyLabInputs(body, primary, custom,
+            repo.metabolicEstimateFor(computedId.removeSuffix("-noop"), snapshotDay, profile))
     }
 
     /** Fitness Age rows for one seven-day window, using original Lab Book evidence. */
     suspend fun fitnessAgeRows(repo: WhoopRepository,
         gateDays: List<DailyMetric>, profile: UserProfile, computedId: String, satKey: String,
-    ): List<MetricSeriesRow> = fitnessAgeRows(captureWeeklyLabs(repo, satKey), gateDays, profile, computedId, satKey)
+    ): List<MetricSeriesRow> = fitnessAgeRows(captureWeeklyLabs(repo, satKey, profile, computedId), gateDays, profile, computedId, satKey)
 
     internal fun fitnessAgeRows(
         labs: WeeklyLabInputs, gateDays: List<DailyMetric>, profile: UserProfile, computedId: String, satKey: String,
@@ -2761,7 +2766,7 @@ object IntelligenceEngine {
         val labHeight = labs.body["height"]?.normalizedValue
         val labWaist = labs.body["waist"]?.normalizedValue
         val labBodyFat = labs.body["body_fat"]?.normalizedValue
-        val customGlycemicDelta = if (labs.primaryGlycemicPresence.isEmpty())
+        val customGlycemicDelta = if (labs.metabolicEstimate == null && labs.primaryGlycemicPresence.isEmpty())
             labs.customGlycemic?.result?.ageDeltaYears ?: 0.0 else 0.0
         val rhrs = gateDays.mapNotNull { it.restingHr }.map { it.toDouble() }
         val strains = gateDays.mapNotNull { it.strain }.filter { it >= 30.0 }
@@ -2772,11 +2777,18 @@ object IntelligenceEngine {
             rhrDays = rhrs.size, activityDays = gateDays.mapNotNull { it.strain }.size,
             hasHeightWeight = labHeight != null && labWeight != null, hasWaist = waist != null)
         if (!ready.canCompute) return emptyList()
-        val res = FitnessAgeEngine.compute(
+        val localResult = FitnessAgeEngine.compute(
             age = profile.age, sex = profile.sex,
             restingHR = medianOfDoubles(rhrs),
             paIndex = FitnessAgeEngine.physicalActivityIndexFromStrain(strains.size, meanStrain),
             waistCm = waist, weightKg = labWeight, heightCm = labHeight, bodyFatPct = labBodyFat) ?: return emptyList()
+        // One metabolic contribution only: accepted AI replaces the body blend and custom glucose addition.
+        // Without a current, source-validated estimate, this path is byte-identical to the local calculation.
+        val res = labs.metabolicEstimate?.let { estimate ->
+            MetabolicFitnessAge.apply(localResult, FitnessAgeEngine.fitnessAge(profile.age, profile.sex,
+                medianOfDoubles(rhrs), FitnessAgeEngine.physicalActivityIndexFromStrain(strains.size, meanStrain)),
+                estimate.deltaYears)
+        } ?: localResult
         val rows = mutableListOf(MetricSeriesRow(deviceId = computedId, day = satKey, key = "fitness_age", value = res.fitnessAge + customGlycemicDelta))
         res.bmi?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_bmi", it) }
         res.waistToHeightRatio?.let { rows += MetricSeriesRow(computedId, satKey, "fitness_factor_whtr", it) }
@@ -2854,7 +2866,7 @@ object IntelligenceEngine {
             val anchor = runCatching { java.time.LocalDate.parse(anchorDay) }.getOrNull() ?: continue
             val from = anchor.minusDays(6).toString()
             val week = byDay.values.filter { it.day in from..anchorDay }.sortedBy { it.day }
-            val labs = captureWeeklyLabs(repo, anchorDay)
+            val labs = captureWeeklyLabs(repo, anchorDay, profile, computedId)
             capturedLabs?.put(anchorDay, labs)
             val candidates = fitnessAgeRows(labs, week, profile, computedId, anchorDay) +
                 vitalityRows(week, profile, computedId, anchorDay)
@@ -2928,8 +2940,19 @@ object IntelligenceEngine {
                 "; takenAt=" + source.takenAt + "; device=" + source.deviceId +
                 "; source=" + source.source + "; row=" + source.rowId
         }
-        val custom = labs.customGlycemic.takeIf { labs.primaryGlycemicPresence.isEmpty() }
-        if (custom != null) {
+        val custom = labs.customGlycemic.takeIf { labs.metabolicEstimate == null && labs.primaryGlycemicPresence.isEmpty() }
+        if (labs.metabolicEstimate != null) {
+            val estimate = labs.metabolicEstimate
+            parts += "Experimental AI metabolic estimate: delta=" + estimate.deltaYears + " years; fixed blend=20%; " +
+                "replaces local body metabolic component and custom glycaemic addition; request=" + estimate.requestId +
+                "; model=" + estimate.model + "; prompt=" + estimate.promptVersion + "; schema=" + com.noop.ai.MetabolicEstimate.VERSION +
+                "; snapshotDay=" + estimate.day + "; confidence=HIGH (model-reported, not clinical validation)"
+            estimate.originals.forEach { row ->
+                parts += "AI source row=" + row.id + "; marker=" + row.markerKey + "; day=" + row.day +
+                    "; raw=" + (row.value?.toString() ?: row.valueText) + " " + row.unit + "; source=" + row.source +
+                    "; device=" + row.deviceId + "; fingerprint=" + com.noop.ai.LabInterpretation.fingerprint(row)
+            }
+        } else if (custom != null) {
             val row = custom.row
             parts += "Custom glycaemic policy: " + custom.result.evidenceVersion +
                 "; age delta=" + custom.result.ageDeltaYears + "; confidence=" + custom.result.confidence +
@@ -2956,7 +2979,9 @@ object IntelligenceEngine {
                 )
                 "fitness_age", "fitness_factor_bmi", "fitness_factor_whtr",
                 "fitness_factor_body_fat", "fitness_factor_metabolic_delta" -> Triple(
-                    FitnessAgeEngine.ALGORITHM_VERSION, computedId, weeklyInputs
+                    if (labs.metabolicEstimate != null && row.key in setOf("fitness_age", "fitness_factor_metabolic_delta"))
+                        MetabolicFitnessAge.ALGORITHM_VERSION else FitnessAgeEngine.ALGORITHM_VERSION,
+                    computedId, weeklyInputs
                 )
                 "vitality", "body_age" -> Triple(
                     VitalityEngine.ALGORITHM_VERSION, computedId,
@@ -3005,7 +3030,7 @@ object IntelligenceEngine {
      *  strap is offline. Returns true if a value was written. */
     suspend fun recomputeFitnessAgeOnly(
         repo: WhoopRepository, profile: UserProfile, importedDeviceId: String, maxDays: Int = 21,
-    ): Boolean {
+    ): Boolean = repo.withMetabolicCalculationTransaction {
         val computedId = importedDeviceId + "-noop"
         val nowSeconds = System.currentTimeMillis() / 1_000L
         val tzOffsetSeconds = java.util.TimeZone.getDefault().getOffset(nowSeconds * 1_000L) / 1_000L
@@ -3015,7 +3040,7 @@ object IntelligenceEngine {
         val gate7 = repo.daysMerged(importedDeviceId)
             .filter { it.day in oldestDay..newestDay }.sortedBy { it.day }.takeLast(7)
         val weeklyDay = saturdayKeyOnOrBefore(newestDay)
-        val labs = captureWeeklyLabs(repo, weeklyDay)
+        val labs = captureWeeklyLabs(repo, weeklyDay, profile, computedId)
         val rows = fitnessAgeRows(labs, gate7, profile, computedId, weeklyDay)
         if (rows.isNotEmpty()) {
             repo.upsertMetricSeriesWithProvenance(
@@ -3023,7 +3048,7 @@ object IntelligenceEngine {
                 provenance = weeklyScoreProvenance(labs, rows, computedId, gate7, profile),
             )
         }
-        return rows.isNotEmpty()
+        rows.isNotEmpty()
     }
 
     /**

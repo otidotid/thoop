@@ -126,8 +126,7 @@ object FitnessAgeEngine {
             },
         )
         val metabolicDelta = metabolicParts.takeIf { it.isNotEmpty() }?.average()
-        val weightedAge = if (metabolicDelta == null) fitnessDomainAge
-            else fitnessDomainAge * 0.80 + (age + metabolicDelta) * 0.20
+        val weightedAge = blendMetabolicAge(fitnessDomainAge, age, metabolicDelta)
         val vo2 = if (waistCm != null && waistCm > 0)
             estimateVO2max(age, sex, waistCm, restingHR, paIndex) else null
         val nb = sex.lowercase() != "male" && sex.lowercase() != "female"
@@ -139,6 +138,9 @@ object FitnessAgeEngine {
     }
 
     // ── Readiness checklist (transparency: which inputs we have, grouped by what each unlocks) ──
+    internal fun blendMetabolicAge(fitnessDomainAge: Double, age: Double, metabolicDelta: Double?): Double =
+        if (metabolicDelta == null) fitnessDomainAge else fitnessDomainAge * 0.80 + (age + metabolicDelta) * 0.20
+
     const val minCoverageDays = 4
     const val goodCoverageDays = 6
 

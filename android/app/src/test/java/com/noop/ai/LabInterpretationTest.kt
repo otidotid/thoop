@@ -201,7 +201,7 @@ class LabInterpretationTest {
         val result = LabInterpretation.validate(response(req, finding(req)).toString(), req, req.originals)
         val text = LabInterpretation.render(result, req)
         assertTrue(text.startsWith(LabInterpretation.LOCAL_APPENDIX_MARKER))
-        assertTrue(text.contains("AI lab interpretation (unverified; no score changes)"))
+        assertTrue(text.contains("AI lab interpretation (unverified; THOOP owns calculations)"))
         assertTrue(text.contains("0.87654321 mmol/L; source=manual"))
         assertTrue(text.contains("2026-11-12"))
         assertTrue(text.contains("AI evidence (unverified):"))

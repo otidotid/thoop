@@ -2177,23 +2177,16 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
     }
     var range by remember { mutableStateOf(VitalDetailRange.MONTH) }
 
-    // Read immutable provenance for the MOST RECENT displayed score.
-    // Legacy/imported values may have no formula record; in that case the UI
-    // explicitly shows "not recorded" rather than inventing a method.
+    // Keep provenance internal. Only the exact displayed Fitness Age point determines the concise
+    // metabolic-origin label; detailed calculation traces are not part of the score screen.
     val scoreTrace by produceState<com.noop.data.ScoreInputProvenanceRow?>(
-        null, key, detail?.readings?.lastOrNull()?.day, activeStrapId,
+        null, key, detail?.readings?.lastOrNull()?.day, detail?.readings?.lastOrNull()?.source,
+        detail?.readings?.lastOrNull()?.value, activeStrapId, refreshTick,
     ) {
-        val day = detail?.readings?.lastOrNull()?.day
-        val traceKeys = setOf(
-            "recovery", "strain", "rest", "sleep_performance",
-            "fitness_age", "vo2max_est", "vitality", "body_age", "active_kcal",
-        )
+        val reading = detail?.readings?.lastOrNull()
         value = null
-        if (day != null && key in traceKeys) {
-            for (sourceId in vm.repo.computedSourceIds(activeStrapId ?: vm.activeStrapId)) {
-                val found = runCatching { vm.repo.scoreInputDetails(sourceId, day, key) }.getOrNull()
-                if (found != null) { value = found; break }
-            }
+        if (key == "fitness_age" && reading != null && reading.source.isNotBlank()) {
+            value = runCatching { vm.repo.scoreInputDetails(reading.source, reading.day, key) }.getOrNull()
         }
     }
 
@@ -2242,34 +2235,6 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             )
             return@ScreenScaffold
         }
-        // Stage 5: same deterministic record that was persisted beside the score.
-        // This is informational and must never alter the computed value.
-        if (key in setOf("recovery", "strain", "rest", "sleep_performance",
-                "fitness_age", "vo2max_est", "vitality", "body_age", "active_kcal") &&
-            detail?.points?.isNotEmpty() == true
-        ) {
-            SectionHeader("Calculation provenance", overline = "THOOP calculation, AI cannot change it")
-            NoopCard {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Formula version: " + (scoreTrace?.algorithmVersion ?: "Not recorded (legacy/imported result)"),
-                        style = NoopType.subhead, color = Palette.textSecondary,
-                    )
-                    Text(
-                        "Input evidence: " + (scoreTrace?.observedInputs
-                            ?: "Exact input snapshot was not recorded for this point. No values are inferred."),
-                        style = NoopType.footnote, color = Palette.textTertiary,
-                    )
-                    if (scoreTrace?.algorithmVersion != null) {
-                        Text(
-                            "Source: " + scoreTrace!!.sourceId,
-                            style = NoopType.footnote, color = Palette.textTertiary,
-                        )
-                    }
-                }
-            }
-        }
-
         if (detail == null || detail.points.isEmpty()) {
             if (key == "active_kcal") {
                 CaloriesBreakdownCard(activeKcal = null, profile = profile, estimated = true)
@@ -2349,21 +2314,32 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
             return@ScreenScaffold
         }
         if (key == "fitness_age") {
+            val latestScore = detail.readings.last()
             val factorKeys = remember { listOf(
                 "fitness_factor_bmi", "fitness_factor_whtr",
                 "fitness_factor_body_fat", "fitness_factor_metabolic_delta",
             ) }
             val metabolicFactors by produceState<Map<String, Double>>(
                 initialValue = emptyMap(),
-                key1 = vm.activeStrapId,
-                key2 = detail.readings.lastOrNull()?.day,
+                key1 = latestScore.source,
+                key2 = latestScore.day,
+                key3 = scoreTrace,
             ) {
-                val latestDay = detail.readings.lastOrNull()?.day ?: "9999-12-31"
-                value = factorKeys.mapNotNull { factorKey ->
-                    vm.repo.metricSeriesComputedUnion(
-                        vm.activeStrapId, factorKey, "0000-01-01", latestDay,
-                    ).lastOrNull()?.value?.let { factorKey to it }
-                }.toMap()
+                value = emptyMap()
+                value = vm.repo.withMetabolicCalculationTransaction {
+                    val currentTrace = vm.repo.scoreInputDetails(latestScore.source, latestScore.day, "fitness_age")
+                    factorKeys.mapNotNull { factorKey ->
+                        val factor = vm.repo.metricSeries(latestScore.source, factorKey, latestScore.day, latestScore.day)
+                            .firstOrNull { it.deviceId == latestScore.source && it.day == latestScore.day }
+                        val current = if (factorKey == "fitness_factor_metabolic_delta") {
+                            val trace = vm.repo.scoreInputDetails(latestScore.source, latestScore.day, factorKey)
+                            com.noop.analytics.currentFitnessAgeMetabolicFactor(
+                                latestScore.source, latestScore.day, currentTrace, factor, trace,
+                            )
+                        } else factor
+                        current?.value?.let { factorKey to it }
+                    }.toMap()
+                }
             }
             FitnessAgeDetailExperience(
                 readings = detail.readings,
@@ -2373,6 +2349,7 @@ fun VitalDetailScreen(vm: AppViewModel, key: String) {
                 restingHr = days.takeLast(7).mapNotNull { it.restingHr?.toDouble() }.average().takeIf { !it.isNaN() },
                 weeklyEffort = days.takeLast(7).mapNotNull { it.strain }.average().takeIf { !it.isNaN() },
                 metabolicFactors = metabolicFactors,
+                aiMetabolic = hasAiMetabolicProvenance(scoreTrace, latestScore.source, latestScore.day),
                 color = detail.color,
                 format = detail.format,
             )
@@ -2920,6 +2897,7 @@ private fun FitnessAgeDetailExperience(
     restingHr: Double?,
     weeklyEffort: Double?,
     metabolicFactors: Map<String, Double>,
+    aiMetabolic: Boolean,
     color: Color,
     format: (Double) -> String,
 ) {
@@ -2938,34 +2916,40 @@ private fun FitnessAgeDetailExperience(
     }
     // Presentation-only motion for the large THOOP Age hero. The stored value and scoring path stay
     // untouched: only the hero's scale, glow, and translucent inner layers breathe slowly.
-    val ageHeroMotion = rememberInfiniteTransition(label = "thoop-age-hero")
-    val ageHeroScale by ageHeroMotion.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.025f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "thoop-age-scale",
-    )
-    val ageHeroGlow by ageHeroMotion.animateFloat(
-        initialValue = 0.10f,
-        targetValue = 0.24f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "thoop-age-glow",
-    )
-    val ageHeroShift by ageHeroMotion.animateFloat(
-        initialValue = -0.035f,
-        targetValue = 0.035f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6_000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "thoop-age-blob-shift",
-    )
+    val poseStill = rememberPoseStill()
+    val (ageHeroScale, ageHeroGlow, ageHeroShift) = if (poseStill) {
+        Triple(1f, 0.10f, 0f)
+    } else {
+        val ageHeroMotion = rememberInfiniteTransition(label = "thoop-age-hero")
+        val scale = ageHeroMotion.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.025f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "thoop-age-scale",
+        ).value
+        val glow = ageHeroMotion.animateFloat(
+            initialValue = 0.10f,
+            targetValue = 0.24f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "thoop-age-glow",
+        ).value
+        val shift = ageHeroMotion.animateFloat(
+            initialValue = -0.035f,
+            targetValue = 0.035f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 6_000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "thoop-age-blob-shift",
+        ).value
+        Triple(scale, glow, shift)
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         Box(
@@ -3105,7 +3089,7 @@ private fun FitnessAgeDetailExperience(
             }
         }
 
-        SectionHeader("Fitness Factors", overline = "On-device inputs")
+        SectionHeader("Fitness Factors", overline = if (aiMetabolic) "Fitness and metabolic inputs" else "On-device inputs")
         NoopCard {
             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 FitnessAgeDetailFactor(
@@ -3143,7 +3127,8 @@ private fun FitnessAgeDetailExperience(
                         value = String.format(Locale.US, "%.1f kg/m2", bmi),
                         marker = ((bmi - 15.0) / 25.0).toFloat().coerceIn(0f, 1f),
                         left = "15", right = "40",
-                        source = "Labs", method = "Weight / height^2 · Metabolic domain",
+                        source = "Labs", method = if (aiMetabolic) "Weight / height^2 · Lab context"
+                            else "Weight / height^2 · Metabolic domain",
                     )
                 }
                 metabolicFactors["fitness_factor_whtr"]?.let { whtr ->
@@ -3153,7 +3138,8 @@ private fun FitnessAgeDetailExperience(
                         value = String.format(Locale.US, "%.2f", whtr),
                         marker = (whtr / 0.70).toFloat().coerceIn(0f, 1f),
                         left = "0.35", right = "0.70",
-                        source = "Labs", method = "Waist / height · Metabolic domain",
+                        source = "Labs", method = if (aiMetabolic) "Waist / height · Lab context"
+                            else "Waist / height · Metabolic domain",
                     )
                 }
                 metabolicFactors["fitness_factor_body_fat"]?.let { bodyFat ->
@@ -3163,17 +3149,21 @@ private fun FitnessAgeDetailExperience(
                         value = String.format(Locale.US, "%.1f%%", bodyFat),
                         marker = (bodyFat / 50.0).toFloat().coerceIn(0f, 1f),
                         left = "Lower", right = "Higher",
-                        source = "Labs", method = "Manual marker · Metabolic domain",
+                        source = "Labs", method = if (aiMetabolic) "Measured marker · Lab context"
+                            else "Manual marker · Metabolic domain",
                     )
                 }
                 metabolicFactors["fitness_factor_metabolic_delta"]?.let { impact ->
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
                     FitnessAgeDetailFactor(
-                        label = "METABOLIC IMPACT",
-                        value = String.format(Locale.US, "+%.1f years", impact),
-                        marker = (impact / 4.0).toFloat().coerceIn(0f, 1f),
-                        left = "Neutral", right = "Higher impact",
-                        source = "THOOP Age", method = "Normalized available Labs inputs",
+                        label = if (aiMetabolic) "AI METABOLIC ESTIMATE" else "METABOLIC ESTIMATE",
+                        value = String.format(Locale.US, "%+.1f years", impact),
+                        marker = if (aiMetabolic) null else (impact / 4.0).toFloat().coerceIn(0f, 1f),
+                        left = if (aiMetabolic) "Younger" else "Neutral",
+                        right = if (aiMetabolic) "Older" else "Higher impact",
+                        source = if (aiMetabolic) "AI · Experimental" else "THOOP Age",
+                        method = if (aiMetabolic) "Metabolic age delta · 20% blend in THOOP Age"
+                            else "Local metabolic age delta · 20% blend",
                     )
                 }
             }
