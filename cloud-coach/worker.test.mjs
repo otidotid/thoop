@@ -13,6 +13,12 @@ const base = {
 const ai = (response = 'A gentle walk can be reasonable if you feel well.') => ({
   run: async () => ({ response }),
 });
+const completedResponse = text => ({ id: 'resp_worker', object: 'response', status: 'completed', error: null,
+  incomplete_details: null, output: [
+    { id: 'rs_worker', type: 'reasoning', summary: [{ type: 'summary_text', text: 'Private chain of thought' }] },
+    { id: 'msg_worker', type: 'message', role: 'assistant', status: 'completed',
+      content: [{ type: 'output_text', text, annotations: [] }] },
+  ] });
 function post(body = base, { method = 'POST', headers = {}, raw = false } = {}) {
   return new Request(endpoint, {
     method,
@@ -67,6 +73,66 @@ test('retains Android contract, no D1 required for healthy answer', async () => 
   assert.deepEqual(body.references, []);
   assert.equal(body.memorySaved, false);
   assert.equal(headers.get('cache-control'), 'no-store');
+});
+
+test('ordinary greeting uses canonical binding input and completed Responses assistant text', async () => {
+  let calls = 0;
+  const env = { DISABLE_EXTERNAL_REFERENCES: 'true', AI: { run: async (model, parameters) => {
+    calls++;
+    assert.equal(model, '@cf/openai/gpt-oss-120b');
+    assert.deepEqual(Object.keys(parameters).sort(), ['input', 'max_output_tokens', 'reasoning', 'temperature']);
+    assert.equal(parameters.max_output_tokens, 1400);
+    assert.deepEqual(parameters.reasoning, { effort: 'low' });
+    assert.equal(parameters.temperature, 0.35);
+    assert.equal(parameters.input[0].role, 'system');
+    assert.ok(parameters.input.some(message => message.role === 'user' && message.content.includes('hi coach')));
+    return completedResponse('Hi! How can I help today?');
+  } } };
+  const { status, body } = await reply(post({ ...base, question: 'hi coach', healthContext: '' }), env);
+  assert.equal(status, 200);
+  assert.equal(body.answer, 'Hi! How can I help today?');
+  assert.equal(body.intent, 'chat');
+  assert.equal(calls, 1);
+  assert.doesNotMatch(JSON.stringify(body), /Private chain of thought|rs_worker|msg_worker/);
+});
+
+test('nutrition review accepts Responses JSON through the same binding adapter without saving', async () => {
+  let calls = 0;
+  const env = { DISABLE_EXTERNAL_REFERENCES: 'true', AI: { run: async (model, parameters) => {
+    calls++;
+    assert.equal(model, '@cf/openai/gpt-oss-120b');
+    assert.equal(parameters.max_output_tokens, calls === 1 ? 1400 : 900);
+    assert.deepEqual(parameters.reasoning, { effort: 'low' });
+    assert.ok(Array.isArray(parameters.input));
+    assert.ok(!Object.hasOwn(parameters, 'messages') && !Object.hasOwn(parameters, 'max_tokens'));
+    return completedResponse(calls === 1 ? 'I can estimate that meal for review.' :
+      JSON.stringify({ foodName: 'one egg', caloriesKcal: 90, proteinGrams: 6, confidence: 'medium' }));
+  } } };
+  const { status, body } = await reply(post({ ...base, question: 'I ate one egg', localHour: 8 }), env);
+  assert.equal(status, 200);
+  assert.equal(body.intent, 'food_log');
+  assert.equal(body.nutrition.caloriesKcal, 90);
+  assert.equal(body.nutrition.proteinGrams, 6);
+  assert.match(body.answer, /Nothing has been saved/);
+  assert.doesNotMatch(JSON.stringify(body), /Private chain of thought/);
+  assert.equal(calls, 2);
+});
+
+test('incomplete, refused and tool-only Responses cannot leak into ordinary chat', async () => {
+  for (const result of [
+    { ...completedResponse('private partial answer'), status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } },
+    { status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'refusal', refusal: 'private refusal' }] }] },
+    { status: 'completed', output: [{ type: 'function_call', name: 'private_tool', arguments: 'private arguments' }] },
+  ]) {
+    let calls = 0;
+    const { status, body } = await reply(post({ ...base, question: 'hi coach' }), {
+      DISABLE_EXTERNAL_REFERENCES: 'true', AI: { run: async () => { calls++; return result; } },
+    });
+    assert.equal(status, 502);
+    assert.equal(body.retryable, true);
+    assert.doesNotMatch(JSON.stringify(body), /private/);
+    assert.equal(calls, 1);
+  }
 });
 
 test('rejects wrong method or malformed content with proper HTTP errors', async () => {
@@ -270,7 +336,11 @@ test('food-log follow-up recovers prior user meal instead of estimating the comp
     AI: { run: async (_model, params) => {
       count++;
       if (count === 1) return { response: "I’ve already saved that breakfast." };
-      estimatePrompt = params.messages[1].content;
+      assert.ok(!Object.hasOwn(params, 'messages'));
+      assert.ok(!Object.hasOwn(params, 'max_tokens'));
+      assert.equal(params.max_output_tokens, 900);
+      assert.deepEqual(params.reasoning, { effort: 'low' });
+      estimatePrompt = params.input[1].content;
       return { response: '{"foodName":"sweet bread, chicken, bananas","caloriesKcal":1600}' };
     } },
     DISABLE_EXTERNAL_REFERENCES: 'true',

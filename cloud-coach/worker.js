@@ -1,5 +1,6 @@
 import { interpretLabsSafely, validLabRequest } from "./lab-interpretation.js";
 import { estimateMetabolicSafely, validMetabolicRequest, METABOLIC_MODEL, METABOLIC_PROMPT_VERSION } from "./metabolic-estimate.js";
+import { toWorkersAIInput, extractWorkersAIText } from "./workers-ai-response.js";
 
 const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
 
@@ -374,7 +375,7 @@ async function callWorkersAI(env, prompt, question) {
     throw error;
   }
 
-  const raw = extractWorkersText(result);
+  const raw = extractWorkersAIText(result);
   const answer = cleanNaturalAnswer(raw);
   if (!answer) throw new Error("Workers AI returned an empty answer");
   if (looksLikeInternalOutput(answer)) {
@@ -417,7 +418,7 @@ async function estimateNutritionSafely(env, question, references, localHour) {
     // Nutrition Review card. Retry once with a minimal contract instead.
     let first = null;
     try {
-      first = normalizeNutrition(extractFirstJsonObject(extractWorkersText(result)), question, localHour);
+      first = normalizeNutrition(extractFirstJsonObject(extractWorkersAIText(result)), question, localHour);
     } catch (_) {
       // Invalid JSON: repair with one bounded, simpler model call below.
     }
@@ -437,7 +438,7 @@ async function estimateNutritionSafely(env, question, references, localHour) {
       max_tokens: 450,
       temperature: 0.1,
     }, NUTRITION_AI_TIMEOUT_MS);
-    return normalizeNutrition(extractFirstJsonObject(extractWorkersText(repair)), question, localHour);
+    return normalizeNutrition(extractFirstJsonObject(extractWorkersAIText(repair)), question, localHour);
   } catch (error) {
     console.warn("Nutrition estimate unavailable", String(error));
     return null;
@@ -554,7 +555,7 @@ async function runAIWithDeadline(ai, parameters, timeoutMs) {
   let timer;
   try {
     return await Promise.race([
-      ai.run(WORKERS_AI_MODEL, parameters),
+      ai.run(WORKERS_AI_MODEL, toWorkersAIInput(parameters)),
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new HttpError(503, "Cloud Coach AI took too long", true)), timeoutMs);
       }),
@@ -562,19 +563,6 @@ async function runAIWithDeadline(ai, parameters, timeoutMs) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-function extractWorkersText(result) {
-  if (typeof result === "string") return result;
-  if (typeof result?.response === "string") return result.response;
-  if (typeof result?.result?.response === "string") return result.result.response;
-  if (typeof result?.output_text === "string") return result.output_text;
-  if (Array.isArray(result?.choices)) {
-    const content = result.choices[0]?.message?.content;
-    if (typeof content === "string") return content;
-  }
-  console.warn("Unexpected Workers AI response shape");
-  return "";
 }
 
 function looksLikeInternalOutput(text) {
