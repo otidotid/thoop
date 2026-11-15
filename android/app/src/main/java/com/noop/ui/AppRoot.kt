@@ -617,6 +617,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     // The Updates inbox sheet (opened by the Today header bell). The store is a process singleton so
     // the Today cards and the import path post to the same inbox this sheet renders.
     val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) { BottomBarModuleStore.load(context) }
     val updateStore = remember { UpdateStore.from(context) }
     var showUpdatesInbox by remember { mutableStateOf(false) }
     // #984: the changelog sheet a What's New inbox row opens. Held here (not inside the inbox) so it
@@ -1094,6 +1095,7 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
     // it visibly "lost" the theme. SharedPreferences isn't reactive; read once like the other tabs.
     val showDayCycleBackground = remember { NoopPrefs.showDayCycleBackground(context) }
     val skyBehindCards = remember { NoopPrefs.skyBehindCards(context) }
+    var showDockEditor by remember { mutableStateOf(false) }
     ScreenScaffold(
         title = uiString(R.string.l10n_app_root_more_4bab2d8f),
         subtitle = "Insights, activity, data, and settings in one place",
@@ -1101,10 +1103,13 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
         // Sky-behind-cards fills the viewport so the transparent cards reveal the sky the whole way down.
         fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
     ) {
+        NoopCard(padding = 0.dp) {
+            MoreRow(Destination.Settings, { showDockEditor = true }, "Customize Dock", Icons.Filled.Tune)
+        }
         // Mirror the iOS More page: each group is a tappable UPPERCASE overline header (with a disclosure
         // chevron) over a single grouped white NoopCard whose rows are tight (accent icon + title +
         // chevron) and separated by inset hairlines (NOT loose NavigationDrawerItems on the bare surface).
-        visibleMoreGroups(permanentBottomBarDestinations).forEach { group ->
+        visibleMoreGroups(BottomBarModuleStore.selected).forEach { group ->
             val isOpen = expanded[group.header] ?: group.defaultExpanded
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MoreGroupHeader(
@@ -1133,6 +1138,39 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+        if (showDockEditor) {
+            Dialog(onDismissRequest = { showDockEditor = false }) {
+                NoopCard(padding = 18.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Customize Dock", style = NoopType.title2, color = Palette.textPrimary)
+                        Text("Today and More stay fixed. Choose and order up to three middle modules.", style = NoopType.footnote, color = Palette.textSecondary)
+                        BottomBarModuleStore.selected.forEach { destination ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(destination.icon, null, tint = Palette.accent)
+                                Spacer(Modifier.width(10.dp))
+                                Text(stringResource(destination.titleRes), modifier = Modifier.weight(1f))
+                                Text("↑", modifier = Modifier.clickable { BottomBarModuleStore.move(context, destination, -1) }.padding(10.dp))
+                                Text("↓", modifier = Modifier.clickable { BottomBarModuleStore.move(context, destination, 1) }.padding(10.dp))
+                                Text("Remove", color = Palette.statusCritical, modifier = Modifier.clickable { BottomBarModuleStore.setPinned(context, destination, false) }.padding(10.dp))
+                            }
+                        }
+                        Overline("Available modules")
+                        configurableBottomBarDestinations.filterNot { it in BottomBarModuleStore.selected }.forEach { destination ->
+                            Row(Modifier.fillMaxWidth().clickable { BottomBarModuleStore.setPinned(context, destination, true) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(destination.icon, null, tint = Palette.textSecondary)
+                                Spacer(Modifier.width(10.dp))
+                                Text(stringResource(destination.titleRes), modifier = Modifier.weight(1f))
+                                Text("Add", color = Palette.accent)
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            Text("Reset", modifier = Modifier.clickable { BottomBarModuleStore.reset(context) }.padding(12.dp))
+                            Text("Done", color = Palette.accent, modifier = Modifier.clickable { showDockEditor = false }.padding(12.dp))
                         }
                     }
                 }
@@ -1177,7 +1215,12 @@ private fun MoreGroupHeader(title: String, expanded: Boolean, onToggle: () -> Un
 /** One tappable destination row in the More page — accent icon + title + trailing chevron in a
  *  comfortable tap target, mirroring the iOS MoreRow. */
 @Composable
-private fun MoreRow(dest: Destination, onClick: () -> Unit) {
+private fun MoreRow(
+    dest: Destination,
+    onClick: () -> Unit,
+    titleOverride: String? = null,
+    iconOverride: ImageVector? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1185,9 +1228,9 @@ private fun MoreRow(dest: Destination, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(dest.icon, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(20.dp))
+        Icon(iconOverride ?: dest.icon, contentDescription = null, tint = Palette.accent, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
-        Text(stringResource(dest.titleRes), style = NoopType.body, color = Palette.textPrimary, modifier = Modifier.weight(1f))
+        Text(titleOverride ?: stringResource(dest.titleRes), style = NoopType.body, color = Palette.textPrimary, modifier = Modifier.weight(1f))
         Icon(
             Icons.Filled.ChevronRight,
             contentDescription = null,
@@ -1216,14 +1259,15 @@ internal val permanentBottomBarDestinations: List<Destination> = listOf(
     Destination.Workouts,
     Destination.Coach,
 )
-internal fun barTabsFor(): List<BarTab> = permanentBottomBarDestinations.map { destination ->
+internal fun barTabsFor(): List<BarTab> = (listOf(Destination.Today) + BottomBarModuleStore.selected).map { destination ->
     val icon = if (destination == Destination.Today) Icons.Outlined.GridView else destination.icon
     BarTab(destination, icon, destination.titleRes)
 }
 internal fun visibleBarDestinationsFor(
     selected: List<Destination>,
     coachEnabled: Boolean,
-): List<Destination> = permanentBottomBarDestinations
+): List<Destination> = (listOf(Destination.Today) + selected)
+    .filter { it != Destination.Coach || coachEnabled }
 @Composable
 private fun GlassBottomBar(
     current: Destination,

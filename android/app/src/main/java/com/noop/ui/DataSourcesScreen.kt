@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -66,6 +68,7 @@ import com.noop.data.PairedDeviceRow
 import com.noop.data.SourceKind
 import com.noop.ble.PuffinExperiment
 import com.noop.ingest.HealthConnectImporter
+import com.noop.ingest.HealthConnectAutoImport
 import com.noop.ingest.HealthConnectWriter
 import com.noop.ingest.ActivityFileImporter
 import com.noop.ingest.LiftingImporter
@@ -128,6 +131,8 @@ fun DataSourcesScreen(vm: AppViewModel) {
     var hcReadCategories by remember {
         mutableStateOf(HealthConnectImporter.selectedCategories(context))
     }
+    var hcAutoImportHours by remember { mutableStateOf(HealthConnectAutoImport.intervalHours(context)) }
+    var hcAutoImportMenu by remember { mutableStateOf(false) }
     // A background (BLE-path) writeback updates prefs, not the VM's flow — re-read on entry so the
     // status line reflects the latest attempt whenever this screen is opened (#660).
     LaunchedEffect(Unit) { vm.refreshHcWritebackStatus() }
@@ -425,7 +430,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
         SourceCard(
             title = uiString(R.string.l10n_data_sources_screen_health_connect_be6bca3e),
             icon = Icons.Filled.MonitorHeart,
-            subtitle = "Manual import only. Workout Only imports exercise sessions, distance and GPS route when available. " +
+            subtitle = "Manual or scheduled import. Workout Only imports exercise sessions, distance and GPS route when available. " +
                 "Workout + Activity also imports supported steps and calorie activity. Sleep, HR, HRV, SpO₂, " +
                 "VO₂ max and body composition are never read.",
         ) {
@@ -445,6 +450,27 @@ fun DataSourcesScreen(vm: AppViewModel) {
                         HealthConnectImporter.setSelectedCategories(context, categories)
                     },
                 )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Automatic import", style = NoopType.subhead, color = Palette.textPrimary)
+                    Text("Run the selected Health Connect import automatically in the background.", style = NoopType.footnote, color = Palette.textTertiary)
+                    Box {
+                        TextButton(onClick = { hcAutoImportMenu = true }) {
+                            Text(if (hcAutoImportHours == 0) "Off" else "Every $hcAutoImportHours hours")
+                        }
+                        DropdownMenu(expanded = hcAutoImportMenu, onDismissRequest = { hcAutoImportMenu = false }) {
+                            HealthConnectAutoImport.allowedHours.forEach { hours ->
+                                DropdownMenuItem(
+                                    text = { Text(if (hours == 0) "Off" else "Every $hours hours") },
+                                    onClick = {
+                                        hcAutoImportHours = hours
+                                        HealthConnectAutoImport.setIntervalHours(context, hours)
+                                        hcAutoImportMenu = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
                 BackupButton(
                     label = uiString(R.string.l10n_data_sources_screen_import_from_health_connect_35d55e21),
                     icon = Icons.Filled.FileUpload,

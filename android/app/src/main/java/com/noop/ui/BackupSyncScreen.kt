@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.noop.data.DataBackup
-import com.noop.ingest.HealthConnectAutoImport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -69,8 +68,6 @@ fun BackupSyncScreen() {
     val scope = rememberCoroutineScope()
 
     var treeUri by remember { mutableStateOf(BackupSyncPrefs.treeUri(context)) }
-    var healthConnectHours by remember { mutableStateOf(HealthConnectAutoImport.intervalHours(context)) }
-    var healthConnectMenu by remember { mutableStateOf(false) }
     var auto by remember { mutableStateOf(BackupSyncPrefs.autoEnabled(context)) }
     var lastMs by remember { mutableStateOf(BackupSyncPrefs.lastBackupMs(context)) }
     var busy by remember { mutableStateOf(false) }
@@ -210,36 +207,6 @@ fun BackupSyncScreen() {
             }
         }
 
-        item {
-        NoopCard {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Health Connect", style = NoopType.headline, color = Palette.textPrimary)
-                Text(
-                    "Automatically import selected Health Connect categories using one periodic job.",
-                    style = NoopType.footnote,
-                    color = Palette.textTertiary,
-                )
-                Box {
-                    TextButton(onClick = { healthConnectMenu = true }) {
-                        Text(if (healthConnectHours == 0) "Auto import: Off" else "Auto import: Every $healthConnectHours hours")
-                    }
-                    DropdownMenu(expanded = healthConnectMenu, onDismissRequest = { healthConnectMenu = false }) {
-                        HealthConnectAutoImport.allowedHours.forEach { hours ->
-                            DropdownMenuItem(
-                                text = { Text(if (hours == 0) "Off" else "Every $hours hours") },
-                                onClick = {
-                                    healthConnectHours = hours
-                                    HealthConnectAutoImport.setIntervalHours(context, hours)
-                                    healthConnectMenu = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        }
         // 2 Â· Auto-backup + back up now
         item {
             NoopCard(padding = 20.dp, tint = if (auto && treeUri != null) Palette.accent else null) {

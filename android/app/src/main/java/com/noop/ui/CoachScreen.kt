@@ -926,10 +926,10 @@ private fun MicComposerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(26.dp))
             .background(Palette.surfaceOverlay)
-            .border(1.dp, Palette.hairline, RoundedCornerShape(18.dp))
-            .padding(8.dp),
+            .border(1.dp, Palette.hairline, RoundedCornerShape(26.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -1076,10 +1076,10 @@ private fun SendButton(enabled: Boolean, sending: Boolean, onClick: () -> Unit) 
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
-            .size(52.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .size(48.dp)
+            .clip(RoundedCornerShape(24.dp))
             .background(bg)
-            .border(1.dp, if (enabled) Color.Transparent else Palette.hairline, RoundedCornerShape(14.dp))
+            .border(1.dp, if (enabled) Color.Transparent else Palette.hairline, RoundedCornerShape(24.dp))
             .let {
                 if (enabled)
                     it
