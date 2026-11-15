@@ -1,0 +1,2 @@
+# Preserve Room's exact export bytes, including on Windows checkouts using core.autocrlf.
+*.json text eol=lf

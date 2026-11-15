@@ -4,7 +4,6 @@ import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -169,14 +168,11 @@ class WhoopDatabaseUpgradeTest {
         )
     }
 
-    @After
-    fun removeSchemaArchive() {
-        Files.deleteIfExists(schemaArchive)
-    }
-
     /** Robolectric's AssetManager mounts archives, while Gradle keeps these fixtures as JVM resources. */
     private fun createSchemaArchive(): Path =
         Files.createTempFile("noop-room-schemas-", ".zip").also { archive ->
+            // AssetManager owns the mounted handle beyond JUnit's @After on Windows. Defer cleanup
+            // until JVM shutdown; deleting here masks the outcome of the actual migration checks.
             archive.toFile().deleteOnExit()
             ZipOutputStream(Files.newOutputStream(archive)).use { zip ->
                 for (version in (previousVersion - 1)..WhoopDatabase.SCHEMA_VERSION) {
