@@ -134,9 +134,17 @@ internal class GoogleCloudBackupWorker(
                 .backUpNow(token, account.accountId)
             prefs.writeStatus("Automatic backup uploaded: ${uploaded.name}")
             Result.success()
-        }.getOrElse {
-            prefs.writeStatus("Automatic backup will retry after a temporary failure.")
-            if (runAttemptCount < 3) Result.retry() else Result.failure()
+        }.getOrElse { failure ->
+            if (failure is GoogleDriveAuthenticationException) {
+                val paused = prefs.read().copy(enabled = false)
+                prefs.write(paused)
+                GoogleCloudBackupScheduler.apply(applicationContext, paused)
+                prefs.writeStatus("Reauthentication required. Automatic backup is paused; local data is safe.")
+                Result.failure()
+            } else {
+                prefs.writeStatus("Automatic backup will retry after a temporary failure.")
+                if (runAttemptCount < 3) Result.retry() else Result.failure()
+            }
         }
     }
 

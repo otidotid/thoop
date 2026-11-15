@@ -76,7 +76,7 @@ object MetabolicEstimate {
         require(keys(response) == responseKeys && string(response, "schemaVersion") == VERSION)
         require(string(response, "requestId") == request.requestId && string(response, "confidence") == "HIGH")
         val delta = number(response, "metabolicAgeDeltaYears")
-        require(delta in 0.0..4.0)
+        require(delta in -2.0..4.0)
         val refs = strings(response, "recordRefs", request.originals.size, 64)
         require(refs.size == request.originals.size && refs.toSet().size == refs.size)
         require(refs.toSet() == request.originals.map(::recordRef).toSet())

@@ -2,6 +2,8 @@ package com.noop.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.noop.data.GoogleDriveBackupClient
 import com.noop.data.GoogleDriveBackupCoordinator
+import com.noop.data.GoogleDriveAuthenticationException
 import com.noop.data.GoogleDriveArchiveManager
 import com.noop.data.CompactDailySnapshots
 import com.noop.data.HybridHistoryPolicy
@@ -135,6 +138,8 @@ internal fun GoogleAccountCard() {
     var archiveRecords by remember { mutableStateOf(archiveManager.archives()) }
     var archivePreview by remember { mutableStateOf<GoogleDriveArchiveManager.ArchivePreview?>(null) }
     var showArchiveBrowser by remember { mutableStateOf(false) }
+    var showTechnicalDetails by remember { mutableStateOf(false) }
+    var showRollingSnapshotDetails by remember { mutableStateOf(false) }
     // Transient, opt-in passphrase prompt. No password is written to settings or Drive metadata.
     var showArchivePassphraseDialog by remember { mutableStateOf(false) }
     var archiveOpenMonth by remember { mutableStateOf<YearMonth?>(null) }
@@ -182,6 +187,34 @@ internal fun GoogleAccountCard() {
         }
     }
 
+    fun showDriveFailure(failure: Throwable, fallback: String) {
+        if (failure is GoogleDriveAuthenticationException) {
+            driveAccessToken = null
+            driveAuthorized = false
+            account?.accountId?.let { id ->
+                drivePrefs.edit().putBoolean("configured.$id", false).apply()
+            }
+            val paused = cloudSchedule.copy(enabled = false)
+            cloudSchedule = paused
+            cloudSchedulePreferences.write(paused)
+            GoogleCloudBackupScheduler.apply(context.applicationContext, paused)
+            AutomaticHybridHistoryScheduler.stopCloud(context.applicationContext)
+            cloudScheduleStatus = "Reauthentication required. Automatic backup is paused."
+            errorMessage = "Google Drive session expired. Reconnect Google Drive to continue. Local data is safe."
+        } else {
+            errorMessage = failure.message?.take(180) ?: fallback
+        }
+    }
+
+    fun backupIdentity(backup: GoogleDriveBackupClient.RemoteBackup): String =
+        listOf(backup.id, backup.sha256.orEmpty(), backup.createdTime).joinToString("|")
+
+    fun acknowledgeRestoreCandidate(backup: GoogleDriveBackupClient.RemoteBackup) {
+        account?.accountId?.let { id ->
+            drivePrefs.edit().putString("restorePromptAcknowledged.$id", backupIdentity(backup)).apply()
+        }
+    }
+
     fun acceptDriveAuthorization(result: com.google.android.gms.auth.api.identity.AuthorizationResult) {
         driveController.accessToken(result)
             .onSuccess { token ->
@@ -204,13 +237,12 @@ internal fun GoogleAccountCard() {
                         runCatching {
                             backupCoordinator.availableBackups(token, signedInAccount.accountId)
                         }.onSuccess { backups ->
-                            val newest = backups.firstOrNull()
-                            val ack = drivePrefs.getString("restorePromptAcknowledged.${signedInAccount.accountId}", null)
-                            if (newest != null && ack != newest.id) { postLoginBackups = backups; showPostLoginRestorePrompt = true }
+                            // An active, onboarded device must not be interrupted whenever a fresh
+                            // daily backup appears. Restore discovery remains available through Restore.
+                            // Recovery/onboarding flows may explicitly set showPostLoginRestorePrompt later.
 
                         }.onFailure { failure ->
-                            errorMessage = failure.message
-                                ?: "Could not check Google Drive backups after sign-in."
+                            showDriveFailure(failure, "Could not check Google Drive backups after sign-in.")
                         }
                     }
                 }
@@ -253,7 +285,7 @@ internal fun GoogleAccountCard() {
     if (showPostLoginRestorePrompt && postLoginBackups.isNotEmpty()) {
         val newestBackup = postLoginBackups.first()
         AlertDialog(
-            onDismissRequest = { postLoginBackups.firstOrNull()?.let { newest -> account?.accountId?.let { id -> drivePrefs.edit().putString("restorePromptAcknowledged.$id", newest.id).apply() } }; showPostLoginRestorePrompt = false },
+            onDismissRequest = { postLoginBackups.firstOrNull()?.let(::acknowledgeRestoreCandidate); showPostLoginRestorePrompt = false },
             title = { Text("Google Drive backup found") },
             text = {
                 Text(
@@ -264,13 +296,13 @@ internal fun GoogleAccountCard() {
             },
             dismissButton = {
                 TextButton(
-                    onClick = { postLoginBackups.firstOrNull()?.let { newest -> account?.accountId?.let { id -> drivePrefs.edit().putString("restorePromptAcknowledged.$id", newest.id).apply() } }; showPostLoginRestorePrompt = false },
+                    onClick = { postLoginBackups.firstOrNull()?.let(::acknowledgeRestoreCandidate); showPostLoginRestorePrompt = false },
                 ) { Text("Continue without restoring") }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        postLoginBackups.firstOrNull()?.let { newest -> account?.accountId?.let { id -> drivePrefs.edit().putString("restorePromptAcknowledged.$id", newest.id).apply() } }; availableBackups = postLoginBackups
+                        postLoginBackups.firstOrNull()?.let(::acknowledgeRestoreCandidate); availableBackups = postLoginBackups
                         selectedPreview = null
                         backupStatus = "Select a backup to validate and preview."
                         showPostLoginRestorePrompt = false
@@ -473,7 +505,7 @@ internal fun GoogleAccountCard() {
     archivePreview?.let { preview ->
         AlertDialog(
             onDismissRequest = { archivePreview = null },
-            title = { Text("Archived History · ${preview.selectedDay ?: preview.record.month}") },
+            title = { Text("Archived History Â· ${preview.selectedDay ?: preview.record.month}") },
             text = {
                 Column(
                     modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
@@ -484,9 +516,9 @@ internal fun GoogleAccountCard() {
                         Text("Archived through: $it", style = NoopType.footnote, color = Palette.textSecondary)
                     }
                     Text("Total records: ${preview.totalRecords}", style = NoopType.body, color = Palette.textPrimary)
-                    Text("Schema: ${preview.record.schemaVersion} · " +
+                    Text("Schema: ${preview.record.schemaVersion} Â· " +
                         (if (preview.record.encrypted) "Encrypted + authenticated" else "Legacy unencrypted") +
-                        " · SHA-256 verified", style = NoopType.footnote, color = Palette.textSecondary)
+                        " Â· SHA-256 verified", style = NoopType.footnote, color = Palette.textSecondary)
                     preview.tableCounts.entries.filter { it.value > 0 }.take(12).forEach { row ->
                         Text("${row.key}: ${row.value}", style = NoopType.footnote, color = Palette.textSecondary)
                     }
@@ -588,7 +620,7 @@ internal fun GoogleAccountCard() {
                                     }
                                 }
                             } catch (failure: Exception) {
-                                errorMessage = failure.message ?: "Google Drive recovery failed safely."
+                                showDriveFailure(failure, "Google Drive recovery failed safely.")
                             } finally {
                                 password.fill('\u0000')
                                 driveBusy = false
@@ -767,7 +799,7 @@ internal fun GoogleAccountCard() {
                 }
                 Text(
                     "Cloud history is eligible from day 22 onward. " +
-                        "Days 15–21 use the rolling local snapshot window; " +
+                        "Days 15â€“21 use the rolling local snapshot window; " +
                         "no local records are deleted.",
                     style = NoopType.footnote,
                     color = Palette.textSecondary,
@@ -832,9 +864,9 @@ internal fun GoogleAccountCard() {
                     } else {
                         archiveRecords.sortedByDescending { it.month }.forEach { archive ->
                             NoopButton(
-                                text = "${archive.month} · " +
-                                    "through ${archive.coveredThrough ?: "month end"} · " +
-                                    "${archive.recordCount} records · " +
+                                text = "${archive.month} Â· " +
+                                    "through ${archive.coveredThrough ?: "month end"} Â· " +
+                                    "${archive.recordCount} records Â· " +
                                     (if (archive.encrypted) "Encrypted" else "Legacy unencrypted"),
                                 kind = NoopButtonKind.Tertiary,
                                 fullWidth = true,
@@ -874,55 +906,53 @@ internal fun GoogleAccountCard() {
                     color = Palette.textSecondary,
                 )
             }
-            Text(
-                "Rolling local history · days 15–21 (offline)",
-                style = NoopType.subhead,
-                color = Palette.textPrimary,
-            )
-            Text(
-                "Refreshed daily in the background and when this screen opens. All original records stay local.",
-                style = NoopType.footnote,
-                color = Palette.textSecondary,
-            )
-            if (compactSnapshots.isEmpty()) {
-                Text("No daily snapshot data in this seven-day window.",
-                    style = NoopType.footnote, color = Palette.textSecondary)
-            } else {
-                compactSnapshots.take(35).forEach { snapshot ->
-                    val details = buildList {
-                        snapshot.sleepMin?.let { add("sleep ${it.toInt()} min") }
-                        snapshot.avgHrv?.let { add("HRV ${it.toInt()} ms") }
-                        snapshot.recovery?.let { add("recovery ${it.toInt()}") }
-                        snapshot.steps?.let { add("${it} steps") }
-                        snapshot.foodCalories?.let { add("${it.toInt()} kcal") }
-                        add("${snapshot.recordCount} records")
-                    }
-                    Text("${snapshot.day} · ${snapshot.source}: ${details.joinToString(" · ")}",
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Rolling local history", style = NoopType.subhead, color = Palette.textPrimary)
+                    Text("Days 15â€“21 Â· Offline Â· ${compactSnapshots.size} snapshot rows",
                         style = NoopType.footnote, color = Palette.textSecondary)
+                }
+                TextButton(onClick = { showRollingSnapshotDetails = !showRollingSnapshotDetails }) {
+                    Text(if (showRollingSnapshotDetails) "Hide details" else "View details")
+                }
+            }
+            if (showRollingSnapshotDetails) {
+                Text("Diagnostic snapshot records", style = NoopType.caption, color = Palette.textTertiary)
+                if (compactSnapshots.isEmpty()) {
+                    Text("No daily snapshot data in this seven-day window.", style = NoopType.footnote, color = Palette.textSecondary)
+                } else compactSnapshots.take(35).forEach { snapshot ->
+                    Text("${snapshot.day} Â· ${snapshot.source} Â· ${snapshot.recordCount} records",
+                        style = NoopType.footnote, color = Palette.textTertiary)
                 }
             }
             errorMessage?.let { message ->
                 Text(
                     text = message,
                     style = NoopType.footnote,
-                    color = Palette.textSecondary,
+                    color = if (message.startsWith("Google Drive session expired")) Palette.statusWarning else Palette.textSecondary,
                 )
+                TextButton(onClick = { showTechnicalDetails = !showTechnicalDetails }) {
+                    Text(if (showTechnicalDetails) "Hide technical details" else "Technical details")
+                }
+                if (showTechnicalDetails) {
+                    Text("Drive access is limited to THOOP's private appDataFolder. No local record was deleted.",
+                        style = NoopType.caption, color = Palette.textTertiary)
+                }
             }
-
-
             Text(
-                text = if (driveAuthorized) {
-                    "Google Drive backup: Authorized"
+                text = if (driveAuthorized && driveAccessToken != null) {
+                    "Google Drive Â· Connected"
+                } else if (currentAccount != null) {
+                    "Google Drive Â· Reauthentication required"
                 } else {
-                    "Google Drive backup: Not configured"
+                    "Google Drive Â· Not configured"
                 },
                 style = NoopType.subhead,
-                color = if (driveAuthorized) Palette.textPrimary else Palette.textSecondary,
+                color = if (driveAuthorized && driveAccessToken != null) Palette.textPrimary else Palette.textSecondary,
             )
-
             if (currentAccount != null && !driveAuthorized) {
                 NoopButton(
-                    text = if (driveBusy) "Connecting Google Drive..." else "Enable Google Drive Backup",
+                    text = if (driveBusy) "Connecting Google Drive..." else if (currentAccount != null) "Reconnect Google Drive" else "Enable Google Drive Backup",
                     fullWidth = true,
                     enabled = !driveBusy && !busy,
                     onClick = {
@@ -956,30 +986,44 @@ internal fun GoogleAccountCard() {
             }
 
             if (currentAccount != null && driveAuthorized) {
-                NoopButton(
-                    text = if (driveBusy) "Loading backups..." else "Restore from Google Drive",
-                    fullWidth = true,
-                    enabled = !driveBusy && !busy && driveAccessToken != null,
-                    onClick = {
-                        val token = driveAccessToken ?: return@NoopButton
-                        driveBusy = true
-                        errorMessage = null
-                        selectedPreview = null
-                        scope.launch {
-                            runCatching { backupCoordinator.availableBackups(token, currentAccount.accountId) }
-                                .onSuccess { backups ->
-                                    availableBackups = backups
-                                    backupStatus = if (backups.isEmpty()) "No cloud backups found."
-                                        else "Select a backup to validate and preview."
-                                }
-                                .onFailure { errorMessage = it.message ?: "Could not load cloud backups." }
-                            driveBusy = false
-                        }
-                    },
-                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    NoopButton(
+                        text = if (driveBusy) "Loading..." else "Restore",
+                        kind = NoopButtonKind.Secondary,
+                        modifier = Modifier.weight(1f),
+                        enabled = !driveBusy && !busy && driveAccessToken != null,
+                        onClick = {
+                            val token = driveAccessToken ?: return@NoopButton
+                            driveBusy = true
+                            errorMessage = null
+                            selectedPreview = null
+                            scope.launch {
+                                runCatching { backupCoordinator.availableBackups(token, currentAccount.accountId) }
+                                    .onSuccess { backups ->
+                                        availableBackups = backups
+                                        backupStatus = if (backups.isEmpty()) "No cloud backups found."
+                                            else "Select a backup to validate and preview."
+                                    }
+                                    .onFailure { showDriveFailure(it, "Could not load cloud backups.") }
+                                driveBusy = false
+                            }
+                        },
+                    )
+                    NoopButton(
+                        text = if (driveBusy) "Backing up..." else "Back up now",
+                        modifier = Modifier.weight(1f),
+                        enabled = !driveBusy && !busy && driveAccessToken != null,
+                        onClick = {
+                            fullBackupAction = "backup"
+                            fullBackupTarget = null
+                            fullBackupPassword = ""
+                            fullBackupConfirm = ""
+                        },
+                    )
+                }
                 availableBackups.forEach { backup ->
                     NoopButton(
-                        text = "${formatCloudBackupDate(backup.createdTime)} · ${formatBackupSize(backup.sizeBytes)} · " +
+                        text = "${formatCloudBackupDate(backup.createdTime)} Â· ${formatBackupSize(backup.sizeBytes)} Â· " +
                             if (backup.encrypted) "Encrypted" else "Legacy unencrypted",
                         fullWidth = true,
                         enabled = !driveBusy,
@@ -1006,8 +1050,8 @@ internal fun GoogleAccountCard() {
                 selectedPreview?.let { preview ->
                     Text(
                         text = "${preview.backup.name}\n" +
-                            "${formatCloudBackupDate(preview.backup.createdTime)} · " +
-                            "${formatBackupSize(preview.backup.sizeBytes)}\nValid THOOP backup · " +
+                            "${formatCloudBackupDate(preview.backup.createdTime)} Â· " +
+                            "${formatBackupSize(preview.backup.sizeBytes)}\nValid THOOP backup Â· " +
                             if (preview.includesFoodHistory) "Food history included" else "Legacy health-only backup",
                         style = NoopType.footnote,
                         color = Palette.textSecondary,
@@ -1031,17 +1075,6 @@ internal fun GoogleAccountCard() {
                     )
                 }
 
-                NoopButton(
-                    text = if (driveBusy) "Backing up..." else "Encrypted full backup now",
-                    fullWidth = true,
-                    enabled = !driveBusy && !busy && driveAccessToken != null,
-                    onClick = {
-                        fullBackupAction = "backup"
-                        fullBackupTarget = null
-                        fullBackupPassword = ""
-                        fullBackupConfirm = ""
-                    },
-                )
             }
 
             if (currentAccount != null && driveAuthorized) {

@@ -15,6 +15,10 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
+/** A Drive token has expired or no longer grants THOOP appDataFolder access. */
+internal class GoogleDriveAuthenticationException(val statusCode: Int) :
+    IOException("Google Drive session expired. Reconnect Google Drive to continue.")
+
 /** Drive REST operations limited to THOOP's private appDataFolder. Access tokens are never stored. */
 internal class GoogleDriveBackupClient(
     private val http: OkHttpClient = OkHttpClient.Builder()
@@ -192,8 +196,12 @@ internal class GoogleDriveBackupClient(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun driveError(action: String, code: Int, body: String?) =
-        IOException("Google Drive could not $action (HTTP $code). ${body.orEmpty().take(240)}".trim())
+    private fun driveError(action: String, code: Int, body: String?): IOException = when (code) {
+        401, 403 -> GoogleDriveAuthenticationException(code)
+        408, 429 -> IOException("Google Drive is temporarily busy. THOOP will try again later.")
+        in 500..599 -> IOException("Google Drive is temporarily unavailable. THOOP will try again later.")
+        else -> IOException("Google Drive could not $action (HTTP $code).")
+    }
 
     companion object {
         private const val APP_DATA_FOLDER = "appDataFolder"
