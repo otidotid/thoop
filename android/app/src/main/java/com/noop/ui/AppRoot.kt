@@ -22,9 +22,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -301,48 +304,60 @@ internal object BottomBarModuleStore {
 
     fun decode(raw: String?): List<Destination> {
         if (raw == null) return defaults
-        val allowed = configurableBottomBarDestinations.toSet()
-        return raw.split(',')
-            .mapNotNull { token -> Destination.entries.firstOrNull { it.route == token.trim() } }
-            .filter { it in allowed }
-            .distinct()
-            .take(MAX_PINNED)
+        // Empty is an explicit choice of zero optional pins; null alone means never configured.
+        if (raw.isBlank()) return emptyList()
+        return normalize(raw.split(',')
+            .mapNotNull { token -> Destination.entries.firstOrNull { it.route == token.trim() } })
             .ifEmpty { defaults }
     }
 
-    fun encode(items: List<Destination>): String = items.joinToString(",") { it.route }
+    fun normalize(items: List<Destination>): List<Destination> = items
+        .filter { it in configurableBottomBarDestinations }.distinct().take(MAX_PINNED)
+
+    fun encode(items: List<Destination>): String = normalize(items).joinToString(",") { it.route }
 
     fun load(ctx: Context) {
         selected = decode(NoopPrefs.of(ctx.applicationContext).getString(KEY, null))
     }
 
     private fun persist(ctx: Context, value: List<Destination>) {
-        selected = value.distinct().take(MAX_PINNED)
+        selected = normalize(value)
         NoopPrefs.of(ctx.applicationContext).edit().putString(KEY, encode(selected)).apply()
     }
 
-    fun setPinned(ctx: Context, destination: Destination, pinned: Boolean): Boolean {
-        if (destination !in configurableBottomBarDestinations) return false
-        val next = selected.toMutableList()
+    /** A rejected addition leaves the existing selection untouched. */
+    fun withPinned(current: List<Destination>, destination: Destination, pinned: Boolean): List<Destination>? {
+        if (destination !in configurableBottomBarDestinations) return null
+        val next = normalize(current).toMutableList()
         if (pinned) {
-            if (destination in next) return true
-            if (next.size >= MAX_PINNED) return false
+            if (destination in next) return next
+            if (next.size >= MAX_PINNED) return null
             next += destination
         } else {
             next -= destination
         }
-        persist(ctx, next)
+        return next
+    }
+
+    fun setPinned(ctx: Context, destination: Destination, pinned: Boolean): Boolean {
+        val next = withPinned(selected, destination, pinned) ?: return false
+        if (next != selected) persist(ctx, next)
         return true
     }
 
-    fun move(ctx: Context, destination: Destination, delta: Int) {
-        val from = selected.indexOf(destination)
-        if (from < 0) return
-        val to = (from + delta).coerceIn(0, selected.lastIndex)
-        if (from == to) return
-        val next = selected.toMutableList()
+    fun moved(current: List<Destination>, destination: Destination, delta: Int): List<Destination> {
+        val next = normalize(current).toMutableList()
+        val from = next.indexOf(destination)
+        if (from < 0) return next
+        val to = (from + delta.toLong()).coerceIn(0L, next.lastIndex.toLong()).toInt()
+        if (from == to) return next
         next.add(to, next.removeAt(from))
-        persist(ctx, next)
+        return next
+    }
+
+    fun move(ctx: Context, destination: Destination, delta: Int) {
+        val next = moved(selected, destination, delta)
+        if (next != selected) persist(ctx, next)
     }
 
     fun reset(ctx: Context) = persist(ctx, defaults)
@@ -1145,27 +1160,36 @@ private fun MoreScreen(onNavigate: (String) -> Unit) {
         }
         if (showDockEditor) {
             Dialog(onDismissRequest = { showDockEditor = false }) {
-                NoopCard(padding = 18.dp) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                NoopCard(modifier = Modifier.fillMaxHeight(0.85f), padding = 18.dp) {
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Customize Dock", style = NoopType.title2, color = Palette.textPrimary)
                         Text("Today and More stay fixed. Choose and order up to three middle modules.", style = NoopType.footnote, color = Palette.textSecondary)
-                        BottomBarModuleStore.selected.forEach { destination ->
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(destination.icon, null, tint = Palette.accent)
-                                Spacer(Modifier.width(10.dp))
-                                Text(stringResource(destination.titleRes), modifier = Modifier.weight(1f))
-                                Text("↑", modifier = Modifier.clickable { BottomBarModuleStore.move(context, destination, -1) }.padding(10.dp))
-                                Text("↓", modifier = Modifier.clickable { BottomBarModuleStore.move(context, destination, 1) }.padding(10.dp))
-                                Text("Remove", color = Palette.statusCritical, modifier = Modifier.clickable { BottomBarModuleStore.setPinned(context, destination, false) }.padding(10.dp))
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(BottomBarModuleStore.selected, key = { "pinned:" + it.route }) { destination ->
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(destination.icon, null, tint = Palette.accent)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(stringResource(destination.titleRes), modifier = Modifier.weight(1f))
+                                    Text("↑", modifier = Modifier.clickable { BottomBarModuleStore.move(context, destination, -1) }.padding(10.dp))
+                                    Text("↓", modifier = Modifier.clickable { BottomBarModuleStore.move(context, destination, 1) }.padding(10.dp))
+                                    Text("Remove", color = Palette.statusCritical, modifier = Modifier.clickable { BottomBarModuleStore.setPinned(context, destination, false) }.padding(10.dp))
+                                }
                             }
-                        }
-                        Overline("Available modules")
-                        configurableBottomBarDestinations.filterNot { it in BottomBarModuleStore.selected }.forEach { destination ->
-                            Row(Modifier.fillMaxWidth().clickable { BottomBarModuleStore.setPinned(context, destination, true) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(destination.icon, null, tint = Palette.textSecondary)
-                                Spacer(Modifier.width(10.dp))
-                                Text(stringResource(destination.titleRes), modifier = Modifier.weight(1f))
-                                Text("Add", color = Palette.accent)
+                            item(key = "available-heading") { Overline("Available modules") }
+                            items(configurableBottomBarDestinations.filterNot { it in BottomBarModuleStore.selected },
+                                key = { "available:" + it.route }) { destination ->
+                                val canAdd = BottomBarModuleStore.selected.size < BottomBarModuleStore.MAX_PINNED
+                                Row(Modifier.fillMaxWidth().clickable(enabled = canAdd) {
+                                    BottomBarModuleStore.setPinned(context, destination, true)
+                                }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(destination.icon, null, tint = Palette.textSecondary)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(stringResource(destination.titleRes), modifier = Modifier.weight(1f))
+                                    Text("Add", color = if (canAdd) Palette.accent else Palette.textTertiary)
+                                }
                             }
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -1259,15 +1283,17 @@ internal val permanentBottomBarDestinations: List<Destination> = listOf(
     Destination.Workouts,
     Destination.Coach,
 )
-internal fun barTabsFor(): List<BarTab> = (listOf(Destination.Today) + BottomBarModuleStore.selected).map { destination ->
-    val icon = if (destination == Destination.Today) Icons.Outlined.GridView else destination.icon
-    BarTab(destination, icon, destination.titleRes)
-}
+internal fun barTabsFor(selected: List<Destination> = BottomBarModuleStore.selected): List<BarTab> =
+    visibleBarDestinationsFor(selected, coachEnabled = true).map { destination ->
+        val icon = if (destination == Destination.Today) Icons.Outlined.GridView else destination.icon
+        BarTab(destination, icon, destination.titleRes)
+    }
+/** The Coach activity switch does not replace the user's saved navigation choices. More is drawn separately. */
 internal fun visibleBarDestinationsFor(
     selected: List<Destination>,
+    @Suppress("UNUSED_PARAMETER")
     coachEnabled: Boolean,
-): List<Destination> = (listOf(Destination.Today) + selected)
-    .filter { it != Destination.Coach || coachEnabled }
+): List<Destination> = listOf(Destination.Today) + BottomBarModuleStore.normalize(selected)
 @Composable
 private fun GlassBottomBar(
     current: Destination,

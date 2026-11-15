@@ -14,7 +14,21 @@ const finding = { recordRef: ref, fingerprint, identity: 'UNCERTAIN', confidence
   domains: ['other'], interpretation: 'Verify the marker with the report.', evidence: [],
   limitations: ['Custom name is unverified.'] };
 const response = () => ({ schemaVersion: request.schemaVersion, requestId: request.requestId, findings: [{ ...finding }] });
-const env = output => ({ ENABLE_LAB_INTERPRETATION: 'true', AI: { run: async () => ({ response: JSON.stringify(output) }) } });
+const completed = text => ({ status: 'completed', error: null, incomplete_details: null, output: [
+  { type: 'reasoning', summary: [{ type: 'summary_text', text: 'Private reasoning' }] },
+  { type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] },
+] });
+const env = output => ({ ENABLE_LAB_INTERPRETATION: 'true', AI: { run: async () => completed(JSON.stringify(output)) } });
+
+test('partial or refused Responses cannot be accepted as completed lab findings', async () => {
+  for (const output of [{ ...completed(JSON.stringify(response())), status: 'incomplete' },
+    { status: 'completed', output: [{ type: 'message', role: 'assistant',
+      content: [{ type: 'refusal', refusal: 'Cannot interpret' }] }] }]) {
+    const e = env(response());
+    e.AI.run = async () => output;
+    assert.equal(await interpretLabsSafely(e, request, true), null);
+  }
+});
 
 test('interpretation requires explicit consent and deployment opt-in', async () => {
   let calls = 0;
@@ -65,8 +79,11 @@ test('isolated batches remain optional for old or disabled Workers', async () =>
 test('arbitrary custom marker retains original units/source/value in untrusted data request', async () => {
   let prompt;
   const e = { ENABLE_LAB_INTERPRETATION: 'true', AI: { run: async (_, input) => {
-    prompt = input.messages[0].content;
-    return { response: JSON.stringify(response()) };
+    assert.deepEqual(Object.keys(input).sort(), ['input', 'max_output_tokens', 'reasoning']);
+    assert.equal(input.max_output_tokens, 6000);
+    assert.deepEqual(input.reasoning, { effort: 'low' });
+    prompt = input.input[0].content;
+    return completed(JSON.stringify(response()));
   } } };
   assert.deepEqual(await interpretLabsSafely(e, request, true), response());
   assert.ok(prompt.includes('2.123456789'));
@@ -135,7 +152,7 @@ test('old chat clients retain contract; structured result does not write D1', as
   const operations = [];
   const e = env(response());
   e.DISABLE_EXTERNAL_REFERENCES = 'true';
-  e.AI.run = async (_, input) => input.messages[0].content.includes('Response exact schema:')
+  e.AI.run = async (_, input) => input.input[0].content.includes('Response exact schema:')
     ? { response: JSON.stringify(response()) } : { response: 'Please verify your lab report.' };
   e.DB = { prepare: sql => ({ bind: (...args) => {
     operations.push({ sql, args });

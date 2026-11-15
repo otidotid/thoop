@@ -104,13 +104,13 @@ class MetabolicEstimateTest {
 
     @Test fun onlyFiniteBoundedHighConfidenceScalarIsAccepted() {
         val request = prepare()
-        for (delta in listOf(0.0, 1.25, 4.0)) {
+        for (delta in listOf(-2.0, -0.001, 0.0, 1.25, 4.0)) {
             val accepted = MetabolicEstimate.validate(response(request, delta).toString(), request, request.originals)!!
             assertEquals(delta, accepted.deltaYears, 0.0)
             assertEquals(MetabolicEstimate.MODEL, accepted.model)
             assertEquals(MetabolicEstimate.PROMPT_VERSION, accepted.promptVersion)
         }
-        for (invalid in listOf(-0.001, 4.001, "1.25", JSONObject.NULL))
+        for (invalid in listOf(-2.001, 4.001, "1.25", JSONObject.NULL))
             assertNull(MetabolicEstimate.validate(response(request, invalid).toString(), request, request.originals))
         for (confidence in listOf("LOW", "MODERATE", "high"))
             assertNull(MetabolicEstimate.validate(response(request).put("confidence", confidence).toString(), request, request.originals))
@@ -168,6 +168,18 @@ class MetabolicEstimateTest {
         val tampered = JSONObject(stored)
         tampered.getJSONObject("request").getJSONArray("observations").getJSONObject(0).put("value", 999.0)
         assertNull(MetabolicEstimate.restore(tampered.toString(), request.originals, 40.0, "male", day))
+    }
+
+    @Test fun negativeBoundarySurvivesDurableRestoreWithoutClippingOrChangingOriginals() {
+        val request = prepare()
+        val originals = request.originals.map { it.copy() }
+        val accepted = MetabolicEstimate.validate(response(request, -2.0).toString(), request, originals)!!
+        val stored = MetabolicEstimate.toJson(accepted)
+        val restored = MetabolicEstimate.restore(stored, originals, 40.0, "male", day)!!
+        assertEquals(-2.0, restored.deltaYears, 0.0)
+        assertEquals(stored, MetabolicEstimate.toJson(restored))
+        assertEquals(originals, restored.originals)
+        assertEquals(originals, request.originals)
     }
 
     @Test fun durableRestoreExpiresAndRejectsNewSourcesBeforeTheScoreDay() {

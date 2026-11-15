@@ -48,15 +48,26 @@ jobs:
 
       - name: Run Full Debug unit tests
         working-directory: android
-        run: |
-          ./gradlew :app:testFullDebugUnitTest --no-daemon \
-            --tests "*" \
-            --tests "!com.noop.data.WorkoutReplacementDataSafetyTest" \
-            --tests "!com.noop.ui.BottomBarTabsTest" \
-            --tests "!com.noop.ui.GaugeNumeralStyleTest" \
-            --tests "!com.noop.ui.GermanLocalizationTest" \
-            --tests "!com.noop.ui.PoseStillCoverageTest" \
-            --tests "!com.noop.ui.SyncChipStateTest"
+        run: ./gradlew :app:testFullDebugUnitTest --no-daemon
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Worker regression tests
+        working-directory: cloud-coach
+        run: node --test
+
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-debug-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+          if-no-files-found: warn
 
       - name: Build Full Debug APK
         working-directory: android
@@ -101,15 +112,15 @@ jobs:
             echo
             echo "### Included"
             echo
-            echo "- Current-day Calories repair"
-            echo "- Uses raw heart-rate data and the existing Calories formula"
-            echo "- Updates only the missing current-day active-calorie value"
-            echo "- Preserves Sleep, Recovery, HRV, Strain, Steps, and historical metrics"
+            echo "- Android Full Debug build from the exact tagged source"
+            echo "- Complete Android unit suite and Worker regression tests"
+            echo "- See the source commit and release documentation for feature changes"
             echo
             echo "### Validation"
             echo
             echo "- Kotlin compilation passed"
-            echo "- Full Debug test sources compiled successfully"
+            echo "- Complete Full Debug unit suite passed"
+            echo "- Worker tests passed"
             echo "- Full Debug APK assembled successfully"
             echo "- SHA-256 checksum included"
             echo
@@ -124,10 +135,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # Retain an owner-published release and its matching signing certificate.
+          # A generic CI debug key must never overwrite an installed-app update artifact.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Existing release retained; validation reports were uploaded separately."
+            exit 0
+          fi
           gh release create "$GITHUB_REF_NAME" \
             "release-assets/THOOP-${GITHUB_REF_NAME}-full-debug.apk" \
             "release-assets/SHA256SUMS.txt" \
             "release-assets/release-info.txt" \
             --verify-tag \
+            --draft --prerelease --latest=false \
             --title "THOOP ${GITHUB_REF_NAME}" \
             --notes-file "release-assets/RELEASE_NOTES.md"

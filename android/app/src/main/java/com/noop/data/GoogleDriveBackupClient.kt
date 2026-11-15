@@ -19,6 +19,15 @@ import java.util.concurrent.TimeUnit
 internal class GoogleDriveAuthenticationException(val statusCode: Int) :
     IOException("Google Drive session expired. Reconnect Google Drive to continue.")
 
+/** Retryable server/rate-limit failures do not invalidate a user's Drive grant. */
+internal class GoogleDriveRetryableException(val statusCode: Int) :
+    IOException("Google Drive is temporarily busy or unavailable. THOOP will try again later.")
+
+/** A quota needs action or a reset, rather than a new OAuth grant. */
+internal class GoogleDriveQuotaException(val statusCode: Int, message: String) : IOException(message)
+
+internal class GoogleDriveRequestException(val statusCode: Int, message: String) : IOException(message)
+
 /** Drive REST operations limited to THOOP's private appDataFolder. Access tokens are never stored. */
 internal class GoogleDriveBackupClient(
     private val http: OkHttpClient = OkHttpClient.Builder()
@@ -196,11 +205,33 @@ internal class GoogleDriveBackupClient(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun driveError(action: String, code: Int, body: String?): IOException = when (code) {
-        401, 403 -> GoogleDriveAuthenticationException(code)
-        408, 429 -> IOException("Google Drive is temporarily busy. THOOP will try again later.")
-        in 500..599 -> IOException("Google Drive is temporarily unavailable. THOOP will try again later.")
-        else -> IOException("Google Drive could not $action (HTTP $code).")
+    private fun driveError(action: String, code: Int, body: String?): IOException {
+        // Drive also uses 403 for rate/storage limits. Read structured reasons only; a message that
+        // happens to mention authentication must never revoke a healthy grant or stop cloud history.
+        val reasons = runCatching {
+            val error = JSONObject(body.orEmpty()).optJSONObject("error")
+            buildSet {
+                for (key in listOf("errors", "details")) {
+                    val entries = error?.optJSONArray(key) ?: continue
+                    for (index in 0 until entries.length()) {
+                        entries.optJSONObject(index)?.optString("reason")?.takeIf(String::isNotBlank)?.let(::add)
+                    }
+                }
+            }
+        }.getOrDefault(emptySet())
+        return when {
+            code == 401 || code == 403 && reasons.any { it in AUTH_REASONS } ->
+                GoogleDriveAuthenticationException(code)
+            code == 408 || code == 429 || code in 500..599 ||
+                code == 403 && reasons.any { it in RETRYABLE_REASONS } -> GoogleDriveRetryableException(code)
+            code == 403 && "storageQuotaExceeded" in reasons -> GoogleDriveQuotaException(code,
+                "Google Drive storage is full. Free space in Drive, Gmail or Google Photos, then try again. Your Drive connection is still authorized.")
+            code == 403 && "dailyLimitExceeded" in reasons -> GoogleDriveQuotaException(code,
+                "Google Drive's daily API quota has been reached. Try again after the quota resets or ask the app administrator to review the quota. Your Drive connection is still authorized.")
+            code == 403 -> GoogleDriveRequestException(code,
+                "Google Drive denied this action. Check the account's Drive or administrator permissions (HTTP 403).")
+            else -> GoogleDriveRequestException(code, "Google Drive could not $action (HTTP $code).")
+        }
     }
 
     companion object {
@@ -208,6 +239,9 @@ internal class GoogleDriveBackupClient(
         private const val BACKUP_KIND = "thoop_full_backup_v1"
         private const val ARCHIVE_KIND = "thoop_monthly_archive_v1"
         private const val BACKUP_MIME = "application/vnd.otidotid.thoop-backup"
+        private val AUTH_REASONS = setOf("authError", "invalidCredentials", "insufficientPermissions",
+            "ACCESS_TOKEN_EXPIRED", "ACCESS_TOKEN_SCOPE_INSUFFICIENT")
+        private val RETRYABLE_REASONS = setOf("rateLimitExceeded", "userRateLimitExceeded", "sharingRateLimitExceeded")
         private const val UPLOAD_ENDPOINT =
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,createdTime,size,appProperties"
         private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()

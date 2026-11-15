@@ -1,3 +1,5 @@
+import { toWorkersAIInput, extractWorkersAIText } from "./workers-ai-response.js";
+
 // Optional interpretation only. No database, reference-service calls, or score writes.
 const SCHEMA = "lab-interpretation-v1";
 const MAX_ROWS = 32;
@@ -64,13 +66,13 @@ export async function interpretLabsSafely(env, request, consent) {
       JSON.stringify(request),
     ].join("\n");
     const result = await Promise.race([
-      env.AI.run("@cf/openai/gpt-oss-120b", {
+      env.AI.run("@cf/openai/gpt-oss-120b", toWorkersAIInput({
         messages: [{ role: "user", content: prompt }], max_tokens: 6000,
-      }),
+      })),
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 12000); }),
     ]);
-    const raw = typeof result?.response === "string" ? result.response : "";
-    if (!raw || new TextEncoder().encode(raw).length > MAX_BYTES) return null;
+    const raw = extractWorkersAIText(result, MAX_BYTES);
+    if (!raw) return null;
     return validateLabResponse(JSON.parse(raw), request);
   } catch {
     // Failure must never interrupt ordinary Coach chat or local calculation.

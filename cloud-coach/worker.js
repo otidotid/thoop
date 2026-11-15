@@ -1,5 +1,6 @@
 import { interpretLabsSafely, validLabRequest } from "./lab-interpretation.js";
 import { estimateMetabolicSafely, validMetabolicRequest, METABOLIC_MODEL, METABOLIC_PROMPT_VERSION } from "./metabolic-estimate.js";
+import { toWorkersAIInput, extractWorkersAIText } from "./workers-ai-response.js";
 
 const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
 const FOOD_AI_MODEL = "@cf/openai/gpt-oss-20b";
@@ -376,7 +377,7 @@ async function callWorkersAI(env, prompt, question) {
     throw error;
   }
 
-  const raw = extractWorkersText(result);
+  const raw = extractWorkersAIText(result);
   const answer = cleanNaturalAnswer(raw);
   if (!answer) throw new Error("Workers AI returned an empty answer");
   if (looksLikeInternalOutput(answer)) {
@@ -421,7 +422,7 @@ async function estimateNutritionSafely(env, question, references, localHour) {
     // Nutrition Review card. Retry once with a minimal contract instead.
     let first = null;
     try {
-      first = normalizeNutrition(extractFirstJsonObject(extractWorkersText(result)), question, localHour);
+      first = normalizeNutrition(extractFirstJsonObject(extractWorkersAIText(result)), question, localHour);
     } catch (_) {
       // Invalid JSON: repair with one bounded, simpler model call below.
     }
@@ -441,7 +442,7 @@ async function estimateNutritionSafely(env, question, references, localHour) {
       max_tokens: 600,
       temperature: 0.1,
     }, NUTRITION_AI_TIMEOUT_MS, FOOD_AI_MODEL);
-    return normalizeNutrition(extractFirstJsonObject(extractWorkersText(repair)), question, localHour);
+    return normalizeNutrition(extractFirstJsonObject(extractWorkersAIText(repair)), question, localHour);
   } catch (error) {
     console.warn("Nutrition estimate unavailable", String(error));
     return null;
@@ -526,16 +527,16 @@ function findPriorFoodStatement(recentMessages) {
 async function classifyIntentWithAI(env, question) {
   try {
     const result = await runAIWithDeadline(env.AI, {
-      input: [{ role: "user", content: [
+      messages: [{ role: "user", content: [
         "Return exactly one label: food_log, food_preview, nutrition_summary, or chat.",
         "Understand Indonesian, English, slang, mixed language, abbreviations, and reasonable typos.",
         "food_log means consumed food or drink, including a short food list with a natural portion.",
         `Message: ${cleanText(question, 1200)}`,
       ].join("\n") }],
-      max_output_tokens: 24,
-      reasoning: { effort: "low" },
+      max_tokens: 24,
+      reasoning_effort: "low",
     }, 8000, FOOD_AI_MODEL);
-    return normalizeIntent(extractWorkersAIText(result).trim().toLowerCase());
+    return normalizeIntent(extractWorkersAIText(result, 128).trim().toLowerCase());
   } catch (_) { return "chat"; }
 }
 
@@ -575,7 +576,7 @@ async function runAIWithDeadline(ai, parameters, timeoutMs, model = WORKERS_AI_M
   let timer;
   try {
     return await Promise.race([
-      ai.run(model, parameters),
+      ai.run(model, toWorkersAIInput(parameters)),
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new HttpError(503, "Cloud Coach AI took too long", true)), timeoutMs);
       }),
@@ -583,19 +584,6 @@ async function runAIWithDeadline(ai, parameters, timeoutMs, model = WORKERS_AI_M
   } finally {
     clearTimeout(timer);
   }
-}
-
-function extractWorkersText(result) {
-  if (typeof result === "string") return result;
-  if (typeof result?.response === "string") return result.response;
-  if (typeof result?.result?.response === "string") return result.result.response;
-  if (typeof result?.output_text === "string") return result.output_text;
-  if (Array.isArray(result?.choices)) {
-    const content = result.choices[0]?.message?.content;
-    if (typeof content === "string") return content;
-  }
-  console.warn("Unexpected Workers AI response shape");
-  return "";
 }
 
 function looksLikeInternalOutput(text) {

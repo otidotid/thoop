@@ -152,13 +152,18 @@ class MetabolicFitnessAgeIntegrationTest {
 
     @Test fun acceptedScalarBoundsMoveOnlyFitnessAgeAndMetabolicDeltaAtTheFixedTwentyPercentRate() {
         val originals = originals()
+        val minusTwo = score(labs(originals, accepted(originals, -2.0)))
         val zero = score(labs(originals, accepted(originals, 0.0)))
         val four = score(labs(originals, accepted(originals, 4.0)))
         assertEquals(0.8, four.value("fitness_age") - zero.value("fitness_age"), 1e-12)
+        assertEquals(-0.4, minusTwo.value("fitness_age") - zero.value("fitness_age"), 1e-12)
+        assertEquals(-2.0, minusTwo.value("fitness_factor_metabolic_delta"), 0.0)
         assertEquals(0.0, zero.value("fitness_factor_metabolic_delta"), 0.0)
         assertEquals(4.0, four.value("fitness_factor_metabolic_delta"), 0.0)
         assertEquals(zero.filterNot { it.key in setOf("fitness_age", "fitness_factor_metabolic_delta") },
             four.filterNot { it.key in setOf("fitness_age", "fitness_factor_metabolic_delta") })
+        assertEquals(zero.filterNot { it.key in setOf("fitness_age", "fitness_factor_metabolic_delta") },
+            minusTwo.filterNot { it.key in setOf("fitness_age", "fitness_factor_metabolic_delta") })
     }
 
     @Test fun rejectedAiOrMissingConsentFallsBackToTheExactExistingCalculation() {
@@ -168,7 +173,7 @@ class MetabolicFitnessAgeIntegrationTest {
         val expected = score(localLabs)
         val expectedTrace = IntelligenceEngine.weeklyScoreProvenance(localLabs, expected, computedId, week, profile)
         val invalidWires = listOf(
-            wire(request, 4.001), wire(request, 3.0).put("fitnessAge", 20.0),
+            wire(request, -2.001), wire(request, 4.001), wire(request, 3.0).put("fitnessAge", 20.0),
             wire(request, 3.0).put("coefficients", JSONObject().put("metabolic", 1.0)),
             wire(request, 3.0).put("confidence", "LOW"),
         )

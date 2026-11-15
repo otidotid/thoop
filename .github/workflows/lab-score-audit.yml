@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/lab-marks-ai-integration-v1
+      - fix/preview5-regressions
   workflow_dispatch:
 
 permissions:
@@ -35,6 +36,11 @@ jobs:
           --tests 'com.noop.ai.LabInterpretation*Test'
           --tests 'com.noop.ai.MetabolicEstimateTest'
           --tests 'com.noop.ai.CloudCoach*TransportTest'
+          --tests 'com.noop.data.GoogleDriveBackupClientTest'
+          --tests 'com.noop.data.GoogleCloudBackupFailureTest'
+          --tests 'com.noop.ingest.HealthConnectAutoImportPolicyTest'
+          --tests 'com.noop.ui.BottomBar*Test'
+          --tests 'com.noop.ui.CoachTabVisibilityTest'
           --tests 'com.noop.data.MetabolicEstimatePersistenceTest'
           --tests 'com.noop.analytics.MetabolicFitnessAgeIntegrationTest'
           --tests 'com.noop.ai.AiCoachContextTest'

@@ -6,22 +6,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BottomBarTabsTest {
-    @Test fun permanentBottomBarUsesFixedDestinationOrder() {
-        val tabs = barTabsFor()
+    @Test fun unsetDockUsesTheExistingPreviewFiveDefaultsInOrder() {
+        val tabs = barTabsFor(BottomBarModuleStore.decode(null))
         assertEquals(
             listOf(
                 Destination.Today,
-                Destination.Trends,
                 Destination.Workouts,
-                Destination.Coach,
+                Destination.Trends,
+                Destination.Sleep,
             ),
             tabs.map { it.dest },
         )
     }
 
-    @Test fun permanentBottomBarContainsNoDuplicateDestinations() {
-        val tabs = barTabsFor()
+    @Test fun customDockKeepsPinOrderAndCannotDuplicateStructuralDestinations() {
+        val tabs = barTabsFor(listOf(Destination.Today, Destination.Coach, Destination.Health,
+            Destination.Coach, Destination.More, Destination.Live, Destination.Sleep))
+        assertEquals(listOf(Destination.Today, Destination.Coach, Destination.Health, Destination.Live), tabs.map { it.dest })
         assertEquals(tabs.map { it.dest }.distinct(), tabs.map { it.dest })
+    }
+
+    @Test fun anExplicitlyEmptyDockHasOnlyTodayBeforeTheFixedMoreSlot() {
+        assertEquals(listOf(Destination.Today), barTabsFor(BottomBarModuleStore.decode("")).map { it.dest })
     }
 
     @Test fun pinnedModulesAreRemovedFromMoreButUnpinnedModulesRemain() {
@@ -41,5 +47,17 @@ class BottomBarTabsTest {
     @Test fun todayAndMoreAreStructuralNotConfigurable() {
         assertFalse(Destination.Today in configurableBottomBarDestinations)
         assertFalse(Destination.More in configurableBottomBarDestinations)
+    }
+
+    @Test fun unpinningRestoresTheDestinationToMoreWithoutLosingOtherDestinations() {
+        val pinned = listOf(Destination.Coach, Destination.Sleep, Destination.Health)
+        val unpinned = BottomBarModuleStore.withPinned(pinned, Destination.Sleep, false)!!
+        val before = visibleMoreGroups(pinned).flatMap { it.items }
+        val after = visibleMoreGroups(unpinned).flatMap { it.items }
+        assertEquals(before.toSet() + Destination.Sleep, after.toSet())
+        assertEquals(after.size, after.distinct().size)
+        assertFalse(Destination.Coach in after)
+        assertFalse(Destination.Health in after)
+        assertEquals(drawerGroups.flatMap { it.items }.toSet(), visibleMoreGroups(emptyList()).flatMap { it.items }.toSet())
     }
 }

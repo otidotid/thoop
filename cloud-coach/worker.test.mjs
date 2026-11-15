@@ -270,7 +270,10 @@ test('food-log follow-up recovers prior user meal instead of estimating the comp
     AI: { run: async (_model, params) => {
       count++;
       if (count === 1) return { response: "I’ve already saved that breakfast." };
-      estimatePrompt = params.messages[1].content;
+      assert.ok(!Object.hasOwn(params, 'messages'));
+      assert.equal(params.max_output_tokens, 600);
+      assert.deepEqual(params.reasoning, { effort: 'low' });
+      estimatePrompt = params.input[1].content;
       return { response: '{"foodName":"sweet bread, chicken, bananas","caloriesKcal":1600}' };
     } },
     DISABLE_EXTERNAL_REFERENCES: 'true',

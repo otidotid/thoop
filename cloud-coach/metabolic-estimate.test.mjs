@@ -20,8 +20,21 @@ const result = request => ({ schemaVersion: 'metabolic-estimate-v1', requestId: 
   metabolicAgeDeltaYears: 1.25, confidence: 'HIGH', recordRefs: request.observations.map(row => row.recordRef),
   reasoning: 'Experimental wellness estimate, not a clinical age conversion.',
   limitations: ['Unvalidated estimate; reported units and context require care.'] });
+const completed = text => ({ status: 'completed', error: null, incomplete_details: null, output: [
+  { type: 'reasoning', summary: [{ type: 'summary_text', text: 'Private reasoning' }] },
+  { type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] },
+] });
 const env = response => ({ ENABLE_METABOLIC_ESTIMATE: 'true',
-  AI: { run: async () => ({ response: JSON.stringify(response) }) } });
+  AI: { run: async () => completed(JSON.stringify(response)) } });
+
+test('negative boundary survives completed Responses but partial output cannot activate it', async () => {
+  const request = makeRequest();
+  const negative = { ...result(request), metabolicAgeDeltaYears: -2 };
+  assert.deepEqual(await estimateMetabolicSafely(env(negative), request, true, true), negative);
+  const e = env(negative);
+  e.AI.run = async () => ({ ...completed(JSON.stringify(negative)), status: 'incomplete' });
+  assert.equal(await estimateMetabolicSafely(e, request, true, true), null);
+});
 const post = body => new Request('https://example.test/v1/labs/metabolic', { method: 'POST',
   headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
@@ -33,11 +46,14 @@ test('single metabolic estimate covers more than 32 distinct latest markers with
   e.AI.run = async (model, input) => {
     calls++;
     assert.equal(model, METABOLIC_MODEL);
-    assert.ok(input.messages[0].content.includes('not a validated medical conversion'));
-    assert.ok(input.messages[0].content.includes('Unknown and missing evidence are NOT normal'));
-    assert.ok(input.messages[0].content.includes('1.23456789'));
-    assert.ok(input.messages[0].content.includes('custom_marker_40'));
-    return { response: JSON.stringify(result(request)) };
+    assert.deepEqual(Object.keys(input).sort(), ['input', 'max_output_tokens', 'reasoning']);
+    assert.equal(input.max_output_tokens, 6000);
+    assert.deepEqual(input.reasoning, { effort: 'low' });
+    assert.ok(input.input[0].content.includes('not a validated medical conversion'));
+    assert.ok(input.input[0].content.includes('Unknown and missing evidence are NOT normal'));
+    assert.ok(input.input[0].content.includes('1.23456789'));
+    assert.ok(input.input[0].content.includes('custom_marker_40'));
+    return completed(JSON.stringify(result(request)));
   };
   assert.deepEqual(await estimateMetabolicSafely(e, request, true, true), result(request));
   assert.equal(calls, 1);

@@ -69,6 +69,8 @@ import com.noop.data.SourceKind
 import com.noop.ble.PuffinExperiment
 import com.noop.ingest.HealthConnectImporter
 import com.noop.ingest.HealthConnectAutoImport
+import com.noop.ingest.HealthConnectAutoImportPolicy
+import androidx.health.connect.client.permission.HealthPermission
 import com.noop.ingest.HealthConnectWriter
 import com.noop.ingest.ActivityFileImporter
 import com.noop.ingest.LiftingImporter
@@ -133,6 +135,35 @@ fun DataSourcesScreen(vm: AppViewModel) {
     }
     var hcAutoImportHours by remember { mutableStateOf(HealthConnectAutoImport.intervalHours(context)) }
     var hcAutoImportMenu by remember { mutableStateOf(false) }
+    var hcAutoPendingHours by remember { mutableStateOf<Int?>(null) }
+    var hcAutoAccess by remember { mutableStateOf(HealthConnectAutoImportPolicy.Access.DISABLED) }
+    var hcAutoStatus by remember { mutableStateOf(HealthConnectAutoImport.status(context)) }
+    DisposableEffect(context) {
+        val autoPrefs = HealthConnectAutoImport.preferences(context)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            hcAutoImportHours = HealthConnectAutoImport.intervalHours(context)
+            hcAutoStatus = HealthConnectAutoImport.status(context)
+        }
+        autoPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { autoPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    LaunchedEffect(hcAutoImportHours, hcReadCategories) {
+        hcAutoAccess = HealthConnectAutoImport.access(context)
+        if (hcAutoAccess != HealthConnectAutoImportPolicy.Access.READY)
+            HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
+    }
+    val autoLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(autoLifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) scope.launch {
+                hcAutoAccess = HealthConnectAutoImport.access(context)
+                if (hcAutoAccess != HealthConnectAutoImportPolicy.Access.READY)
+                    HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
+            }
+        }
+        autoLifecycle.lifecycle.addObserver(observer)
+        onDispose { autoLifecycle.lifecycle.removeObserver(observer) }
+    }
     // A background (BLE-path) writeback updates prefs, not the VM's flow — re-read on entry so the
     // status line reflects the latest attempt whenever this screen is opened (#660).
     LaunchedEffect(Unit) { vm.refreshHcWritebackStatus() }
@@ -302,6 +333,40 @@ fun DataSourcesScreen(vm: AppViewModel) {
         HealthConnectImporter.sdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
     }
 
+    // This grant configures future scheduled work; it never starts a manual import.
+    val hcAutoPermissionLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract(),
+    ) {
+        val requestedHours = hcAutoPendingHours
+        hcAutoPendingHours = null
+        scope.launch {
+            hcAutoAccess = HealthConnectAutoImport.access(context, enabling = true)
+            if (requestedHours != null && hcAutoAccess == HealthConnectAutoImportPolicy.Access.READY)
+                HealthConnectAutoImport.setIntervalHours(context, requestedHours)
+            else HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
+        }
+    }
+    fun configureAutoImport(hours: Int) {
+        if (hours == 0) {
+            hcAutoPendingHours = null
+            HealthConnectAutoImport.setIntervalHours(context, 0)
+            return
+        }
+        scope.launch {
+            hcAutoAccess = HealthConnectAutoImport.access(context, enabling = true)
+            when (hcAutoAccess) {
+                HealthConnectAutoImportPolicy.Access.READY -> HealthConnectAutoImport.setIntervalHours(context, hours)
+                HealthConnectAutoImportPolicy.Access.READ_PERMISSION_REQUIRED,
+                HealthConnectAutoImportPolicy.Access.BACKGROUND_PERMISSION_REQUIRED -> {
+                    hcAutoPendingHours = hours
+                    hcAutoPermissionLauncher.launch(HealthConnectImporter.permissionsFor(hcReadCategories) +
+                        HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
+                }
+                else -> HealthConnectAutoImport.writeStatus(context, HealthConnectAutoImportPolicy.message(hcAutoAccess))
+            }
+        }
+    }
+
     // "Broadcast heart rate": flip the toggle on only AFTER the BLUETOOTH_ADVERTISE (+ CONNECT) runtime
     // permission is granted on Android 12+ — otherwise advertising silently no-ops. On grant (or pre-12,
     // where it's install-time) the VM starts the HR peripheral.
@@ -462,14 +527,21 @@ fun DataSourcesScreen(vm: AppViewModel) {
                                 DropdownMenuItem(
                                     text = { Text(if (hours == 0) "Off" else "Every $hours hours") },
                                     onClick = {
-                                        hcAutoImportHours = hours
-                                        HealthConnectAutoImport.setIntervalHours(context, hours)
                                         hcAutoImportMenu = false
+                                        configureAutoImport(hours)
                                     },
                                 )
                             }
                         }
                     }
+                }
+                if (hcAutoStatus.isNotBlank()) {
+                    Text(hcAutoStatus, style = NoopType.footnote, color = Palette.textSecondary)
+                }
+                if (hcAutoImportHours > 0 && hcAutoAccess in setOf(
+                        HealthConnectAutoImportPolicy.Access.READ_PERMISSION_REQUIRED,
+                        HealthConnectAutoImportPolicy.Access.BACKGROUND_PERMISSION_REQUIRED)) {
+                    TextButton(onClick = { configureAutoImport(hcAutoImportHours) }) { Text("Allow background imports") }
                 }
                 BackupButton(
                     label = uiString(R.string.l10n_data_sources_screen_import_from_health_connect_35d55e21),

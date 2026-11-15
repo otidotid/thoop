@@ -37,8 +37,8 @@ android {
         applicationId = "com.otidotid.thoop"
         minSdk = 26
         targetSdk = 34
-        versionCode = 557
-        versionName = "13.1.1"
+        versionCode = 559
+        versionName = "13.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CLOUD_COACH_BASE_URL", "\"${cloudCoachBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
@@ -314,7 +314,8 @@ dependencies {
 
     // --- Health Connect (optional native Android import of steps/HR/HRV/sleep/etc.) ---
     // Pinned to alpha07: alpha11+ require compileSdk 35; this module is compileSdk 34.
-    implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
+    // First compatible SDK with feature-gated background access on both platform and APK providers.
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
 
     // --- Unit / instrumentation tests ---
     testImplementation("junit:junit:4.13.2")

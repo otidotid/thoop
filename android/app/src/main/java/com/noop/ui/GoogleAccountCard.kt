@@ -202,6 +202,8 @@ internal fun GoogleAccountCard() {
             cloudScheduleStatus = "Reauthentication required. Automatic backup is paused."
             errorMessage = "Google Drive session expired. Reconnect Google Drive to continue. Local data is safe."
         } else {
+            // Quota/rate failures preserve the current grant and schedules. Reconnecting cannot
+            // resolve them; the client supplies an actionable, credential-free explanation.
             errorMessage = failure.message?.take(180) ?: fallback
         }
     }
@@ -675,7 +677,7 @@ internal fun GoogleAccountCard() {
                                         is DataBackup.ImportResult.TooLarge -> errorMessage = result.message
                                     }
                                 }
-                                .onFailure { errorMessage = it.message ?: "Cloud restore failed safely." }
+                                .onFailure { showDriveFailure(it, "Cloud restore failed safely.") }
                             driveBusy = false
                         }
                     },
@@ -950,7 +952,7 @@ internal fun GoogleAccountCard() {
                 style = NoopType.subhead,
                 color = if (driveAuthorized && driveAccessToken != null) Palette.textPrimary else Palette.textSecondary,
             )
-            if (currentAccount != null && !driveAuthorized) {
+            if (currentAccount != null && (!driveAuthorized || driveAccessToken == null)) {
                 NoopButton(
                     text = if (driveBusy) "Connecting Google Drive..." else if (currentAccount != null) "Reconnect Google Drive" else "Enable Google Drive Backup",
                     fullWidth = true,
@@ -1041,7 +1043,7 @@ internal fun GoogleAccountCard() {
                                         selectedPreview = it
                                         backupStatus = "Backup downloaded and checked. Database integrity will be checked before restore."
                                     }
-                                    .onFailure { errorMessage = it.message ?: "Could not validate backup." }
+                                    .onFailure { showDriveFailure(it, "Could not validate backup.") }
                                 driveBusy = false
                             }
                         },

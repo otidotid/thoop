@@ -306,6 +306,7 @@ object HealthConnectImporter {
         val granted = try {
             client.permissionController.getGrantedPermissions()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             return ImportSummary.failure(SOURCE, "Could not read Health Connect permissions: ${e.message}")
         }
         // #645 follow-up: a user who predates the category selector has nothing stored — recover their
@@ -342,6 +343,7 @@ object HealthConnectImporter {
         // A granted permission can outlive the category selection that originally requested it. Gate
         // on BOTH here so switching a category off stops its reads immediately without requiring the
         // user to visit Android's Health Connect settings and revoke the old grant manually (#645).
+        var failedSelectedReads = 0
         suspend fun <T : Record> readSelected(
             type: KClass<T>,
             range: TimeRangeFilter = filter,
@@ -350,7 +352,9 @@ object HealthConnectImporter {
             // Defense in depth: selection + grant are necessary, but never sufficient to escape the
             // permanent activity/exercise-only boundary.
             if (type !in IMPORT_READ_ALLOWLIST || type !in selectedRecordTypes) return false
-            return readAll(client, type, range, selfPackage, onRecord)
+            val completed = readAll(client, type, range, selfPackage, onRecord)
+            if (!completed) failedSelectedReads++
+            return completed
         }
 
         // Per-day accumulators. Keyed by "YYYY-MM-DD" (local).
@@ -682,6 +686,7 @@ object HealthConnectImporter {
                 hydrationMl[day] = (hydrationMl[day] ?: 0.0) + r.volume.inMilliliters
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             return ImportSummary.failure(SOURCE, "Health Connect read failed: ${e.message}")
         }
 
@@ -716,11 +721,13 @@ object HealthConnectImporter {
         // strap-write path already uses. Best-effort - a stamp failure must not sink a good import.
             // Stamped on the EMPTY path too, deliberately: "ran and found nothing" and "never ran" are
             // different diagnoses and this is the only line that separates them.
-            recordImportRun(context, rows = 0, throughDay = null)
+            if (failedSelectedReads == 0) recordImportRun(context, rows = 0, throughDay = null)
             return ImportSummary(
                 source = SOURCE,
                 counts = emptyMap(),
-                message = "No Health Connect data found to import.",
+                message = if (failedSelectedReads == 0) "No Health Connect data found to import."
+                    else "Some selected Health Connect data could not be read. Check access and retry.",
+                successful = failedSelectedReads == 0,
             )
         }
 
@@ -864,6 +871,7 @@ object HealthConnectImporter {
                 repo.saveCandidateWorkoutsNoOverlap(workouts)
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             return ImportSummary.failure(SOURCE, "Saving Health Connect data failed: ${e.message}")
         }
 
@@ -873,6 +881,7 @@ object HealthConnectImporter {
         try {
             HealthConnectWeightSync.syncFromRepository(context, repo)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Best-effort, but a cancelled import must still stop here rather than carry on.
             if (e is kotlin.coroutines.cancellation.CancellationException) throw e
         }
@@ -903,8 +912,10 @@ object HealthConnectImporter {
             counts = counts,
             firstDay = firstDay,
             lastDay = lastDay,
-            message = if (total == 0) "Nothing new to import from Health Connect."
-            else "Imported $total rows from Health Connect.",
+            message = (if (total == 0) "Nothing new to import from Health Connect."
+                else "Imported $total rows from Health Connect.") +
+                if (failedSelectedReads == 0) "" else " Some selected data could not be read; retry to complete the import.",
+            successful = failedSelectedReads == 0,
         )
     }
 
@@ -964,6 +975,7 @@ object HealthConnectImporter {
                 pageToken = response.pageToken
             } while (pageToken != null)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // One record type failing (e.g. a device/SDK validation quirk like "count must not be less
             // than 1" seen on some Health Connect builds) must NOT abort the whole import — log it and
             // keep whatever was read, so every other data type still comes in (issue #34). The reads
@@ -985,6 +997,7 @@ object HealthConnectImporter {
         try {
             coveredDaySet(repo.days(deviceId))
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             emptySet()
         }
 
@@ -1000,6 +1013,7 @@ object HealthConnectImporter {
                 isStrapNativeSourceId(it)
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             setOf(WHOOP, WHOOP_COMPUTED)
         }
 

@@ -16,6 +16,7 @@ import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.common.api.Scope
 import com.noop.ui.GoogleAccountStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -113,6 +114,47 @@ internal object GoogleCloudBackupScheduler {
     }
 }
 
+internal enum class GoogleCloudBackupFailureAction { RETRY, FAILURE }
+
+/** Shared by the worker and its state tests: only a rejected grant may pause scheduled backup. */
+internal fun recordGoogleCloudBackupFailure(
+    prefs: GoogleCloudBackupPreferences,
+    failure: Throwable,
+    runAttemptCount: Int,
+    pauseSchedule: (CloudBackupSchedule) -> Unit,
+): GoogleCloudBackupFailureAction {
+    if (failure is CancellationException) throw failure
+    return when (failure) {
+        is GoogleDriveAuthenticationException -> {
+            val paused = prefs.read().copy(enabled = false)
+            prefs.write(paused)
+            pauseSchedule(paused)
+            prefs.writeStatus("Reauthentication required. Automatic backup is paused; local data is safe.")
+            GoogleCloudBackupFailureAction.FAILURE
+        }
+        is GoogleDriveRetryableException -> {
+            // WorkManager already applies exponential backoff. A transient quota response must not
+            // exhaust a small attempt budget and permanently switch the user's schedule off.
+            prefs.writeStatus("Google Drive is temporarily busy or unavailable. Backup will retry with backoff.")
+            GoogleCloudBackupFailureAction.RETRY
+        }
+        is GoogleDriveQuotaException, is GoogleDriveRequestException -> {
+            val scheduleStatus = if (prefs.read().enabled) "Automatic backup remains enabled." else "Automatic backup is off."
+            prefs.writeStatus("${failure.message} $scheduleStatus")
+            GoogleCloudBackupFailureAction.FAILURE
+        }
+        else -> {
+            if (runAttemptCount < 3) {
+                prefs.writeStatus("Automatic backup will retry after a temporary failure.")
+                GoogleCloudBackupFailureAction.RETRY
+            } else {
+                prefs.writeStatus("Automatic backup could not finish. Try again from Google Drive settings; local data is safe.")
+                GoogleCloudBackupFailureAction.FAILURE
+            }
+        }
+    }
+}
+
 internal class GoogleCloudBackupWorker(
     context: Context,
     params: WorkerParameters,
@@ -135,15 +177,11 @@ internal class GoogleCloudBackupWorker(
             prefs.writeStatus("Automatic backup uploaded: ${uploaded.name}")
             Result.success()
         }.getOrElse { failure ->
-            if (failure is GoogleDriveAuthenticationException) {
-                val paused = prefs.read().copy(enabled = false)
-                prefs.write(paused)
+            when (recordGoogleCloudBackupFailure(prefs, failure, runAttemptCount) { paused ->
                 GoogleCloudBackupScheduler.apply(applicationContext, paused)
-                prefs.writeStatus("Reauthentication required. Automatic backup is paused; local data is safe.")
-                Result.failure()
-            } else {
-                prefs.writeStatus("Automatic backup will retry after a temporary failure.")
-                if (runAttemptCount < 3) Result.retry() else Result.failure()
+            }) {
+                GoogleCloudBackupFailureAction.RETRY -> Result.retry()
+                GoogleCloudBackupFailureAction.FAILURE -> Result.failure()
             }
         }
     }

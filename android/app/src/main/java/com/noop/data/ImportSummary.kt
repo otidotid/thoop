@@ -29,12 +29,14 @@ data class ImportSummary(
      * would quietly overstate coverage.
      */
     val columnCoverageRows: Int = 0,
+    /** False for denied, failed or incomplete reads; zero available records can still be successful. */
+    val successful: Boolean = true,
 ) {
     val totalRows: Int get() = counts.values.sum()
 
     companion object {
         /** A failed/empty import carrying a reason. */
         fun failure(source: String, reason: String) =
-            ImportSummary(source = source, counts = emptyMap(), message = reason)
+            ImportSummary(source = source, counts = emptyMap(), message = reason, successful = false)
     }
 }

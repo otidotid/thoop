@@ -1,3 +1,5 @@
+import { toWorkersAIInput, extractWorkersAIText } from "./workers-ai-response.js";
+
 // Explicitly separate experimental AI estimate. It cannot modify THOOP equations or records.
 export const METABOLIC_MODEL = "@cf/openai/gpt-oss-120b";
 export const METABOLIC_PROMPT_VERSION = "metabolic-prompt-v1";
@@ -86,11 +88,11 @@ export async function estimateMetabolicSafely(env, request, labConsent, metaboli
       JSON.stringify(request),
     ].join("\n");
     const result = await Promise.race([
-      env.AI.run(METABOLIC_MODEL, { messages: [{ role: "user", content: prompt }], max_tokens: 6000 }),
+      env.AI.run(METABOLIC_MODEL, toWorkersAIInput({ messages: [{ role: "user", content: prompt }], max_tokens: 6000 })),
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), AI_TIMEOUT_MS); }),
     ]);
-    const raw = typeof result?.response === "string" ? result.response : "";
-    if (!raw || new TextEncoder().encode(raw).length > MAX_BYTES) return null;
+    const raw = extractWorkersAIText(result, MAX_BYTES);
+    if (!raw) return null;
     return validateMetabolicResponse(JSON.parse(raw), request);
   } catch {
     // Optional failures never produce an invented zero or overwrite a local result.
