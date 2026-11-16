@@ -21,7 +21,7 @@ on:
       - 'Packages/WhoopStore/Tests/WhoopStoreTests/Resources/**'
       - 'Strand/Resources/Localizable.xcstrings'
   push:
-    branches: [main]
+    branches: [main, fix/coach-ime-dock-preview7]
     paths:
       - 'android/**'
       - '.github/workflows/android.yml'
@@ -62,7 +62,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Build debug APK
+        env:
+          THOOP_CLOUD_COACH_URL: https://thoop-cloud-coach.anandhito-prakoso.workers.dev
         run: ./gradlew assembleFullDebug
+
+      - name: Upload Coach keyboard test APK (patch branch only)
+        if: github.ref == 'refs/heads/fix/coach-ime-dock-preview7'
+        uses: actions/upload-artifact@v4
+        with:
+          name: THOOP-Coach-Keyboard-Fix-Preview7
+          path: android/app/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Run unit tests
         run: ./gradlew testFullDebugUnitTest
