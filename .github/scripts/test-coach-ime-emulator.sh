@@ -3,7 +3,9 @@
 set -uo pipefail
 adb shell settings put secure show_ime_with_hard_keyboard 1
 cd android || exit 1
-bash ./gradlew connectedFullDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.noop.ui.CoachImeGeometryTest
+# AndroidTest dependency locks are not populated in the repo's existing lock state.
+# Refresh those locks only inside this disposable emulator runner; do not commit changes.
+bash ./gradlew connectedFullDebugAndroidTest --write-locks -Pandroid.testInstrumentationRunnerArguments.class=com.noop.ui.CoachImeGeometryTest
 result=$?
 cd .. || exit 1
 adb logcat -d -s CoachIME:I > coach-ime-measurements.txt || true
