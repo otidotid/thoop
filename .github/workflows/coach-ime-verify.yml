@@ -10,6 +10,7 @@ on:
       - 'android/app/src/main/AndroidManifest.xml'
       - 'android/app/build.gradle.kts'
       - 'android/app/src/androidTest/**'
+      - '.github/scripts/test-coach-ime-emulator.sh'
   workflow_dispatch:
 
 permissions:
@@ -56,7 +57,7 @@ jobs:
           retention-days: 7
 
   emulator-geometry:
-    needs: android
+    # Run alongside compile/unit tests, not sequentially, to shorten verification.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -84,16 +85,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: |
-            set +e
-            adb shell settings put secure show_ime_with_hard_keyboard 1
-            cd android
-            bash ./gradlew connectedFullDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.noop.ui.CoachImeGeometryTest
-            rc=$?
-            cd ..
-            adb logcat -d -s CoachIME:I > coach-ime-measurements.txt || true
-            adb pull /sdcard/Android/data/com.otidotid.thoop.debug/files/coach-ime-open.png coach-ime-open.png || true
-            exit "$rc"
+          script: bash .github/scripts/test-coach-ime-emulator.sh
       - name: Upload screenshot and measured keyboard gap
         if: always()
         uses: actions/upload-artifact@v4
