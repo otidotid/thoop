@@ -12,6 +12,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -620,7 +625,7 @@ object BottomBarStyleStore {
  * every destination in [drawerGroups], so nothing is lost. A single [AppViewModel] is created here and
  * shared with every screen, so the BLE connection and cached metrics stay app-wide singletons.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val nav = rememberNavController()
@@ -628,6 +633,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val current = Destination.forRoute(currentRoute)
+    // Coach is a messenger: its composer should touch the IME, not sit above the bottom dock.
+    // Only the Coach route gets this adjustment; every other screen keeps its existing layout.
+    val coachKeyboardVisible = currentRoute == Destination.Coach.route && WindowInsets.isImeVisible
     var showQuickActions by remember { mutableStateOf(false) }
     // The Updates inbox sheet (opened by the Today header bell). The store is a process singleton so
     // the Today cards and the import path post to the same inbox this sheet renders.
@@ -697,7 +705,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 // destination is lost without the drawer.
                 // DEFAULT path: the shipped reserved slot, unchanged. Empty only when the overlay is
                 // on, where the bar is drawn below as a sibling and the slot must reserve nothing.
-                if (!BottomBarStyleStore.overlay) {
+                if (!BottomBarStyleStore.overlay && !coachKeyboardVisible) {
                     GlassBottomBar(
                         current = current,
                         onTabSelected = { dest ->
@@ -715,7 +723,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 // adds this measured height to its own contentPadding instead; no shared modifier can.
                 // Slot layout: the Scaffold measured the bar into `inner`, so use it as-is.
                 // Overlay layout: the slot reserves nothing, so the bottom comes from the measured bar.
-                modifier = if (!BottomBarStyleStore.overlay) Modifier.padding(inner) else Modifier.padding(
+                modifier = (if (!BottomBarStyleStore.overlay) Modifier.padding(inner) else Modifier.padding(
                     // Take the top and sides from the Scaffold, but REPLACE its bottom rather than adding
                     // to it. Scaffold's default contentWindowInsets is WindowInsets.systemBars, so
                     // `inner.bottom` already carries the navigation-bar inset — and the bar's measured
@@ -730,7 +738,11 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     // instead, using BottomBarStyleStore.barHeight. Insetting here is what made the first
                     // version of this change invisible — the bar moved, the backdrop did not follow.
                     bottom = 0.dp,
-                ),
+                ))
+                    // The reserved dock is gone while typing. Consume Scaffold's system-bar
+                    // inset before applying IME padding so it is not counted twice.
+                    .then(if (coachKeyboardVisible && !BottomBarStyleStore.overlay) Modifier.consumeWindowInsets(inner) else Modifier)
+                    .then(if (coachKeyboardVisible) Modifier.imePadding() else Modifier),
                 // README motion: top-level destinations crossfade (~240ms) on the calm,
                 // decelerating global easing — nothing slides or bounces between tabs. The
                 // same fade is used for back (pop) so the bar never feels jerky. Drill-ins
@@ -1056,7 +1068,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         // TalkBack could focus a bar nobody can see and a tap could land on a control that is not there.
         // Dropping it at the end of the animation removes both. Safe precisely because it is an overlay —
         // it reserves no space, so composing or not composing it never reflows content.
-        if (BottomBarStyleStore.overlay && barPresent) GlassBottomBar(
+        if (BottomBarStyleStore.overlay && barPresent && !coachKeyboardVisible) GlassBottomBar(
             current = current,
             onTabSelected = { dest ->
                 if (dest.route != currentRoute) nav.navigateTopLevel(dest.route)
