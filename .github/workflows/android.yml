@@ -61,10 +61,12 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      # Deliberately nonfunctional HTTPS endpoint: this build is for keyboard layout
+      # testing on a second phone only. It cannot call a live AI or spend quota.
       - name: Build debug APK
         env:
-          THOOP_CLOUD_COACH_URL: https://thoop-cloud-coach.anandhito-prakoso.workers.dev
-        run: ./gradlew assembleFullDebug
+          THOOP_CLOUD_COACH_URL: https://example.invalid
+        run: bash ./gradlew assembleFullDebug
 
       - name: Upload Coach keyboard test APK (patch branch only)
         if: github.ref == 'refs/heads/fix/coach-ime-dock-preview7'
@@ -76,4 +78,4 @@ jobs:
           retention-days: 7
 
       - name: Run unit tests
-        run: ./gradlew testFullDebugUnitTest
+        run: bash ./gradlew testFullDebugUnitTest
