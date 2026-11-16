@@ -37,7 +37,8 @@ android {
         applicationId = "com.otidotid.thoop"
         minSdk = 26
         targetSdk = 34
-        versionCode = 559
+        // Preview 8: increment Android build number for a safe in-place update.
+        versionCode = 560
         versionName = "13.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
