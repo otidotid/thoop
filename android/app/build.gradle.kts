@@ -38,7 +38,7 @@ android {
         minSdk = 26
         targetSdk = 34
         // Preview 8: increment Android build number for a safe in-place update.
-        versionCode = 560
+        versionCode = 561
         versionName = "13.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
