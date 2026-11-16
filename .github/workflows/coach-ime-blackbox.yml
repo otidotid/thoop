@@ -1,0 +1,48 @@
+name: Coach Keyboard Black-box Emulator Test
+
+on:
+  push:
+    branches: [fix/coach-keyboard-adjust-resize]
+    paths:
+      - '.github/scripts/coach-ime-blackbox.py'
+      - '.github/workflows/coach-ime-blackbox.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  visual-geometry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download previously compiled Android APK with adjustResize
+        uses: actions/download-artifact@v4
+        with:
+          name: THOOP-Coach-IME-Resize-Build561-REQUIRES-LOCAL-SIGNING
+          run-id: 43823373795
+          github-token: ${{ github.token }}
+          path: test-apk
+      - name: Enable emulator acceleration
+        run: |
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+      - name: Measure Coach screen and keyboard using real Android system IME
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: python3 .github/scripts/coach-ime-blackbox.py
+      - name: Publish screenshots, hierarchy and numeric measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coach-keyboard-visual-evidence
+          path: coach-blackbox-evidence/**
+          retention-days: 7
