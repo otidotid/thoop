@@ -1,0 +1,74 @@
+# One-time Android prerelease for the already phone-tested Coach IME layout fix.
+# Run only on this branch. Do not alter the Worker, other screens, or other platforms.
+name: THOOP Preview 8 - Coach keyboard only
+
+on:
+  push:
+    branches: [review/metabolic-v3]
+    paths: ['.github/workflows/thoop-coach-keyboard-preview8.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: thoop-preview8-coach-keyboard
+  cancel-in-progress: false
+
+jobs:
+  android-preview:
+    if: github.repository == 'otidotid/thoop' && github.ref == 'refs/heads/review/metabolic-v3'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout tested branch
+        uses: actions/checkout@v5
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v5
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Build debug APK and run Android unit tests
+        env:
+          THOOP_CLOUD_COACH_URL: https://thoop-cloud-coach.anandhito-prakoso.workers.dev
+        run: |
+          set -euo pipefail
+          bash ./gradlew assembleFullDebug testFullDebugUnitTest
+          cp app/build/outputs/apk/full/debug/*.apk THOOP-v13.2.0-metabolic-preview.8-full-debug.apk
+          sha256sum THOOP-v13.2.0-metabolic-preview.8-full-debug.apk > THOOP-v13.2.0-metabolic-preview.8-full-debug.apk.sha256
+          echo "Built debug APK; this may use a different signing key than locally built prior APKs."
+      - name: Record APK signing certificate
+        run: |
+          set -euo pipefail
+          APK="THOOP-v13.2.0-metabolic-preview.8-full-debug.apk"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APK" > THOOP-v13.2.0-metabolic-preview.8-signing.txt
+          grep -E 'Signer #1 certificate SHA-256 digest' THOOP-v13.2.0-metabolic-preview.8-signing.txt
+      - name: Publish GitHub prerelease only after successful checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v13.2.0-metabolic-preview.8
+        run: |
+          set -euo pipefail
+          test ! "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)" = "$TAG" || { echo "Tag already released; refusing overwrite"; exit 1; }
+          cat > notes.md <<'NOTES'
+          ## THOOP 13.2.0 Metabolic Preview 8 — Coach keyboard fix
+          
+          **Only functional change:** the Coach composer now sits immediately above the Android keyboard. The bottom app dock is temporarily hidden only while typing in Coach and returns when the keyboard closes.
+          
+          This is based on Metabolic Preview 7. Existing Coach, AI/Worker behavior, health data, nutrition, sync, calculations, and all other app functionality are unchanged. Android build code is advanced to 560.
+          
+          **Tested:** Android compile and unit tests on GitHub Actions. Keyboard-open/close layout independently tested by the owner on a second phone.
+          
+          **Important for updating your main phone without losing data:** Android requires the SAME application ID and signing certificate as the installed app. This debug APK can have a different certificate from a locally built debug APK. Try an in-place install with `adb install -r` only. If Android rejects it with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, do **not** uninstall or clear data; instead rebuild with the original signing keystore. The signer SHA-256 is included with the release.
+          
+          Cloud Coach URL remains https://thoop-cloud-coach.anandhito-prakoso.workers.dev.
+          NOTES
+          gh release create "$TAG"             THOOP-v13.2.0-metabolic-preview.8-full-debug.apk             THOOP-v13.2.0-metabolic-preview.8-full-debug.apk.sha256             THOOP-v13.2.0-metabolic-preview.8-signing.txt             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"             --title "THOOP 13.2.0 Metabolic Preview 8 — Coach Keyboard Fix"             --notes-file notes.md --prerelease
