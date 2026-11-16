@@ -8,13 +8,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -83,40 +87,49 @@ import com.noop.ai.CustomAiAuthHeader
 fun CoachScreen(vm: CoachViewModel = viewModel(), onOpenSettings: () -> Unit = {}) {
     val context = LocalContext.current
     val configured = remember { vm.isConfigured() }
-    // #1862: a question handed over by the Today launcher sheet. Consumed once — `consume()` clears it —
-    // so a recomposition cannot resend it, and only when the coach can actually send, so an unconfigured
-    // handoff degrades to showing setup rather than a failed request. Swift twin: CoachView's task.
     LaunchedEffect(configured) {
         val handed = CoachHandoff.consume()
         if (handed != null && configured) vm.send(context, handed)
     }
-    // Same day-cycle gate as the liquid Today: the time-of-day sky settles behind the top content when the
-    // user hasn't opted out; otherwise the scaffold paints the plain dark canvas.
-    val showDayCycleBackground = remember { NoopPrefs.showDayCycleBackground(context) }
-    val skyBehindCards = remember { NoopPrefs.skyBehindCards(context) }
 
-    ScreenScaffold(
-        title = uiString(R.string.l10n_coach_screen_coach_b32c9ad3),
-        subtitle = "Ask about your recovery, strain, sleep and HRV, grounded in your own numbers.",
-        // LIQUID SKY BACKDROP (the pilot pattern — LiquidScreenSky.kt): the liquid sky sits behind the
-        // header and the cards float over the flat canvas below. Reuses the shared LiquidScreenSky() slot
-        // verbatim; when the day-cycle background is off, the scaffold paints the plain surface instead.
-        topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
-        // Sky-behind-cards fills the viewport so the transparent cards reveal the sky the whole way
-        // down (Today / Trends / Sleep / metric-detail parity - same two prefs, same two behaviours).
-        fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
+    // Coach uses a fixed chat viewport instead of ScreenScaffold's vertically scrolling column.
+    // AppRoot already reserves the bottom dock; this layout therefore pins the composer directly
+    // above that dock, while only the conversation timeline scrolls.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.surfaceBase)
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp),
     ) {
-        if (configured) {
-            CoachChat(vm = vm, onOpenSettings = onOpenSettings)
-        } else {
-            NoopCard(padding = 18.dp, tint = Palette.chargeColor) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("THOOP Cloud Coach", style = NoopType.headline, color = Palette.textPrimary)
-                    Text(
-                        "Cloud Coach is not configured in this build.",
-                        style = NoopType.subhead,
-                        color = Palette.statusCritical,
-                    )
+        Column(modifier = Modifier.fillMaxSize()) {
+            Text(
+                uiString(R.string.l10n_coach_screen_coach_b32c9ad3),
+                style = NoopType.title1,
+                color = Palette.textPrimary,
+            )
+            Text(
+                "Ask about your recovery, strain, sleep and HRV, grounded in your own numbers.",
+                style = NoopType.subhead,
+                color = Palette.textSecondary,
+                modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
+            )
+            if (configured) {
+                CoachChat(
+                    vm = vm,
+                    onOpenSettings = onOpenSettings,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                NoopCard(padding = 18.dp, tint = Palette.chargeColor) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("THOOP Cloud Coach", style = NoopType.headline, color = Palette.textPrimary)
+                        Text(
+                            "Cloud Coach is not configured in this build.",
+                            style = NoopType.subhead,
+                            color = Palette.statusCritical,
+                        )
+                    }
                 }
             }
         }
@@ -184,7 +197,7 @@ private fun CoachSetup(vm: CoachViewModel) {
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         colors = coachFieldColors(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(24.dp),
                     )
                 }
 
@@ -275,7 +288,11 @@ private fun CoachSetup(vm: CoachViewModel) {
 // MARK: - Chat (key saved)
 
 @Composable
-private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
+private fun CoachChat(
+    vm: CoachViewModel,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val messages by vm.messages.collectAsStateWithLifecycle()
     val sending by vm.sending.collectAsStateWithLifecycle()
@@ -329,26 +346,33 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
         vm.consumeScheduledBriefIfAny(context)
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val timelineScroll = rememberScrollState()
+    LaunchedEffect(messages.size, sending, pendingNutrition) {
+        timelineScroll.animateScrollTo(timelineScroll.maxValue)
+    }
 
-        // Cloud identity strip: the Coach has one backend and one memory system.
-        NoopCard(padding = 14.dp, tint = Palette.chargeColor) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    StatePill(
-                        title = "THOOP Cloud Coach",
-                        tone = StrandTone.Accent,
-                        showsDot = true,
-                    )
-                    Text(
-                        "Connected • Cloud Memory active",
-                        style = NoopType.footnote,
-                        color = Palette.textSecondary,
-                    )
-                }
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Lightweight messenger header. Avoid a second large card competing with the conversation.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Palette.accent),
+            )
+            Spacer(Modifier.width(8.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                Text("THOOP Coach", style = NoopType.subhead, color = Palette.textPrimary)
+                Text("Online", style = NoopType.caption, color = Palette.textTertiary)
+            }
                 if (messages.isNotEmpty()) {
                     val clearInteraction = remember { MutableInteractionSource() }
                     Icon(
@@ -358,10 +382,9 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .liquidPress(clearInteraction)
-                            .clickable(
-                                interactionSource = clearInteraction,
-                                indication = null,
-                            ) { showClearConfirm = true }
+                            .clickable(interactionSource = clearInteraction, indication = null) {
+                                showClearConfirm = true
+                            }
                             .padding(6.dp)
                             .size(20.dp),
                     )
@@ -380,7 +403,6 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                         .size(20.dp),
                 )
             }
-        }
         if (showClearConfirm) {
             AlertDialog(
                 onDismissRequest = { showClearConfirm = false },
@@ -392,27 +414,42 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showClearConfirm = false }) { Text(stringResource(R.string.l10n_coach_screen_cancel_77dfd213)) }
+                    TextButton(onClick = { showClearConfirm = false }) {
+                        Text(stringResource(R.string.l10n_coach_screen_cancel_77dfd213))
+                    }
                 },
             )
         }
 
-        // Transcript or empty-state with suggested prompts.
-        if (messages.isEmpty()) {
-            NoopCard(padding = 18.dp) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        uiString(R.string.l10n_coach_screen_ask_anything_about_your_recent_recovery_e6c287ca),
-                        style = NoopType.subhead, color = Palette.textSecondary,
-                    )
-                    SuggestedPrompts(prompts = suggestions, onPick = { input = it })
+        // Only this area scrolls. The composer below remains locked to the bottom edge above AppRoot's dock.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(timelineScroll)
+                .padding(top = 10.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (messages.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 336.dp)
+                        .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 20.dp, bottomEnd = 20.dp, bottomStart = 20.dp))
+                        .frostedCardSurface(tint = Palette.chargeColor, cornerRadius = 20.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("THOOP Coach", style = NoopType.subhead, color = Palette.textPrimary)
+                        Text(
+                            uiString(R.string.l10n_coach_screen_ask_anything_about_your_recent_recovery_e6c287ca),
+                            style = NoopType.body,
+                            color = Palette.textSecondary,
+                        )
+                    }
                 }
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            } else {
                 messages.forEach { msg -> ChatBubble(msg, vm) }
                 if (sending) ThinkingBubble()
-                // K7: follow-up suggestion chips after each assistant reply (when not mid-send).
                 pendingNutrition?.let { estimate ->
                     NutritionReviewCard(
                         estimate = estimate,
@@ -420,78 +457,59 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
                         onDismiss = vm::dismissNutritionEstimate,
                     )
                 }
-                if (!sending && messages.isNotEmpty() && messages.last().role == "assistant") {
+                if (!sending && messages.last().role == "assistant") {
                     SuggestedPrompts(prompts = vm.followUpSuggestions, onPick = { input = it })
                 }
             }
         }
 
-        // Error line (red). Capture into a stable local first: `error` is a state-backed nullable, and
-        // the `semantics {}` contentDescription is a DEFERRED closure run later during the accessibility
-        // pass — by then a recomposition can have cleared `error`, so `error!!` inside the lambda would
-        // NPE (#1074). The local `errorMsg` is a fixed non-null snapshot the lambda can't null out from
-        // under it.
-        val errorMsg = error
-        if (errorMsg != null) {
-            Text(
-                errorMsg,
-                style = NoopType.subhead,
-                color = Palette.statusCritical,
-                modifier = Modifier.semantics { contentDescription = uiString(R.string.l10n_coach_screen_coach_error_error_ad9c8c46, errorMsg) },
+        // Fixed composer: no longer part of the scrolling transcript.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Palette.surfaceBase)
+                .padding(top = 4.dp, bottom = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            val errorMsg = error
+            if (errorMsg != null) {
+                Text(
+                    errorMsg,
+                    style = NoopType.footnote,
+                    color = Palette.statusCritical,
+                    modifier = Modifier.semantics {
+                        contentDescription = uiString(
+                            R.string.l10n_coach_screen_coach_error_error_ad9c8c46,
+                            errorMsg,
+                        )
+                    },
+                )
+            }
+            MicComposerRow(
+                input = input,
+                onInputChange = {
+                    input = it
+                    draftPrefs.edit().putString("draft", it).apply()
+                    if (error != null) vm.clearError()
+                },
+                sending = sending,
+                onSend = {
+                    vm.send(context, input)
+                    input = ""
+                    draftPrefs.edit().remove("draft").apply()
+                },
             )
-        }
-        // Input row + Send, a frosted overlay surface so the composer reads as a docked input bar.
-        // K4: the mic button (on-device voice input) sits between the text field and Send.
-        MicComposerRow(
-            input = input,
-            onInputChange = {
-                input = it
-                // K15: persist the draft so it survives an app relaunch.
-                draftPrefs.edit().putString("draft", it).apply()
-                if (error != null) vm.clearError()
-            },
-            sending = sending,
-            onSend = {
-                vm.send(context, input)
-                input = ""
-                // K15: clear the persisted draft on send.
-                draftPrefs.edit().remove("draft").apply()
-            },
-        )
-
-        // K12: rough token estimate shown when the draft is non-empty.
-        if (input.isNotBlank()) {
-            vm.estimatedTokens(input)?.let { tokens ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.Start,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Speed,
-                        contentDescription = null,
-                        modifier = Modifier.size(10.dp),
-                        tint = Palette.textTertiary,
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
+            if (input.isNotBlank()) {
+                vm.estimatedTokens(input)?.let { tokens ->
                     Text(
                         stringResource(R.string.coach_token_estimate, tokens),
                         style = NoopType.caption,
                         color = Palette.textTertiary,
+                        modifier = Modifier.padding(start = 12.dp),
                     )
-                    if (tokens > 8000) {
-                        Text(
-                            stringResource(R.string.coach_token_warning),
-                            style = NoopType.caption,
-                            color = Palette.textTertiary,
-                        )
-                    }
                 }
             }
         }
-
-        // Privacy note repeated under the input so it's always on screen.
-        CloudPrivacyNote()
     }
 }
 
@@ -501,7 +519,11 @@ private fun CoachChat(vm: CoachViewModel, onOpenSettings: () -> Unit) {
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun ChatBubble(msg: ChatMsg, vm: CoachViewModel) {
     val isUser = msg.role == "user"
-    val bubbleShape = RoundedCornerShape(16.dp)
+    val bubbleShape = if (isUser) {
+        RoundedCornerShape(topStart = 20.dp, topEnd = 6.dp, bottomEnd = 20.dp, bottomStart = 20.dp)
+    } else {
+        RoundedCornerShape(topStart = 6.dp, topEnd = 20.dp, bottomEnd = 20.dp, bottomStart = 20.dp)
+    }
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     // K8: long-press popup menu for Copy / Share / Save on assistant replies.
@@ -520,13 +542,13 @@ private fun ChatBubble(msg: ChatMsg, vm: CoachViewModel) {
         } else {
             Modifier
                 .clip(bubbleShape)
-                .frostedCardSurface(tint = Palette.chargeColor, cornerRadius = 16.dp)
+                .frostedCardSurface(tint = Palette.chargeColor, cornerRadius = 20.dp)
         }
         Box(
             modifier = Modifier
-                .widthIn(max = 320.dp)
+                .fillMaxWidth(0.86f)
                 .then(bubbleModifier)
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = 16.dp, vertical = 11.dp)
                 // K8: long-press assistant bubbles to show Copy / Share / Save. User bubbles
                 // are not actionable (the text is the user's own input).
                 .then(
@@ -598,7 +620,7 @@ private fun ThinkingBubble() {
                 .padding(horizontal = 14.dp, vertical = 12.dp)
                 .semantics { contentDescription = uiString(R.string.l10n_coach_screen_coach_is_thinking_aaf91547) },
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(16.dp),
@@ -926,12 +948,12 @@ private fun MicComposerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(28.dp))
             .background(Palette.surfaceOverlay)
-            .border(1.dp, Palette.hairline, RoundedCornerShape(26.dp))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .border(1.dp, Palette.hairline, RoundedCornerShape(28.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         OutlinedTextField(
             value = input,
@@ -939,17 +961,28 @@ private fun MicComposerRow(
             modifier = Modifier.weight(1f),
             placeholder = {
                 Text(
-                    if (isRecording) stringResource(R.string.coach_listening) else uiString(R.string.l10n_coach_screen_ask_your_coach_b1577d4c),
+                    if (isRecording) stringResource(R.string.coach_listening) else "Message THOOP Coach",
                     style = NoopType.body,
                     color = Palette.textTertiary,
                 )
             },
             textStyle = NoopType.body,
             singleLine = false,
-            maxLines = 4,
+            maxLines = 5,
             enabled = !sending,
-            colors = coachFieldColors(),
-            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Palette.textPrimary,
+                unfocusedTextColor = Palette.textPrimary,
+                disabledTextColor = Palette.textTertiary,
+                cursorColor = Palette.accent,
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                disabledBorderColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+            ),
+            shape = RoundedCornerShape(24.dp),
         )
 
         // K4: mic button — on-device voice input. Hidden entirely when on-device recognition
@@ -1008,10 +1041,10 @@ private fun MicButton(
     val statusSuffix = statusMessage?.let { stringResource(R.string.coach_status_suffix, it) } ?: ""
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .size(44.dp)
+            .clip(RoundedCornerShape(22.dp))
             .background(bg)
-            .border(1.dp, Palette.hairline, RoundedCornerShape(14.dp))
+            .border(1.dp, Palette.hairline, RoundedCornerShape(22.dp))
             .let {
                 if (enabled)
                     it
@@ -1076,10 +1109,10 @@ private fun SendButton(enabled: Boolean, sending: Boolean, onClick: () -> Unit) 
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .size(44.dp)
+            .clip(RoundedCornerShape(22.dp))
             .background(bg)
-            .border(1.dp, if (enabled) Color.Transparent else Palette.hairline, RoundedCornerShape(24.dp))
+            .border(1.dp, if (enabled) Color.Transparent else Palette.hairline, RoundedCornerShape(22.dp))
             .let {
                 if (enabled)
                     it
