@@ -1,0 +1,55 @@
+# Isolated verification of Android keyboard window-resize behavior.
+# Never publishes a GitHub Release, never modifies production, no secrets in CI.
+name: THOOP Coach IME Resize Verification
+
+on:
+  push:
+    branches: [fix/coach-keyboard-adjust-resize]
+    paths:
+      - '.github/workflows/coach-ime-verify.yml'
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'android/app/build.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate wrapper
+        uses: gradle/actions/wrapper-validation@v5
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Build APK and unit tests
+        env:
+          THOOP_CLOUD_COACH_URL: https://thoop-cloud-coach.anandhito-prakoso.workers.dev
+        run: |
+          set -euo pipefail
+          bash ./gradlew assembleFullDebug testFullDebugUnitTest
+      - name: Verify merged Android manifest uses adjustResize
+        run: |
+          set -euo pipefail
+          grep -q 'android:windowSoftInputMode="adjustResize"' app/src/main/AndroidManifest.xml
+          MERGED=$(find app/build/intermediates -path '*fullDebug*' -name AndroidManifest.xml -print -quit)
+          echo "Merged manifest: $MERGED"
+          test -n "$MERGED"
+          grep -q 'adjustResize' "$MERGED"
+      - name: Upload verification APK for local re-signing with original THOOP key
+        uses: actions/upload-artifact@v4
+        with:
+          name: THOOP-Coach-IME-Resize-Build561-REQUIRES-LOCAL-SIGNING
+          path: android/app/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
